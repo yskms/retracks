@@ -85,6 +85,14 @@ class SegmentController(private val player: Player) : Player.Listener {
   private var itemExpectedMs = 0L
   private var pausedDuringItem = false
 
+  /**
+   * 現在の出力音量。曲の切り替わり直後は player.duration / currentPosition が
+   * 一瞬前の曲の値を返すことがあり、素直に計算すると音量が 1.0 に跳ねてしまう
+   * （フェードイン前に一瞬フル音量が鳴る原因）。上げ方向の変化をフェードインの
+   * 速度に制限することで、値が一時的に乱れても音量が跳ねないようにする。
+   */
+  private var currentVolume = 1f
+
   private val tickRunnable = object : Runnable {
     override fun run() {
       applyFade()
@@ -120,7 +128,10 @@ class SegmentController(private val player: Player) : Player.Listener {
     itemStartedAtMs = now
     itemExpectedMs = 0L
     pausedDuringItem = false
-    player.volume = if (segment?.fadeInMs?.let { it > 0 } == true) 0f else 1f
+
+    val fadeIn = segment?.fadeInMs ?: 0L
+    currentVolume = if (fadeIn > 0) 0f else 1f
+    player.volume = currentVolume
   }
 
   override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -130,7 +141,10 @@ class SegmentController(private val player: Player) : Player.Listener {
   private fun applyFade() {
     val seg = segment
     if (seg == null) {
-      if (player.volume != 1f) player.volume = 1f
+      if (currentVolume != 1f) {
+        currentVolume = 1f
+        player.volume = 1f
+      }
       return
     }
     if (player.playbackState != Player.STATE_READY) return
@@ -146,12 +160,23 @@ class SegmentController(private val player: Player) : Player.Listener {
     val fadeIn = maxOf(0L, minOf(seg.fadeInMs, half))
     val fadeOut = maxOf(0L, minOf(seg.fadeMs, half))
 
-    val volume = when {
+    val target = when {
       fadeIn > 0 && pos < fadeIn -> pos.toFloat() / fadeIn.toFloat()
       fadeOut > 0 && pos > duration - fadeOut ->
         (duration - pos).toFloat() / fadeOut.toFloat()
       else -> 1f
+    }.coerceIn(0f, 1f)
+
+    // 上げるときはフェードインの速度を超えない。下げるときは即座に従う
+    // （フェードアウトはもともと連続的に下がるので制限しても影響しない）。
+    val next = if (target > currentVolume && fadeIn > 0) {
+      val maxStep = TICK_MS.toFloat() / fadeIn.toFloat()
+      minOf(target, currentVolume + maxStep)
+    } else {
+      target
     }
-    player.volume = volume.coerceIn(0f, 1f)
+
+    currentVolume = next.coerceIn(0f, 1f)
+    player.volume = currentVolume
   }
 }
