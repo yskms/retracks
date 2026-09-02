@@ -1,6 +1,8 @@
 package expo.modules.retracksplayer
 
 import android.content.ComponentName
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -31,10 +33,60 @@ class SegmentInput : Record {
   @Field var fadeMs: Double = 0.0
 }
 
+/**
+ * MediaController はそれを生成したスレッド（メインスレッド）からしか操作できない。
+ * Expo の Function / AsyncFunction は JS スレッドで動くため、コントローラに触る処理は
+ * すべて mainHandler 経由でメインスレッドへ回している。
+ *
+ * getStatus は JS 側から高頻度で呼ばれるので、毎回スレッドを跨がずに済むよう
+ * メインスレッドで更新したスナップショットを返す。
+ */
 @OptIn(UnstableApi::class)
 class RetracksPlayerModule : Module() {
 
+  companion object {
+    private const val SNAPSHOT_INTERVAL_MS = 200L
+  }
+
+  private val mainHandler = Handler(Looper.getMainLooper())
   private var controller: MediaController? = null
+  private var polling = false
+
+  @Volatile
+  private var snapshot: Map<String, Any?> = emptySnapshot()
+
+  private fun emptySnapshot(): Map<String, Any?> = mapOf(
+    "connected" to false,
+    "isPlaying" to false,
+    "index" to -1,
+    "positionMs" to 0.0,
+    "durationMs" to 0.0,
+    "queueSize" to 0
+  )
+
+  /** メインスレッドで実行する。既にメインスレッドならそのまま走らせる。 */
+  private fun onMain(block: () -> Unit) {
+    if (Looper.myLooper() == Looper.getMainLooper()) block() else mainHandler.post(block)
+  }
+
+  private val snapshotRunnable = object : Runnable {
+    override fun run() {
+      val c = controller
+      snapshot = if (c == null) {
+        emptySnapshot()
+      } else {
+        mapOf(
+          "connected" to true,
+          "isPlaying" to c.isPlaying,
+          "index" to c.currentMediaItemIndex,
+          "positionMs" to c.currentPosition.toDouble(),
+          "durationMs" to (c.duration.takeIf { it > 0 }?.toDouble() ?: 0.0),
+          "queueSize" to c.mediaItemCount
+        )
+      }
+      if (polling) mainHandler.postDelayed(this, SNAPSHOT_INTERVAL_MS)
+    }
+  }
 
   private val playerListener = object : Player.Listener {
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -66,102 +118,115 @@ class RetracksPlayerModule : Module() {
       val context = appContext.reactContext
         ?: throw CodedException("React context is not available")
 
-      val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-      val future = MediaController.Builder(context, token).buildAsync()
-      future.addListener({
+      onMain {
         try {
-          val c = future.get()
-          c.addListener(playerListener)
-          controller = c
+          val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
+          val future = MediaController.Builder(context, token).buildAsync()
+          future.addListener({
+            try {
+              val c = future.get()
+              c.addListener(playerListener)
+              controller = c
 
-          // 区間の切り出しを JS 側へ通知する（計測用）
-          PlaybackService.instance?.segmentController?.onCut = { targetMs, actualMs ->
-            sendEvent(
-              "onSegmentCut",
-              mapOf(
-                "targetMs" to targetMs.toDouble(),
-                "actualMs" to actualMs.toDouble(),
-                "driftMs" to (actualMs - targetMs).toDouble()
-              )
-            )
-          }
-          promise.resolve(true)
+              // 区間の切り出しを JS 側へ通知する（計測用）
+              PlaybackService.instance?.segmentController?.onCut = { targetMs, actualMs ->
+                sendEvent(
+                  "onSegmentCut",
+                  mapOf(
+                    "targetMs" to targetMs.toDouble(),
+                    "actualMs" to actualMs.toDouble(),
+                    "driftMs" to (actualMs - targetMs).toDouble()
+                  )
+                )
+              }
+
+              if (!polling) {
+                polling = true
+                mainHandler.post(snapshotRunnable)
+              }
+              promise.resolve(true)
+            } catch (e: Exception) {
+              promise.reject(CodedException("Failed to connect to PlaybackService", e))
+            }
+          }, MoreExecutors.directExecutor())
         } catch (e: Exception) {
-          promise.reject(CodedException("Failed to connect to PlaybackService", e))
+          promise.reject(CodedException("Failed to build MediaController", e))
         }
-      }, MoreExecutors.directExecutor())
+      }
     }
 
     /** キューを差し替える。tracks は JS 側で並べ替え済み（シャッフル順列）であること。 */
     AsyncFunction("setQueue") { tracks: List<TrackInput>, startIndex: Int, promise: Promise ->
-      val c = controller ?: run {
-        promise.reject(CodedException("Player is not prepared"))
-        return@AsyncFunction
-      }
-      val items = tracks.map { t ->
-        MediaItem.Builder()
-          .setMediaId(t.id)
-          .setUri(t.uri)
-          .setMediaMetadata(
-            MediaMetadata.Builder()
-              .setTitle(t.title)
-              .setArtist(t.artist)
-              .setAlbumTitle(t.album)
-              .build()
-          )
-          .build()
-      }
-      PlaybackService.instance?.segmentController
-        ?.setDurations(tracks.associate { it.id to it.durationMs.toLong() })
+      onMain {
+        val c = controller
+        if (c == null) {
+          promise.reject(CodedException("Player is not prepared"))
+          return@onMain
+        }
+        val items = tracks.map { t ->
+          MediaItem.Builder()
+            .setMediaId(t.id)
+            .setUri(t.uri)
+            .setMediaMetadata(
+              MediaMetadata.Builder()
+                .setTitle(t.title)
+                .setArtist(t.artist)
+                .setAlbumTitle(t.album)
+                .build()
+            )
+            .build()
+        }
+        PlaybackService.instance?.segmentController
+          ?.setDurations(tracks.associate { it.id to it.durationMs.toLong() })
 
-      c.setMediaItems(items, startIndex.coerceIn(0, maxOf(0, items.size - 1)), 0L)
-      c.prepare()
-      promise.resolve(items.size)
+        c.setMediaItems(items, startIndex.coerceIn(0, maxOf(0, items.size - 1)), 0L)
+        c.prepare()
+        promise.resolve(items.size)
+      }
     }
 
     /** RUSH の区間設定。null を渡すと RUSH OFF（フル再生）。 */
     Function("setSegment") { segment: SegmentInput? ->
-      PlaybackService.instance?.segmentController?.segment = segment?.let {
-        Segment(
-          startMs = it.startMs.toLong(),
-          lengthMs = it.lengthMs.toLong(),
-          fadeMs = it.fadeMs.toLong()
-        )
+      onMain {
+        PlaybackService.instance?.segmentController?.segment = segment?.let {
+          Segment(
+            startMs = it.startMs.toLong(),
+            lengthMs = it.lengthMs.toLong(),
+            fadeMs = it.fadeMs.toLong()
+          )
+        }
       }
     }
 
     /** リピート。0=OFF, 1=1曲, 2=全曲（Player.REPEAT_MODE_* と同じ） */
     Function("setRepeatMode") { mode: Int ->
-      controller?.repeatMode = mode.coerceIn(0, 2)
+      onMain { controller?.repeatMode = mode.coerceIn(0, 2) }
     }
 
-    Function("play") { controller?.play() }
-    Function("pause") { controller?.pause() }
-    Function("next") { controller?.seekToNextMediaItem() }
-    Function("previous") { controller?.seekToPreviousMediaItem() }
-    Function("skipTo") { index: Int -> controller?.seekTo(index, 0L) }
+    Function("play") { onMain { controller?.play() } }
+    Function("pause") { onMain { controller?.pause() } }
+    Function("next") { onMain { controller?.seekToNextMediaItem() } }
+    Function("previous") { onMain { controller?.seekToPreviousMediaItem() } }
+    Function("skipTo") { index: Int -> onMain { controller?.seekTo(index, 0L) } }
 
     AsyncFunction("seekTo") { positionMs: Double, promise: Promise ->
-      controller?.seekTo(positionMs.toLong())
-      promise.resolve(null)
+      onMain {
+        controller?.seekTo(positionMs.toLong())
+        promise.resolve(null)
+      }
     }
 
-    Function("getStatus") {
-      val c = controller
-      mapOf(
-        "connected" to (c != null),
-        "isPlaying" to (c?.isPlaying ?: false),
-        "index" to (c?.currentMediaItemIndex ?: -1),
-        "positionMs" to (c?.currentPosition?.toDouble() ?: 0.0),
-        "durationMs" to (c?.duration?.takeIf { it > 0 }?.toDouble() ?: 0.0),
-        "queueSize" to (c?.mediaItemCount ?: 0)
-      )
-    }
+    /** メインスレッドで更新済みのスナップショットを返す（コントローラには触らない）。 */
+    Function("getStatus") { snapshot }
 
     OnDestroy {
-      controller?.removeListener(playerListener)
-      controller?.release()
-      controller = null
+      polling = false
+      onMain {
+        mainHandler.removeCallbacks(snapshotRunnable)
+        controller?.removeListener(playerListener)
+        controller?.release()
+        controller = null
+      }
     }
   }
 }

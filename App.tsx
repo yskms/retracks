@@ -114,24 +114,38 @@ export default function App() {
       if (perm.status !== 'granted') return;
 
       const t0 = Date.now();
-      const head = await MusicLibrary.getAssetsAsync({ first: 1 });
-      const all = await MusicLibrary.getAssetsAsync({
-        first: head.totalCount || 5000,
-        sortBy: 'title',
-      });
+
+      // getAssetsAsync の first は 1〜1000 しか受け付けないのでページングする
+      const PAGE_SIZE = 1000;
+      const loaded: TrackInput[] = [];
+      let after: string | undefined;
+      let pages = 0;
+      for (;;) {
+        const page = await MusicLibrary.getAssetsAsync({
+          first: PAGE_SIZE,
+          after,
+          sortBy: 'title',
+        });
+        for (const a of page.assets) {
+          loaded.push({
+            id: a.id,
+            uri: a.uri,
+            title: a.title || a.filename,
+            artist: a.artist || 'Unknown',
+            album: a.albumTitle ?? null,
+            // expo-music-library の duration は秒
+            durationMs: Math.round((a.duration || 0) * 1000),
+          });
+        }
+        pages += 1;
+        if (!page.hasNextPage || pages > 50) break;
+        after = page.endCursor;
+      }
+
       const artists = await MusicLibrary.getArtistsAsync();
       const albums = await MusicLibrary.getAlbumsAsync();
       const elapsedMs = Date.now() - t0;
-
-      const loaded: TrackInput[] = all.assets.map((a) => ({
-        id: a.id,
-        uri: a.uri,
-        title: a.title || a.filename,
-        artist: a.artist || 'Unknown',
-        album: a.albumTitle ?? null,
-        // expo-music-library の duration は秒
-        durationMs: Math.round((a.duration || 0) * 1000),
-      }));
+      addLog(`走査ページ数: ${pages}`);
 
       setTracks(loaded);
       setScan({
@@ -146,6 +160,8 @@ export default function App() {
       );
     } catch (e) {
       addLog(`scan ERROR: ${String(e)}`);
+      const stack = (e as Error)?.stack;
+      if (stack) addLog(`stack: ${stack.split('\n').slice(0, 3).join(' | ')}`);
     } finally {
       setBusy(false);
     }

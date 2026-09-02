@@ -17,7 +17,8 @@
       "predictiveBackGestureEnabled": false
     },
     "plugins": [
-      "expo-music-library"
+      "expo-music-library",
+      "expo-splash-screen"
     ]
   }
 }
