@@ -20,23 +20,29 @@ Offline music player for rediscovering your local music.
 
 ## 開発
 
-Expo SDK 57 / React Native 0.86。ネイティブモジュールを含むため **Expo Go では動かない**（development build が必要）。
+Expo SDK 57 / React Native 0.86。再生層は `modules/retracks-player`（Kotlin + Media3）に
+自前実装しているため、**Expo Go では動かない**。ローカルビルドが必要。
 
 ```bash
 npm install
 
-# development build を作る（クラウド。初回は eas init が必要）
-eas build --profile development --platform android
-
-# 開発サーバー
-npx expo start --dev-client
+# Android SDK が必要（Android Studio を入れて ANDROID_HOME を通す）
+npx expo run:android
 ```
+
+### 構成
+
+| | |
+|---|---|
+| `modules/retracks-player/` | 再生層。ExoPlayer + MediaSessionService。区間再生・フェード・通知/イヤホン操作 |
+| `src/rush.ts` | 区間設定の解決（境界処理とフェードのクランプ）。Kotlin 側 `SegmentController` と同じ規則 |
+| `App.tsx` | 技術検証スパイクの画面 |
+| `docs/requirements.md` | 要件定義書 |
 
 ### 現在の状態
 
-技術検証スパイクの段階。`App.tsx` は docs/requirements.md 13.4 の6項目
-（区間再生の精度 / フェード品質 / 曲間の無音 / バックグラウンド動作 /
-通知の次の曲 / ライブラリ走査速度）を実機で計測するための画面。
+技術検証スパイクの段階。docs/requirements.md 13.4 の6項目を実機で確認するところ。
+**Kotlin はまだ一度もコンパイルしていない**（Android SDK 未導入のため）。
 
 ## 名前について
 

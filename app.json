@@ -17,12 +17,6 @@
       "predictiveBackGestureEnabled": false
     },
     "plugins": [
-      [
-        "expo-audio",
-        {
-          "recordAudioAndroid": false
-        }
-      ],
       "expo-music-library"
     ]
   }
