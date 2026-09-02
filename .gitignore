@@ -1,36 +1,45 @@
-# macOS
-.DS_Store
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
 
-# Node
+# dependencies
 node_modules/
-npm-debug.log*
-yarn-error.log*
-*.log
 
 # Expo
 .expo/
 dist/
 web-build/
 expo-env.d.ts
-.metro-health-check*
 
-# Native credentials
+# Native
+.kotlin/
+*.orig.*
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
-*.orig.*
 
-# 注意: ios/ android/ は意図的に無視していない。
-# Expo の prebuild 運用にするか、Kotlin 拡張のため native を直接管理するかが
-# 未決定のため（docs/requirements.md 13章）。方針が決まったら見直すこと。
+# Metro
+.metro-health-check*
 
-# Env
-.env
-.env.local
-*.local
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
 
-# Editor
-.idea/
-.vscode/
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# 補足: /ios /android は Expo prebuild で生成されるため追跡しない。
+# ネイティブ拡張が必要になった場合も、patch-package もしくは
+# ローカル Expo モジュール（modules/）で対応する方針（docs/requirements.md 13.3）。

@@ -20,7 +20,23 @@ Offline music player for rediscovering your local music.
 
 ## 開発
 
-Expo / React Native で開発予定。技術選定は検討中。
+Expo SDK 57 / React Native 0.86。ネイティブモジュールを含むため **Expo Go では動かない**（development build が必要）。
+
+```bash
+npm install
+
+# development build を作る（クラウド。初回は eas init が必要）
+eas build --profile development --platform android
+
+# 開発サーバー
+npx expo start --dev-client
+```
+
+### 現在の状態
+
+技術検証スパイクの段階。`App.tsx` は docs/requirements.md 13.4 の6項目
+（区間再生の精度 / フェード品質 / 曲間の無音 / バックグラウンド動作 /
+通知の次の曲 / ライブラリ走査速度）を実機で計測するための画面。
 
 ## 名前について
 
