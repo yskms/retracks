@@ -1,0 +1,36 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-error.log*
+*.log
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+.metro-health-check*
+
+# Native credentials
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+
+# 注意: ios/ android/ は意図的に無視していない。
+# Expo の prebuild 運用にするか、Kotlin 拡張のため native を直接管理するかが
+# 未決定のため（docs/requirements.md 13章）。方針が決まったら見直すこと。
+
+# Env
+.env
+.env.local
+*.local
+
+# Editor
+.idea/
+.vscode/
