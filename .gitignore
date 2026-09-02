@@ -43,3 +43,6 @@ yarn-error.*
 # 補足: /ios /android は Expo prebuild で生成されるため追跡しない。
 # ネイティブ拡張が必要になった場合も、patch-package もしくは
 # ローカル Expo モジュール（modules/）で対応する方針（docs/requirements.md 13.3）。
+
+# ローカルモジュールのビルド成果物
+modules/*/android/build/
