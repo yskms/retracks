@@ -13,7 +13,10 @@ export type TrackInput = {
 export type SegmentInput = {
   startMs: number;
   lengthMs: number;
+  /** フェードアウトの長さ */
   fadeMs: number;
+  /** フェードインの長さ */
+  fadeInMs: number;
 };
 
 export type PlayerStatus = {
@@ -35,10 +38,13 @@ export enum RepeatMode {
 export type RetracksPlayerEvents = {
   onTrackChange: (event: { index: number; id: string }) => void;
   onPlaybackStateChange: (event: { isPlaying: boolean }) => void;
-  /** 区間を切って次曲へ送ったときの通知。driftMs が検出のズレ。 */
+  /**
+   * 区間が切り替わったときの通知。
+   * 切り出し自体は ExoPlayer が行うため、実経過時間と期待値の差で精度を測る。
+   */
   onSegmentCut: (event: {
-    targetMs: number;
-    actualMs: number;
+    expectedMs: number;
+    elapsedMs: number;
     driftMs: number;
   }) => void;
 };

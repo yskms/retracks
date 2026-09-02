@@ -65,8 +65,8 @@ export default function App() {
     const cut = RetracksPlayer.addListener('onSegmentCut', (e) => {
       cutAtRef.current = Date.now();
       addLog(
-        `✂ 区間終了 目標${(e.targetMs / 1000).toFixed(2)}s ` +
-          `実際${(e.actualMs / 1000).toFixed(2)}s ズレ${Math.round(e.driftMs)}ms`
+        `✂ 区間終了 期待${(e.expectedMs / 1000).toFixed(2)}s ` +
+          `実測${(e.elapsedMs / 1000).toFixed(2)}s ズレ${Math.round(e.driftMs)}ms`
       );
     });
 
@@ -99,6 +99,7 @@ export default function App() {
         startMs: setting.startSec * 1000,
         lengthMs: setting.lengthSec * 1000,
         fadeMs: setting.fadeSec * 1000,
+        fadeInMs: setting.fadeInSec * 1000,
       });
     } else {
       RetracksPlayer.setSegment(null);
@@ -225,9 +226,15 @@ export default function App() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>区間設定</Text>
-          {(['startSec', 'lengthSec', 'fadeSec'] as const).map((key) => (
+          {(['startSec', 'lengthSec', 'fadeInSec', 'fadeSec'] as const).map((key) => (
             <View key={key} style={styles.row}>
-              <Text style={styles.rowLabel}>{key.replace('Sec', '')}</Text>
+              <Text style={styles.rowLabel}>
+                {key === 'fadeSec'
+                  ? 'fadeOut'
+                  : key === 'fadeInSec'
+                    ? 'fadeIn'
+                    : key.replace('Sec', '')}
+              </Text>
               <TouchableOpacity style={styles.step} onPress={() => bump(key, -5)}>
                 <Text style={styles.stepText}>−5</Text>
               </TouchableOpacity>
@@ -252,7 +259,7 @@ export default function App() {
           {preview && (
             <Text style={styles.mono}>
               この曲での実効区間 {preview.start.toFixed(1)}→{preview.end.toFixed(1)}s
-              / fade {preview.fade.toFixed(1)}s
+              {'\n'}fadeIn {preview.fadeIn.toFixed(1)}s / fadeOut {preview.fade.toFixed(1)}s
             </Text>
           )}
         </View>
@@ -314,7 +321,7 @@ const styles = StyleSheet.create({
   card: { backgroundColor: '#21212a', borderRadius: 10, padding: 12, gap: 8 },
   cardTitle: { color: '#f5a623', fontSize: 13, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  rowLabel: { color: '#c9c9d4', width: 56, fontSize: 12 },
+  rowLabel: { color: '#c9c9d4', width: 62, fontSize: 12 },
   rowValue: { color: '#fff', width: 52, textAlign: 'center', fontSize: 13 },
   step: {
     backgroundColor: '#33333f',

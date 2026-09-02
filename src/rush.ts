@@ -11,8 +11,10 @@ export type SegmentSetting = {
   startSec: number;
   /** 再生時間（秒） */
   lengthSec: number;
-  /** フェード時間（秒） */
+  /** フェードアウト時間（秒） */
   fadeSec: number;
+  /** フェードイン時間（秒） */
+  fadeInSec: number;
 };
 
 export type ResolvedSegment = {
@@ -22,9 +24,11 @@ export type ResolvedSegment = {
   end: number;
   /** 実効的な再生時間（秒） */
   length: number;
-  /** 実効的なフェード時間（秒） */
+  /** 実効的なフェードアウト時間（秒） */
   fade: number;
-  /** フェードを開始する位置（秒） */
+  /** 実効的なフェードイン時間（秒） */
+  fadeIn: number;
+  /** フェードアウトを開始する位置（秒） */
   fadeStart: number;
   /** 境界処理が働いたか（検証用） */
   clamped: {
@@ -38,6 +42,7 @@ export const DEFAULT_SEGMENT: SegmentSetting = {
   startSec: 20,
   lengthSec: 35,
   fadeSec: 2,
+  fadeInSec: 1,
 };
 
 /**
@@ -62,28 +67,38 @@ export function resolveSegment(
 
   const length = Math.max(0, end - start);
 
+  // イン・アウトそれぞれを再生時間の半分以下にすることで、両者が重ならないことも保証される
   const maxFade = length / 2;
-  const fadeShortened = setting.fadeSec > maxFade;
+  const fadeShortened =
+    setting.fadeSec > maxFade || setting.fadeInSec > maxFade;
   const fade = Math.max(0, Math.min(setting.fadeSec, maxFade));
+  const fadeIn = Math.max(0, Math.min(setting.fadeInSec, maxFade));
 
   return {
     start,
     end,
     length,
     fade,
+    fadeIn,
     fadeStart: end - fade,
     clamped: { startResetToZero, endTruncated, fadeShortened },
   };
 }
 
 /**
- * フェード中の音量を返す（1.0 → 0.0 の線形）。
- * 区間外では 1.0 を返す。
+ * 区間内の位置に対する音量（フェードイン／フェードアウトを反映）。
+ *
+ * 実際の再生時の音量制御は Kotlin 側 SegmentController が行う。こちらは
+ * 表示・確認用。規則を変えるときは両方を直すこと。
  */
 export function fadeVolumeAt(positionSec: number, segment: ResolvedSegment): number {
-  if (segment.fade <= 0) return 1;
-  if (positionSec <= segment.fadeStart) return 1;
-  if (positionSec >= segment.end) return 0;
-  const progressed = (positionSec - segment.fadeStart) / segment.fade;
-  return Math.max(0, Math.min(1, 1 - progressed));
+  const offset = positionSec - segment.start;
+  if (segment.fadeIn > 0 && offset < segment.fadeIn) {
+    return Math.max(0, Math.min(1, offset / segment.fadeIn));
+  }
+  if (segment.fade > 0 && positionSec > segment.fadeStart) {
+    if (positionSec >= segment.end) return 0;
+    return Math.max(0, Math.min(1, (segment.end - positionSec) / segment.fade));
+  }
+  return 1;
 }

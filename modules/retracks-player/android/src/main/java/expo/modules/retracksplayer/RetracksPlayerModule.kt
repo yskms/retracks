@@ -30,7 +30,10 @@ class TrackInput : Record {
 class SegmentInput : Record {
   @Field var startMs: Double = 0.0
   @Field var lengthMs: Double = 0.0
+  /** フェードアウトの長さ */
   @Field var fadeMs: Double = 0.0
+  /** フェードインの長さ */
+  @Field var fadeInMs: Double = 0.0
 }
 
 /**
@@ -52,6 +55,10 @@ class RetracksPlayerModule : Module() {
   private var controller: MediaController? = null
   private var polling = false
 
+  /** 区間設定を変えたときに MediaItem を組み直せるよう、投入した曲を保持しておく。 */
+  private var tracks: List<TrackInput> = emptyList()
+  private var currentSegment: Segment? = null
+
   @Volatile
   private var snapshot: Map<String, Any?> = emptySnapshot()
 
@@ -63,6 +70,48 @@ class RetracksPlayerModule : Module() {
     "durationMs" to 0.0,
     "queueSize" to 0
   )
+
+  /**
+   * 区間の切り出しは ClippingConfiguration で ExoPlayer 自身に行わせる。
+   * ポーリングで終了を検出するより精度が高く、開始位置へのシークも不要になる。
+   */
+  private fun buildItems(list: List<TrackInput>, seg: Segment?): List<MediaItem> =
+    list.map { t ->
+      val builder = MediaItem.Builder()
+        .setMediaId(t.id)
+        .setUri(t.uri)
+        .setMediaMetadata(
+          MediaMetadata.Builder()
+            .setTitle(t.title)
+            .setArtist(t.artist)
+            .setAlbumTitle(t.album)
+            .build()
+        )
+      val durationMs = t.durationMs.toLong()
+      if (seg != null && durationMs > 0) {
+        val r = SegmentController.resolve(durationMs, seg)
+        if (r.length > 0) {
+          builder.setClippingConfiguration(
+            MediaItem.ClippingConfiguration.Builder()
+              .setStartPositionMs(r.start)
+              .setEndPositionMs(r.end)
+              .build()
+          )
+        }
+      }
+      builder.build()
+    }
+
+  /** 区間設定の変更を反映する。再生位置（曲の位置）は保つ。 */
+  private fun rebuildQueue() {
+    val c = controller ?: return
+    if (tracks.isEmpty()) return
+    val index = c.currentMediaItemIndex.coerceAtLeast(0)
+    val wasPlaying = c.isPlaying
+    c.setMediaItems(buildItems(tracks, currentSegment), index, 0L)
+    c.prepare()
+    if (wasPlaying) c.play()
+  }
 
   /** メインスレッドで実行する。既にメインスレッドならそのまま走らせる。 */
   private fun onMain(block: () -> Unit) {
@@ -129,13 +178,13 @@ class RetracksPlayerModule : Module() {
               controller = c
 
               // 区間の切り出しを JS 側へ通知する（計測用）
-              PlaybackService.instance?.segmentController?.onCut = { targetMs, actualMs ->
+              PlaybackService.instance?.segmentController?.onCut = { expectedMs, elapsedMs ->
                 sendEvent(
                   "onSegmentCut",
                   mapOf(
-                    "targetMs" to targetMs.toDouble(),
-                    "actualMs" to actualMs.toDouble(),
-                    "driftMs" to (actualMs - targetMs).toDouble()
+                    "expectedMs" to expectedMs.toDouble(),
+                    "elapsedMs" to elapsedMs.toDouble(),
+                    "driftMs" to (elapsedMs - expectedMs).toDouble()
                   )
                 )
               }
@@ -156,29 +205,15 @@ class RetracksPlayerModule : Module() {
     }
 
     /** キューを差し替える。tracks は JS 側で並べ替え済み（シャッフル順列）であること。 */
-    AsyncFunction("setQueue") { tracks: List<TrackInput>, startIndex: Int, promise: Promise ->
+    AsyncFunction("setQueue") { list: List<TrackInput>, startIndex: Int, promise: Promise ->
       onMain {
         val c = controller
         if (c == null) {
           promise.reject(CodedException("Player is not prepared"))
           return@onMain
         }
-        val items = tracks.map { t ->
-          MediaItem.Builder()
-            .setMediaId(t.id)
-            .setUri(t.uri)
-            .setMediaMetadata(
-              MediaMetadata.Builder()
-                .setTitle(t.title)
-                .setArtist(t.artist)
-                .setAlbumTitle(t.album)
-                .build()
-            )
-            .build()
-        }
-        PlaybackService.instance?.segmentController
-          ?.setDurations(tracks.associate { it.id to it.durationMs.toLong() })
-
+        tracks = list
+        val items = buildItems(list, currentSegment)
         c.setMediaItems(items, startIndex.coerceIn(0, maxOf(0, items.size - 1)), 0L)
         c.prepare()
         promise.resolve(items.size)
@@ -188,13 +223,17 @@ class RetracksPlayerModule : Module() {
     /** RUSH の区間設定。null を渡すと RUSH OFF（フル再生）。 */
     Function("setSegment") { segment: SegmentInput? ->
       onMain {
-        PlaybackService.instance?.segmentController?.segment = segment?.let {
+        currentSegment = segment?.let {
           Segment(
             startMs = it.startMs.toLong(),
             lengthMs = it.lengthMs.toLong(),
-            fadeMs = it.fadeMs.toLong()
+            fadeMs = it.fadeMs.toLong(),
+            fadeInMs = it.fadeInMs.toLong()
           )
         }
+        PlaybackService.instance?.segmentController?.segment = currentSegment
+        // 区間は MediaItem に焼き込まれているので、変更したら組み直す
+        rebuildQueue()
       }
     }
 
