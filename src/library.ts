@@ -180,6 +180,22 @@ export async function getArtists(): Promise<Artist[]> {
 }
 
 /**
+ * アーティスト名ごとの代表ジャケットを選ぶ。
+ *
+ * MediaStore はアーティストの写真を持っていないため、そのアーティストのアルバムの
+ * ジャケットを流用する。リリース日は取得できないので「最新のアルバム」は選べず、
+ * ジャケットを持つ最初のアルバムを使う。
+ */
+export function artworkByArtist(albums: Album[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const album of albums) {
+    if (!album.artworkUri) continue;
+    if (!map.has(album.artist)) map.set(album.artist, album.artworkUri);
+  }
+  return map;
+}
+
+/**
  * アーティスト名ごとのアルバム数を数える。
  * MediaStore がアーティストのアルバム数を返さないため、アルバム一覧から求める。
  * コンピレーションなどアルバム側のアーティスト名が異なる場合は数えられない。

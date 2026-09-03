@@ -263,6 +263,11 @@ class RetracksPlayerModule : Module() {
       onMain { controller?.repeatMode = mode.coerceIn(0, 2) }
     }
 
+    /** 消えてしまった通知を出し直す。アプリが前面に戻ったときに呼ぶ。 */
+    Function("refreshNotification") {
+      onMain { PlaybackService.instance?.refreshNotification() }
+    }
+
     Function("play") { onMain { controller?.play() } }
     Function("pause") { onMain { controller?.pause() } }
     Function("next") { onMain { controller?.seekToNextMediaItem() } }

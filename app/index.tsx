@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { usePlayback } from '../src/playback';
 import {
+  artworkByArtist,
   countAlbumsByArtist,
   getAlbums,
   getArtists,
@@ -64,6 +65,8 @@ export default function LibraryScreen() {
   const [albums, setAlbums] = useState<Album[]>([]);
 
   const albumCounts = useMemo(() => countAlbumsByArtist(albums), [albums]);
+  // アーティストの写真は持っていないので、そのアーティストのアルバムから流用する
+  const artistArtwork = useMemo(() => artworkByArtist(albums), [albums]);
 
   // 下線はページのスクロール量に追従させる。onPageSelected だけだと
   // 指を離してから動くため、一覧より遅れて見える。
@@ -246,6 +249,7 @@ export default function LibraryScreen() {
               <Row
                 title={item.name}
                 subtitle={subtitleForArtist(albumCounts.get(item.name), item.trackCount)}
+                artworkUri={artistArtwork.get(item.name) ?? null}
                 chevron
                 selected={isSelected('artists', item.id)}
                 onPress={() => {

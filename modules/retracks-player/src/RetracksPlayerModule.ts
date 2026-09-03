@@ -15,6 +15,8 @@ declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
   /** null で RUSH OFF。 */
   setSegment(segment: SegmentInput | null): void;
   setRepeatMode(mode: number): void;
+  /** 消えてしまった通知を出し直す。 */
+  refreshNotification(): void;
   play(): void;
   pause(): void;
   next(): void;

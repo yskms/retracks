@@ -75,6 +75,20 @@ class PlaybackService : MediaSessionService() {
 
   override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
+  /**
+   * 通知を出し直す。
+   *
+   * 通知をスワイプで消すと、Media3 はプレイヤーの状態が変わるまで通知を出し直さない。
+   * 再生は続いているのに通知だけ無い状態になるため、アプリが前面に戻ったときに
+   * ここを呼んで復活させる。
+   */
+  fun refreshNotification() {
+    val session = mediaSession ?: return
+    if (session.player.playWhenReady) {
+      onUpdateNotification(session, /* startInForegroundRequired = */ true)
+    }
+  }
+
   override fun onTaskRemoved(rootIntent: Intent?) {
     // タスク一覧からスワイプで消されたとき、再生していなければサービスを畳む
     val player = mediaSession?.player
