@@ -1,14 +1,9 @@
 /**
  * RE:TR4CKS 技術検証スパイク
  *
- * docs/requirements.md 13.4 の6項目を実機で確認する。
- *
- *  1. 通知・イヤホンからの「次の曲」… 最優先。画面を消して実機で操作して確認する
- *  2. 区間再生の精度            … onSegmentCut の driftMs
- *  3. フェードアウトの品質      … 聴感で確認
- *  4. 曲の切り替わりの間        … 区間終了から次曲開始までの ms
- *  5. バックグラウンド動作      … アプリを閉じて再生が続くか
- *  6. ライブラリ走査の速度      … 走査時間を ms 表示
+ * 技術検証（要件 13.4）は完了。いまはデータ層の確認に使っている。
+ *  - 曲一覧のキャッシュ（毎回の走査を避ける）
+ *  - シャッフルの1巡永続化（要件 6.2。アプリを閉じても続きから再生される）
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -20,65 +15,113 @@ import {
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import * as MusicLibrary from 'expo-music-library';
 
-import {
-  RetracksPlayer,
-  RepeatMode,
-  type TrackInput,
-} from './modules/retracks-player/src';
+import { RetracksPlayer, RepeatMode } from './modules/retracks-player/src';
 import { DEFAULT_SEGMENT, resolveSegment, type SegmentSetting } from './src/rush';
+import {
+  loadLibrary,
+  refreshLibrary,
+  requestPermission,
+  type Track,
+} from './src/library';
+import {
+  buildQueueKey,
+  isCycleComplete,
+  prepareShuffle,
+  progressOf,
+  saveCursor,
+  startNextCycle,
+  type ShuffleState,
+} from './src/shuffle';
+import { clearAll } from './src/storage';
 
-type ScanResult = {
-  songs: number;
-  artists: number;
-  albums: number;
-  elapsedMs: number;
-};
+const QUEUE_KEY = buildQueueKey('all');
 
 export default function App() {
   const [log, setLog] = useState<string[]>([]);
-  const [scan, setScan] = useState<ScanResult | null>(null);
-  const [tracks, setTracks] = useState<TrackInput[]>([]);
+  const [tracks, setTracks] = useState<Track[]>([]);
   const [ready, setReady] = useState(false);
   const [rushOn, setRushOn] = useState(true);
   const [setting, setSetting] = useState<SegmentSetting>(DEFAULT_SEGMENT);
   const [status, setStatus] = useState(() => RetracksPlayer.getStatus?.() ?? null);
+  const [shuffle, setShuffle] = useState<ShuffleState | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const cutAtRef = useRef(0);
+  const tracksRef = useRef<Track[]>([]);
+  const shuffleRef = useRef<ShuffleState | null>(null);
+  const lastIndexRef = useRef(-1);
+
+  tracksRef.current = tracks;
+  shuffleRef.current = shuffle;
 
   const addLog = useCallback((line: string) => {
     const stamp = new Date().toISOString().slice(14, 23);
     setLog((prev) => [`${stamp}  ${line}`, ...prev].slice(0, 60));
   }, []);
 
-  // ---- 接続とイベント購読 ----------------------------------------------
+  // ---- 起動時：接続とライブラリ読み込み --------------------------------
   useEffect(() => {
-    RetracksPlayer.prepareAsync()
-      .then(() => {
-        setReady(true);
-        addLog('PlaybackService に接続');
-      })
-      .catch((e) => addLog(`connect ERROR: ${String(e)}`));
+    let cancelled = false;
 
+    (async () => {
+      try {
+        await RetracksPlayer.prepareAsync();
+        if (!cancelled) setReady(true);
+        addLog('PlaybackService に接続');
+
+        if (!(await requestPermission())) {
+          addLog('メディアの権限が許可されていません');
+          return;
+        }
+
+        const result = await loadLibrary();
+        if (cancelled) return;
+        setTracks(result.tracks);
+        addLog(
+          `ライブラリ ${result.tracks.length}曲 を ${result.elapsedMs}ms で読み込み` +
+            `（${result.source === 'cache' ? 'キャッシュ' : '走査'}）`
+        );
+      } catch (e) {
+        addLog(`起動 ERROR: ${String(e)}`);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [addLog]);
+
+  // ---- 再生イベント ----------------------------------------------------
+  useEffect(() => {
     const cut = RetracksPlayer.addListener('onSegmentCut', (e) => {
-      cutAtRef.current = Date.now();
-      addLog(
-        `✂ 区間終了 期待${(e.expectedMs / 1000).toFixed(2)}s ` +
-          `実測${(e.elapsedMs / 1000).toFixed(2)}s ズレ${Math.round(e.driftMs)}ms`
-      );
+      addLog(`✂ 区間終了 ズレ${Math.round(e.driftMs)}ms`);
     });
 
     const change = RetracksPlayer.addListener('onTrackChange', (e) => {
-      // 検証4: 区間終了から次曲が始まるまでの間
-      const gap = cutAtRef.current ? Date.now() - cutAtRef.current : 0;
-      cutAtRef.current = 0;
-      addLog(`▶ [${e.index}] ${e.id.slice(0, 20)}${gap ? ` (間 ${gap}ms)` : ''}`);
-    });
+      const state = shuffleRef.current;
+      if (!state || e.index < 0) return;
 
-    const playing = RetracksPlayer.addListener('onPlaybackStateChange', (e) => {
-      addLog(e.isPlaying ? 'playing' : 'paused');
+      const previous = lastIndexRef.current;
+      lastIndexRef.current = e.index;
+
+      // 1巡し終えて先頭へ戻った：次の巡の順列を作る（要件 6.2）
+      if (previous === state.order.length - 1 && e.index === 0) {
+        const lastPlayed = state.order[previous] ?? null;
+        void (async () => {
+          const next = await startNextCycle(
+            QUEUE_KEY,
+            tracksRef.current.map((t) => t.id),
+            lastPlayed
+          );
+          setShuffle(next);
+          addLog('1巡完了。順列を作り直して2巡目へ');
+        })();
+        return;
+      }
+
+      const updated = { ...state, cursor: e.index };
+      setShuffle(updated);
+      void saveCursor(QUEUE_KEY, e.index);
     });
 
     const timer = setInterval(() => setStatus(RetracksPlayer.getStatus()), 250);
@@ -86,106 +129,97 @@ export default function App() {
     return () => {
       cut.remove();
       change.remove();
-      playing.remove();
       clearInterval(timer);
     };
   }, [addLog]);
 
-  // ---- 区間設定を native へ反映 ----------------------------------------
+  // ---- 区間設定を native へ ---------------------------------------------
   useEffect(() => {
     if (!ready) return;
-    if (rushOn) {
-      RetracksPlayer.setSegment({
-        startMs: setting.startSec * 1000,
-        lengthMs: setting.lengthSec * 1000,
-        fadeMs: setting.fadeSec * 1000,
-        fadeInMs: setting.fadeInSec * 1000,
-      });
-    } else {
-      RetracksPlayer.setSegment(null);
-    }
+    RetracksPlayer.setSegment(
+      rushOn
+        ? {
+            startMs: setting.startSec * 1000,
+            lengthMs: setting.lengthSec * 1000,
+            fadeMs: setting.fadeSec * 1000,
+            fadeInMs: setting.fadeInSec * 1000,
+          }
+        : null
+    );
   }, [ready, rushOn, setting]);
 
-  // ---- 検証6: ライブラリ走査 -------------------------------------------
-  const scanLibrary = useCallback(async () => {
+  // ---- 再生開始 --------------------------------------------------------
+  const start = useCallback(async () => {
+    if (!ready) return addLog('まだ接続できていません');
+    if (tracks.length === 0) return addLog('ライブラリが空です');
+
     setBusy(true);
     try {
-      const perm = await MusicLibrary.requestPermissionsAsync();
-      addLog(`permission: ${perm.status}`);
-      if (perm.status !== 'granted') return;
+      const { state, resumed, added, removed } = await prepareShuffle(
+        QUEUE_KEY,
+        tracks.map((t) => t.id)
+      );
+      setShuffle(state);
+      lastIndexRef.current = state.cursor;
 
-      const t0 = Date.now();
+      const byId = new Map(tracks.map((t) => [t.id, t]));
+      const ordered = state.order
+        .map((id) => byId.get(id))
+        .filter((t): t is Track => t != null);
 
-      // getAssetsAsync の first は 1〜1000 しか受け付けないのでページングする
-      const PAGE_SIZE = 1000;
-      const loaded: TrackInput[] = [];
-      let after: string | undefined;
-      let pages = 0;
-      for (;;) {
-        const page = await MusicLibrary.getAssetsAsync({
-          first: PAGE_SIZE,
-          after,
-          sortBy: 'title',
-        });
-        for (const a of page.assets) {
-          loaded.push({
-            id: a.id,
-            uri: a.uri,
-            title: a.title || a.filename,
-            artist: a.artist || 'Unknown',
-            album: a.albumTitle ?? null,
-            // expo-music-library の duration は秒
-            durationMs: Math.round((a.duration || 0) * 1000),
-          });
-        }
-        pages += 1;
-        if (!page.hasNextPage || pages > 50) break;
-        after = page.endCursor;
-      }
+      await RetracksPlayer.setQueue(
+        ordered.map((t) => ({
+          id: t.id,
+          uri: t.uri,
+          title: t.title,
+          artist: t.artist,
+          album: t.album,
+          durationMs: t.durationMs,
+        })),
+        state.cursor
+      );
+      RetracksPlayer.setRepeatMode(RepeatMode.All);
+      RetracksPlayer.play();
 
-      const artists = await MusicLibrary.getArtistsAsync();
-      const albums = await MusicLibrary.getAlbumsAsync();
-      const elapsedMs = Date.now() - t0;
-      addLog(`走査ページ数: ${pages}`);
-
-      setTracks(loaded);
-      setScan({
-        songs: loaded.length,
-        artists: artists.length,
-        albums: albums.length,
-        elapsedMs,
-      });
+      const { played, total } = progressOf(state);
       addLog(
-        `scan: ${loaded.length}曲 / ${artists.length}アーティスト / ` +
-          `${albums.length}アルバム を ${elapsedMs}ms`
+        resumed
+          ? `前回の続きから再開 ${played}/${total}` +
+              (added.length || removed.length
+                ? `（追加${added.length} / 削除${removed.length}）`
+                : '')
+          : `新しい順列を作成 ${total}曲`
       );
     } catch (e) {
-      addLog(`scan ERROR: ${String(e)}`);
-      const stack = (e as Error)?.stack;
-      if (stack) addLog(`stack: ${stack.split('\n').slice(0, 3).join(' | ')}`);
+      addLog(`start ERROR: ${String(e)}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [ready, tracks, addLog]);
+
+  // ---- ライブラリ再走査 -------------------------------------------------
+  const refresh = useCallback(async () => {
+    setBusy(true);
+    try {
+      const result = await refreshLibrary(tracksRef.current);
+      setTracks(result.tracks);
+      addLog(
+        `再走査 ${result.tracks.length}曲 ${result.elapsedMs}ms ` +
+          `(追加${result.added.length} / 削除${result.removed.length})`
+      );
+    } catch (e) {
+      addLog(`refresh ERROR: ${String(e)}`);
     } finally {
       setBusy(false);
     }
   }, [addLog]);
 
-  // ---- キュー投入 ------------------------------------------------------
-  const startQueue = useCallback(async () => {
-    if (!ready) return addLog('まだ接続できていません');
-    if (tracks.length === 0) return addLog('先に SCAN を実行してください');
-
-    // 本実装ではこの順列を永続化する（要件 6.2）
-    const shuffled = [...tracks];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-
-    const count = await RetracksPlayer.setQueue(shuffled, 0);
-    RetracksPlayer.setRepeatMode(RepeatMode.All);
-    RetracksPlayer.play();
-    addLog(`queue: ${count}曲を投入して再生開始`);
-    addLog('▼ ここで画面を消し、通知とイヤホンの「次へ」を試すこと');
-  }, [ready, tracks, addLog]);
+  const reset = useCallback(async () => {
+    await clearAll();
+    setShuffle(null);
+    lastIndexRef.current = -1;
+    addLog('保存内容を消去しました（次回は走査＋新しい順列）');
+  }, [addLog]);
 
   const bump = (key: keyof SegmentSetting, delta: number) =>
     setSetting((prev) => ({
@@ -196,6 +230,7 @@ export default function App() {
   const preview = status?.durationMs
     ? resolveSegment(status.durationMs / 1000, setting)
     : null;
+  const progress = shuffle ? progressOf(shuffle) : null;
 
   return (
     <View style={styles.root}>
@@ -207,21 +242,24 @@ export default function App() {
         </Text>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>6. ライブラリ走査</Text>
-          <TouchableOpacity
-            style={[styles.button, busy && styles.dim]}
-            onPress={scanLibrary}
-            disabled={busy}
-          >
-            <Text style={styles.buttonText}>{busy ? 'SCANNING…' : 'SCAN'}</Text>
-          </TouchableOpacity>
-          {scan && (
-            <Text style={styles.mono}>
-              {scan.songs}曲 / {scan.artists}アーティスト / {scan.albums}アルバム
-              {'\n'}
-              {scan.elapsedMs}ms
-            </Text>
-          )}
+          <Text style={styles.cardTitle}>ライブラリとシャッフル</Text>
+          <Text style={styles.mono}>
+            {tracks.length}曲
+            {progress ? `　1巡の進捗 ${progress.played} / ${progress.total}` : ''}
+            {shuffle && isCycleComplete(shuffle) ? '（1巡の最後）' : ''}
+          </Text>
+          <View style={styles.row}>
+            <TouchableOpacity
+              style={[styles.button, busy && styles.dim]}
+              onPress={refresh}
+              disabled={busy}
+            >
+              <Text style={styles.buttonText}>再走査</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.button} onPress={reset}>
+              <Text style={styles.buttonText}>保存を消去</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View style={styles.card}>
@@ -235,9 +273,6 @@ export default function App() {
                     ? 'fadeIn'
                     : key.replace('Sec', '')}
               </Text>
-              <TouchableOpacity style={styles.step} onPress={() => bump(key, -5)}>
-                <Text style={styles.stepText}>−5</Text>
-              </TouchableOpacity>
               <TouchableOpacity style={styles.step} onPress={() => bump(key, -1)}>
                 <Text style={styles.stepText}>−1</Text>
               </TouchableOpacity>
@@ -258,16 +293,20 @@ export default function App() {
           </TouchableOpacity>
           {preview && (
             <Text style={styles.mono}>
-              この曲での実効区間 {preview.start.toFixed(1)}→{preview.end.toFixed(1)}s
-              {'\n'}fadeIn {preview.fadeIn.toFixed(1)}s / fadeOut {preview.fade.toFixed(1)}s
+              実効区間 {preview.start.toFixed(1)}→{preview.end.toFixed(1)}s /
+              fadeIn {preview.fadeIn.toFixed(1)}s / fadeOut {preview.fade.toFixed(1)}s
             </Text>
           )}
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>1〜5. 再生</Text>
+          <Text style={styles.cardTitle}>再生</Text>
           <View style={styles.row}>
-            <TouchableOpacity style={styles.button} onPress={startQueue}>
+            <TouchableOpacity
+              style={[styles.button, busy && styles.dim]}
+              onPress={start}
+              disabled={busy}
+            >
               <Text style={styles.buttonText}>START</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -284,24 +323,21 @@ export default function App() {
             >
               <Text style={styles.buttonText}>PREV</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.button}
-              onPress={() => RetracksPlayer.next()}
-            >
+            <TouchableOpacity style={styles.button} onPress={() => RetracksPlayer.next()}>
               <Text style={styles.buttonText}>NEXT</Text>
             </TouchableOpacity>
           </View>
           {status && (
             <Text style={styles.mono}>
               [{status.index + 1}/{status.queueSize}]{' '}
-              {(status.positionMs / 1000).toFixed(2)}s /{' '}
+              {(status.positionMs / 1000).toFixed(1)}s /{' '}
               {(status.durationMs / 1000).toFixed(1)}s
             </Text>
           )}
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>計測ログ</Text>
+          <Text style={styles.cardTitle}>ログ</Text>
           {log.map((line, i) => (
             <Text key={i} style={styles.logLine}>
               {line}
