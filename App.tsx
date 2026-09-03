@@ -27,13 +27,25 @@ import {
 import {
   buildQueueKey,
   isCycleComplete,
+  loadShuffle,
   prepareShuffle,
   progressOf,
   saveCursor,
   startNextCycle,
   type ShuffleState,
 } from './src/shuffle';
-import { clearAll } from './src/storage';
+import { clearAll, readJson, StorageKeys, writeJson } from './src/storage';
+
+/** getStatus のスナップショットが埋まるまで少し待つ。 */
+async function waitForStatus(timeoutMs = 1500) {
+  const started = Date.now();
+  for (;;) {
+    const status = RetracksPlayer.getStatus();
+    if (status?.connected) return status;
+    if (Date.now() - started > timeoutMs) return status;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
 
 const QUEUE_KEY = buildQueueKey('all');
 
@@ -46,6 +58,9 @@ export default function App() {
   const [status, setStatus] = useState(() => RetracksPlayer.getStatus?.() ?? null);
   const [shuffle, setShuffle] = useState<ShuffleState | null>(null);
   const [busy, setBusy] = useState(false);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  /** サービス側に再生中のキューが残っているか。残っていれば作り直さない。 */
+  const [hasSession, setHasSession] = useState(false);
 
   const tracksRef = useRef<Track[]>([]);
   const shuffleRef = useRef<ShuffleState | null>(null);
@@ -65,6 +80,12 @@ export default function App() {
 
     (async () => {
       try {
+        // 区間設定は先に読む。既定値のまま native へ送ると「設定が変わった」と
+        // 判定され、再生中のキューが組み直されてしまう。
+        const saved = await readJson<SegmentSetting>(StorageKeys.settings);
+        if (saved && !cancelled) setSetting({ ...DEFAULT_SEGMENT, ...saved });
+        if (!cancelled) setSettingsLoaded(true);
+
         await RetracksPlayer.prepareAsync();
         if (!cancelled) setReady(true);
         addLog('PlaybackService に接続');
@@ -81,6 +102,23 @@ export default function App() {
           `ライブラリ ${result.tracks.length}曲 を ${result.elapsedMs}ms で読み込み` +
             `（${result.source === 'cache' ? 'キャッシュ' : '走査'}）`
         );
+
+        // サービスが生きていて再生が続いている場合は、そのセッションを引き継ぐ。
+        // ここでキューを作り直すと再生中の曲が先頭に戻ってしまう。
+        const status = await waitForStatus();
+        if (!cancelled && status && status.queueSize > 0) {
+          const restored = await loadShuffle(QUEUE_KEY);
+          if (restored) {
+            const adopted = { ...restored, cursor: Math.max(0, status.index) };
+            setShuffle(adopted);
+            lastIndexRef.current = adopted.cursor;
+          }
+          setHasSession(true);
+          addLog(
+            `再生中のセッションに接続（${status.index + 1}/${status.queueSize}）。` +
+              'キューは作り直しません'
+          );
+        }
       } catch (e) {
         addLog(`起動 ERROR: ${String(e)}`);
       }
@@ -122,6 +160,8 @@ export default function App() {
       const updated = { ...state, cursor: e.index };
       setShuffle(updated);
       void saveCursor(QUEUE_KEY, e.index);
+      // 新しい曲になったので、途中位置の記録は捨てる
+      void writeJson(StorageKeys.playbackPosition(QUEUE_KEY), 0);
     });
 
     const timer = setInterval(() => setStatus(RetracksPlayer.getStatus()), 250);
@@ -135,7 +175,8 @@ export default function App() {
 
   // ---- 区間設定を native へ ---------------------------------------------
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || !settingsLoaded) return;
+    void writeJson(StorageKeys.settings, setting);
     RetracksPlayer.setSegment(
       rushOn
         ? {
@@ -146,11 +187,20 @@ export default function App() {
           }
         : null
     );
-  }, [ready, rushOn, setting]);
+  }, [ready, settingsLoaded, rushOn, setting]);
 
   // ---- 再生開始 --------------------------------------------------------
   const start = useCallback(async () => {
     if (!ready) return addLog('まだ接続できていません');
+
+    // サービスにキューが残っているなら作り直さない。
+    // 作り直すと再生中の曲が区間の先頭から鳴り直してしまう。
+    if (hasSession) {
+      RetracksPlayer.play();
+      addLog('再生中のセッションを継続');
+      return;
+    }
+
     if (tracks.length === 0) return addLog('ライブラリが空です');
 
     setBusy(true);
@@ -179,7 +229,18 @@ export default function App() {
         state.cursor
       );
       RetracksPlayer.setRepeatMode(RepeatMode.All);
+
+      // 曲の途中で終了していた場合はその位置から
+      const savedPosition = await readJson<number>(
+        StorageKeys.playbackPosition(QUEUE_KEY)
+      );
+      if (typeof savedPosition === 'number' && savedPosition > 1000) {
+        await RetracksPlayer.seekTo(savedPosition);
+        addLog(`曲の途中 ${(savedPosition / 1000).toFixed(1)}s から再開`);
+      }
+
       RetracksPlayer.play();
+      setHasSession(true);
 
       const { played, total } = progressOf(state);
       addLog(
@@ -195,7 +256,30 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [ready, tracks, addLog]);
+  }, [ready, hasSession, tracks, addLog]);
+
+  /** 順列を作り直して最初から始める（動作確認用）。 */
+  const restart = useCallback(async () => {
+    await clearAll();
+    setShuffle(null);
+    setHasSession(false);
+    lastIndexRef.current = -1;
+    addLog('保存内容を消去。START で新しい順列を作ります');
+  }, [addLog]);
+
+  // ---- 再生位置の保存 ---------------------------------------------------
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const current = RetracksPlayer.getStatus();
+      if (current?.isPlaying && current.positionMs > 0) {
+        void writeJson(
+          StorageKeys.playbackPosition(QUEUE_KEY),
+          Math.round(current.positionMs)
+        );
+      }
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   // ---- ライブラリ再走査 -------------------------------------------------
   const refresh = useCallback(async () => {
@@ -212,13 +296,6 @@ export default function App() {
     } finally {
       setBusy(false);
     }
-  }, [addLog]);
-
-  const reset = useCallback(async () => {
-    await clearAll();
-    setShuffle(null);
-    lastIndexRef.current = -1;
-    addLog('保存内容を消去しました（次回は走査＋新しい順列）');
   }, [addLog]);
 
   const bump = (key: keyof SegmentSetting, delta: number) =>
@@ -247,6 +324,7 @@ export default function App() {
             {tracks.length}曲
             {progress ? `　1巡の進捗 ${progress.played} / ${progress.total}` : ''}
             {shuffle && isCycleComplete(shuffle) ? '（1巡の最後）' : ''}
+            {hasSession ? '\n再生中のセッションあり（STARTで継続）' : ''}
           </Text>
           <View style={styles.row}>
             <TouchableOpacity
@@ -256,7 +334,7 @@ export default function App() {
             >
               <Text style={styles.buttonText}>再走査</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.button} onPress={reset}>
+            <TouchableOpacity style={styles.button} onPress={restart}>
               <Text style={styles.buttonText}>保存を消去</Text>
             </TouchableOpacity>
           </View>

@@ -177,6 +177,11 @@ class RetracksPlayerModule : Module() {
               c.addListener(playerListener)
               controller = c
 
+              // アプリのプロセスだけ作り直された場合、サービスは生きたままで
+              // 区間設定を保持している。それを引き継がないと「設定が変わった」と
+              // 誤判定してキューを組み直し、再生中の曲が先頭に戻ってしまう。
+              currentSegment = PlaybackService.instance?.segmentController?.segment
+
               // 区間の切り出しを JS 側へ通知する（計測用）
               PlaybackService.instance?.segmentController?.onCut = { expectedMs, elapsedMs ->
                 sendEvent(
@@ -223,7 +228,7 @@ class RetracksPlayerModule : Module() {
     /** RUSH の区間設定。null を渡すと RUSH OFF（フル再生）。 */
     Function("setSegment") { segment: SegmentInput? ->
       onMain {
-        currentSegment = segment?.let {
+        val next = segment?.let {
           Segment(
             startMs = it.startMs.toLong(),
             lengthMs = it.lengthMs.toLong(),
@@ -231,7 +236,13 @@ class RetracksPlayerModule : Module() {
             fadeInMs = it.fadeInMs.toLong()
           )
         }
-        PlaybackService.instance?.segmentController?.segment = currentSegment
+
+        // 値が同じなら何もしない。組み直しは再生中の曲を先頭から鳴らし直すため、
+        // 設定が実際に変わったときだけ行う。
+        if (next == currentSegment) return@onMain
+
+        currentSegment = next
+        PlaybackService.instance?.segmentController?.segment = next
         // 区間は MediaItem に焼き込まれているので、変更したら組み直す
         rebuildQueue()
       }

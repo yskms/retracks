@@ -21,6 +21,16 @@ export const StorageKeys = {
   shuffle: (queueKey: string) => `${PREFIX}:shuffle:v1:${queueKey}`,
   /** 順列とは別に保存する。曲が変わるたびに書くため、順列本体を書き直さずに済む。 */
   shuffleCursor: (queueKey: string) => `${PREFIX}:shuffle-cursor:v1:${queueKey}`,
+  /**
+   * 曲の途中まで再生した位置。アプリを終了して再開したときに続きから鳴らすため。
+   * 区間再生時は区間の先頭を 0 とした値。
+   */
+  playbackPosition: (queueKey: string) => `${PREFIX}:position:v1:${queueKey}`,
+  /**
+   * 区間設定。永続化しないとアプリ再起動のたびに既定値へ戻り、
+   * ネイティブ側が「設定が変わった」と判定してキューを組み直してしまう。
+   */
+  settings: `${PREFIX}:settings:v1`,
 } as const;
 
 export async function readJson<T>(key: string): Promise<T | null> {
