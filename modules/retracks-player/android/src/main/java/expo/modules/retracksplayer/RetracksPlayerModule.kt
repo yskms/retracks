@@ -102,15 +102,22 @@ class RetracksPlayerModule : Module() {
       builder.build()
     }
 
-  /** 区間設定の変更を反映する。再生位置（曲の位置）は保つ。 */
-  private fun rebuildQueue() {
+  /**
+   * 区間設定の変更を「次の曲から」反映する。
+   *
+   * 区間は MediaItem に焼き込まれているため作り直しが必要だが、再生中の曲を
+   * 差し替えるとその曲が区間の先頭から鳴り直してしまう。設定を1つ変えるたびに
+   * 曲が鳴り直すのは体験として悪いので、現在の曲は触らず以降だけ差し替える。
+   */
+  private fun applySegmentFromNextItem() {
     val c = controller ?: return
     if (tracks.isEmpty()) return
-    val index = c.currentMediaItemIndex.coerceAtLeast(0)
-    val wasPlaying = c.isPlaying
-    c.setMediaItems(buildItems(tracks, currentSegment), index, 0L)
-    c.prepare()
-    if (wasPlaying) c.play()
+
+    val count = minOf(tracks.size, c.mediaItemCount)
+    val from = c.currentMediaItemIndex + 1
+    if (from >= count) return
+
+    c.replaceMediaItems(from, count, buildItems(tracks.subList(from, count), currentSegment))
   }
 
   /** メインスレッドで実行する。既にメインスレッドならそのまま走らせる。 */
@@ -242,9 +249,9 @@ class RetracksPlayerModule : Module() {
         if (next == currentSegment) return@onMain
 
         currentSegment = next
+        // フェードの長さは今の曲にも即座に効かせてよい（区間の境界は変わらない）
         PlaybackService.instance?.segmentController?.segment = next
-        // 区間は MediaItem に焼き込まれているので、変更したら組み直す
-        rebuildQueue()
+        applySegmentFromNextItem()
       }
     }
 

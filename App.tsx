@@ -146,12 +146,29 @@ export default function App() {
       if (previous === state.order.length - 1 && e.index === 0) {
         const lastPlayed = state.order[previous] ?? null;
         void (async () => {
-          const next = await startNextCycle(
-            QUEUE_KEY,
-            tracksRef.current.map((t) => t.id),
-            lastPlayed
-          );
+          const ids = tracksRef.current.map((t) => t.id);
+          const next = await startNextCycle(QUEUE_KEY, ids, lastPlayed);
           setShuffle(next);
+          lastIndexRef.current = 0;
+
+          // 作り直した順列をプレイヤーにも反映する。
+          // これをしないと2巡目が1巡目と同じ並びのまま再生されてしまう。
+          const byId = new Map(tracksRef.current.map((t) => [t.id, t]));
+          const ordered = next.order
+            .map((id) => byId.get(id))
+            .filter((t): t is Track => t != null);
+          await RetracksPlayer.setQueue(
+            ordered.map((t) => ({
+              id: t.id,
+              uri: t.uri,
+              title: t.title,
+              artist: t.artist,
+              album: t.album,
+              durationMs: t.durationMs,
+            })),
+            0
+          );
+          RetracksPlayer.play();
           addLog('1巡完了。順列を作り直して2巡目へ');
         })();
         return;
@@ -176,17 +193,24 @@ export default function App() {
   // ---- 区間設定を native へ ---------------------------------------------
   useEffect(() => {
     if (!ready || !settingsLoaded) return;
-    void writeJson(StorageKeys.settings, setting);
-    RetracksPlayer.setSegment(
-      rushOn
-        ? {
-            startMs: setting.startSec * 1000,
-            lengthMs: setting.lengthSec * 1000,
-            fadeMs: setting.fadeSec * 1000,
-            fadeInMs: setting.fadeInSec * 1000,
-          }
-        : null
-    );
+
+    // 連打されるたびに送ると 1000件超のキューを何度も差し替えることになるので、
+    // 操作が落ち着いてから送る。
+    const timer = setTimeout(() => {
+      void writeJson(StorageKeys.settings, setting);
+      RetracksPlayer.setSegment(
+        rushOn
+          ? {
+              startMs: setting.startSec * 1000,
+              lengthMs: setting.lengthSec * 1000,
+              fadeMs: setting.fadeSec * 1000,
+              fadeInMs: setting.fadeInSec * 1000,
+            }
+          : null
+      );
+    }, 350);
+
+    return () => clearTimeout(timer);
   }, [ready, settingsLoaded, rushOn, setting]);
 
   // ---- 再生開始 --------------------------------------------------------
