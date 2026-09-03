@@ -49,6 +49,24 @@ async function waitForStatus(timeoutMs = 1500) {
 
 const QUEUE_KEY = buildQueueKey('all');
 
+/**
+ * 項目ごとの増減幅。フェードは 0.5 秒刻みにする。
+ * ネイティブ側はミリ秒で計算しているので 0.5 秒（500ms）はそのまま効く。
+ */
+const STEPS: Record<keyof SegmentSetting, number[]> = {
+  startSec: [-5, -1, 1, 5],
+  lengthSec: [-5, -1, 1, 5],
+  fadeInSec: [-1, -0.5, 0.5, 1],
+  fadeSec: [-1, -0.5, 0.5, 1],
+};
+
+const LABELS: Record<keyof SegmentSetting, string> = {
+  startSec: 'start',
+  lengthSec: 'length',
+  fadeInSec: 'fadeIn',
+  fadeSec: 'fadeOut',
+};
+
 export default function App() {
   const [log, setLog] = useState<string[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
@@ -201,10 +219,10 @@ export default function App() {
       RetracksPlayer.setSegment(
         rushOn
           ? {
-              startMs: setting.startSec * 1000,
-              lengthMs: setting.lengthSec * 1000,
-              fadeMs: setting.fadeSec * 1000,
-              fadeInMs: setting.fadeInSec * 1000,
+              startMs: Math.round(setting.startSec * 1000),
+              lengthMs: Math.round(setting.lengthSec * 1000),
+              fadeMs: Math.round(setting.fadeSec * 1000),
+              fadeInMs: Math.round(setting.fadeInSec * 1000),
             }
           : null
       );
@@ -325,7 +343,7 @@ export default function App() {
   const bump = (key: keyof SegmentSetting, delta: number) =>
     setSetting((prev) => ({
       ...prev,
-      [key]: Math.max(0, Math.round((prev[key] + delta) * 10) / 10),
+      [key]: Math.max(0, Math.round((prev[key] + delta) * 2) / 2),
     }));
 
   const preview = status?.durationMs
@@ -368,23 +386,19 @@ export default function App() {
           <Text style={styles.cardTitle}>区間設定</Text>
           {(['startSec', 'lengthSec', 'fadeInSec', 'fadeSec'] as const).map((key) => (
             <View key={key} style={styles.row}>
-              <Text style={styles.rowLabel}>
-                {key === 'fadeSec'
-                  ? 'fadeOut'
-                  : key === 'fadeInSec'
-                    ? 'fadeIn'
-                    : key.replace('Sec', '')}
-              </Text>
-              <TouchableOpacity style={styles.step} onPress={() => bump(key, -1)}>
-                <Text style={styles.stepText}>−1</Text>
-              </TouchableOpacity>
-              <Text style={styles.rowValue}>{setting[key]}s</Text>
-              <TouchableOpacity style={styles.step} onPress={() => bump(key, 1)}>
-                <Text style={styles.stepText}>+1</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.step} onPress={() => bump(key, 5)}>
-                <Text style={styles.stepText}>+5</Text>
-              </TouchableOpacity>
+              <Text style={styles.rowLabel}>{LABELS[key]}</Text>
+              {STEPS[key].map((delta) => (
+                <TouchableOpacity
+                  key={delta}
+                  style={styles.step}
+                  onPress={() => bump(key, delta)}
+                >
+                  <Text style={styles.stepText}>
+                    {delta > 0 ? `+${delta}` : `−${Math.abs(delta)}`}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              <Text style={styles.rowValue}>{setting[key].toFixed(1)}s</Text>
             </View>
           ))}
           <TouchableOpacity
