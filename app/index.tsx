@@ -33,6 +33,7 @@ import {
 } from '../src/library';
 import { colors, formatDuration } from '../src/theme';
 import { Row } from '../src/components/Row';
+import { useSelection } from '../src/useSelection';
 
 /**
  * 下線をネイティブ側で動かすためのラッパ。
@@ -48,19 +49,19 @@ const TABS: { id: TabId; label: string }[] = [
   { id: 'albums', label: 'アルバム' },
 ];
 
-type Selection = { kind: TabId; ids: string[] } | null;
-
 export default function LibraryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { tracks, playFrom, playTracks, playAll, currentTrack, progress } = usePlayback();
+  const { tracks, playFrom, playTracks, playAll, currentTrack, allProgress } =
+    usePlayback();
+  const { selection, active: inSelection, toggle, clear, isSelected } =
+    useSelection<TabId>();
 
   const pagerRef = useRef<PagerView>(null);
   const [page, setPage] = useState(0);
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
-  const [selection, setSelection] = useState<Selection>(null);
 
   const albumCounts = useMemo(() => countAlbumsByArtist(albums), [albums]);
 
@@ -82,16 +83,6 @@ export default function LibraryScreen() {
     })();
   }, [tracks.length]);
 
-  const toggleSelect = useCallback((kind: TabId, id: string) => {
-    setSelection((prev) => {
-      if (!prev || prev.kind !== kind) return { kind, ids: [id] };
-      const ids = prev.ids.includes(id)
-        ? prev.ids.filter((x) => x !== id)
-        : [...prev.ids, id];
-      return ids.length === 0 ? null : { kind, ids };
-    });
-  }, []);
-
   /** 選択したものからキューを作って再生する（要件 10.3）。 */
   const playSelection = useCallback(async () => {
     if (!selection) return;
@@ -100,29 +91,28 @@ export default function LibraryScreen() {
     if (kind === 'songs') {
       const byId = new Map(tracks.map((t) => [t.id, t]));
       const picked = ids.map((id) => byId.get(id)).filter((t): t is Track => t != null);
-      await playTracks('all', ids, picked);
+      // 'all' を使うと全曲シャッフルの1巡状態を上書きしてしまうため専用のキーにする
+      await playTracks('selection', ids, picked);
     } else if (kind === 'artists') {
       await playTracks('artist', ids, await getTracksForArtists(ids));
     } else {
       await playTracks('album', ids, await getTracksForAlbums(ids));
     }
 
-    setSelection(null);
+    clear();
     router.push('/player');
-  }, [selection, tracks, playTracks, router]);
-
-  const inSelection = selection != null;
+  }, [selection, tracks, playTracks, clear, router]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {inSelection ? (
         <View style={styles.header}>
-          <Pressable hitSlop={10} onPress={() => setSelection(null)}>
+          <Pressable hitSlop={10} onPress={clear}>
             <Text style={styles.headerIcon}>✕</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>{selection.ids.length}件選択</Text>
-          <Pressable hitSlop={10} onPress={playSelection}>
-            <Text style={styles.headerAction}>▶ 再生</Text>
+          <Text style={styles.headerTitle}>{selection?.ids.length ?? 0}件選択</Text>
+          <Pressable style={styles.headerShuffle} onPress={playSelection}>
+            <Text style={styles.headerShuffleText}>⤮ シャッフル</Text>
           </Pressable>
         </View>
       ) : (
@@ -195,15 +185,15 @@ export default function LibraryScreen() {
                   subtitle={item.artist}
                   trailing={formatDuration(item.durationMs)}
                   artworkUri={item.artworkUri}
-                  selected={selection?.kind === 'songs' && selection.ids.includes(item.id)}
+                  selected={isSelected('songs', item.id)}
                   playing={currentTrack?.id === item.id}
                   onPress={async () => {
-                    if (inSelection) return toggleSelect('songs', item.id);
+                    if (inSelection) return toggle('songs', item.id);
                     // 曲を直接タップしたときは画面を移さない。
                     // 一覧を見ながら次々選べるようにするため。
                     await playFrom(tracks, index);
                   }}
-                  onLongPress={() => toggleSelect('songs', item.id)}
+                  onLongPress={() => toggle('songs', item.id)}
                 />
               )}
             />
@@ -218,8 +208,8 @@ export default function LibraryScreen() {
             >
               <Text style={styles.fabGlyph}>⤮</Text>
               <Text style={styles.fabLabel}>
-                {progress && progress.played > 1
-                  ? `続きから ${progress.played}/${progress.total}`
+                {allProgress && allProgress.played > 1
+                  ? `続きから ${allProgress.played}/${allProgress.total}`
                   : '全曲シャッフル'}
               </Text>
             </Pressable>
@@ -237,15 +227,15 @@ export default function LibraryScreen() {
                 title={item.name}
                 subtitle={subtitleForArtist(albumCounts.get(item.name), item.trackCount)}
                 chevron
-                selected={selection?.kind === 'artists' && selection.ids.includes(item.id)}
+                selected={isSelected('artists', item.id)}
                 onPress={() => {
-                  if (inSelection) return toggleSelect('artists', item.id);
+                  if (inSelection) return toggle('artists', item.id);
                   router.push({
                     pathname: '/artist/[id]',
                     params: { id: item.id, name: item.name },
                   });
                 }}
-                onLongPress={() => toggleSelect('artists', item.id)}
+                onLongPress={() => toggle('artists', item.id)}
               />
             )}
           />
@@ -263,15 +253,15 @@ export default function LibraryScreen() {
                 subtitle={`${item.artist} · ${item.trackCount}曲`}
                 artworkUri={item.artworkUri}
                 chevron
-                selected={selection?.kind === 'albums' && selection.ids.includes(item.id)}
+                selected={isSelected('albums', item.id)}
                 onPress={() => {
-                  if (inSelection) return toggleSelect('albums', item.id);
+                  if (inSelection) return toggle('albums', item.id);
                   router.push({
                     pathname: '/album/[id]',
                     params: { id: item.id, title: item.title, artist: item.artist },
                   });
                 }}
-                onLongPress={() => toggleSelect('albums', item.id)}
+                onLongPress={() => toggle('albums', item.id)}
               />
             )}
           />
@@ -308,7 +298,13 @@ const styles = StyleSheet.create({
   brand: { color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
   headerIcon: { color: colors.text, fontSize: 18 },
-  headerAction: { color: colors.accent, fontSize: 15, fontWeight: '700' },
+  headerShuffle: {
+    backgroundColor: colors.accent,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+  },
+  headerShuffleText: { color: '#1a1206', fontSize: 12, fontWeight: '700' },
   tabBar: { flexDirection: 'row' },
   tab: { flex: 1, alignItems: 'center' },
   tabLabel: { color: colors.textDim, fontSize: 13, paddingVertical: 12 },

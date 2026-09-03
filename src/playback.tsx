@@ -42,6 +42,11 @@ type PlaybackValue = {
   status: PlayerStatus | null;
   currentTrack: Track | null;
   progress: { played: number; total: number } | null;
+  /**
+   * 全曲キューの1巡の進捗。いま別のキューを再生していても、また何も再生していなくても
+   * 「続きから N/M」を出せるように、再生中のキューとは別に保持する。
+   */
+  allProgress: { played: number; total: number } | null;
   setting: SegmentSetting;
   rushOn: boolean;
   log: string[];
@@ -99,6 +104,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [rushOn, setRushOn] = useState(true);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [log, setLog] = useState<string[]>([]);
+  const [allProgress, setAllProgress] = useState<{
+    played: number;
+    total: number;
+  } | null>(null);
+
+  const ALL_KEY = buildQueueKey('all');
 
   const queueKeyRef = useRef<string>(buildQueueKey('all'));
   const queueRef = useRef<Track[]>([]);
@@ -159,6 +170,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         const result = await loadLibrary();
         if (cancelled) return;
         applyTracks(result.tracks);
+
+        // 再生していなくても FAB に「続きから」を出せるよう、保存済みの1巡を読む
+        const savedAll = await loadShuffle(ALL_KEY);
+        if (!cancelled && savedAll) setAllProgress(progressOf(savedAll));
         addLog(
           `ライブラリ ${result.tracks.length}曲 / ${result.elapsedMs}ms` +
             `（${result.source === 'cache' ? 'キャッシュ' : '走査'}）`
@@ -222,7 +237,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      applyShuffle({ ...state, cursor: event.index });
+      const updated = { ...state, cursor: event.index };
+      applyShuffle(updated);
+      if (queueKeyRef.current === ALL_KEY) setAllProgress(progressOf(updated));
       void saveCursor(queueKeyRef.current, event.index);
       void writeJson(StorageKeys.playbackPosition(queueKeyRef.current), 0);
     });
@@ -303,6 +320,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
       RetracksPlayer.play();
       const { played, total } = progressOf(state);
+      if (key === ALL_KEY) setAllProgress({ played, total });
       addLog(resumed ? `続きから再開 ${played}/${total}` : `新しい順列 ${total}曲`);
     },
     [ready, addLog, applyShuffle, applyQueue]
@@ -343,6 +361,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     await clearAll();
     applyShuffle(null);
     applyQueue([]);
+    setAllProgress(null);
     lastIndexRef.current = -1;
     addLog('保存内容を消去しました');
   }, [addLog, applyShuffle, applyQueue]);
@@ -361,6 +380,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     status,
     currentTrack,
     progress,
+    allProgress,
     setting,
     rushOn,
     log,

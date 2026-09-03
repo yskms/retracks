@@ -18,7 +18,7 @@ export type ShuffleState = {
   cursor: number;
 };
 
-export type QueueMode = 'all' | 'artist' | 'album';
+export type QueueMode = 'all' | 'artist' | 'album' | 'selection';
 
 /**
  * 順列の保存単位となるキー。生成条件ごとに順列を持つため、
@@ -26,7 +26,9 @@ export type QueueMode = 'all' | 'artist' | 'album';
  */
 export function buildQueueKey(mode: QueueMode, ids: string[] = []): string {
   if (mode === 'all') return 'all';
-  // 選択順に依存しないよう並べ替えてから連結する
+  // 選択順に依存しないよう並べ替えてから連結する。
+  // 'selection'（曲を直接選んだ場合）も専用のキーになるため、
+  // 全曲シャッフルの1巡状態を上書きしてしまうことはない。
   return `${mode}:${[...ids].sort().join(',')}`;
 }
 
