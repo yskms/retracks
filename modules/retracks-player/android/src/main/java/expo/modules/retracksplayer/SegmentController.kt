@@ -2,6 +2,7 @@ package expo.modules.retracksplayer
 
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -54,6 +55,16 @@ class SegmentController(private val player: Player) : Player.Listener {
     const val MIN_RISE_MS = 200L
 
     /**
+     * 音量の適用先が再生位置よりどれだけ先行しているか（ミリ秒）。
+     *
+     * player.volume は「いま鳴っている音」ではなく、これから AudioTrack へ書き込む
+     * サンプルに効く。ExoPlayer は先読みして書き込むため、再生位置 Q の時点で
+     * 書き込まれているのは概ね Q + この値 の位置の音になる。
+     * ゲインの計算にこの分だけ進めた位置を使うことで、音とゲインの位置を合わせる。
+     */
+    const val WRITE_AHEAD_MS = 250L
+
+    /**
      * 区間の解決。JS 側の src/rush.ts と同じ規則。両方を変更すること。
      *
      *  - 開始位置が曲の長さを超える場合は 0 から（要件 4.2）
@@ -103,6 +114,14 @@ class SegmentController(private val player: Player) : Player.Listener {
    */
   private var currentVolume = 1f
 
+  /**
+   * player.currentPosition は実測で約260ms ごとにしか更新されない。
+   * そのまま使うとフェードが 260ms 刻みの階段になり、音量が段階的に飛ぶ。
+   * 値が変わらない間は経過時間で補間して、tick の分解能まで滑らかにする。
+   */
+  private var lastRawPos = -1L
+  private var lastRawPosAtMs = 0L
+
   private val tickRunnable = object : Runnable {
     override fun run() {
       applyFade()
@@ -138,6 +157,7 @@ class SegmentController(private val player: Player) : Player.Listener {
     itemStartedAtMs = now
     itemExpectedMs = 0L
     pausedDuringItem = false
+    lastRawPos = -1L
 
     // ここで音量を触らない。切り替わり直後はまだ前の曲の末尾が出力されているため、
     // 1.0 に戻すとその末尾が鳴ってしまう。音量は applyFade のランプに任せる。
@@ -146,6 +166,19 @@ class SegmentController(private val player: Player) : Player.Listener {
 
   override fun onIsPlayingChanged(isPlaying: Boolean) {
     if (!isPlaying) pausedDuringItem = true
+  }
+
+  /** 位置の更新が粗いので、同じ値が続く間は経過時間を足して補間する。 */
+  private fun interpolatedPosition(): Long {
+    val raw = player.currentPosition
+    val now = SystemClock.elapsedRealtime()
+    if (raw != lastRawPos) {
+      lastRawPos = raw
+      lastRawPosAtMs = now
+      return raw
+    }
+    if (!player.isPlaying) return raw
+    return raw + (now - lastRawPosAtMs)
   }
 
   private fun applyFade() {
@@ -165,7 +198,8 @@ class SegmentController(private val player: Player) : Player.Listener {
     if (duration <= 0) return
     if (itemExpectedMs == 0L) itemExpectedMs = duration
 
-    val pos = player.currentPosition.coerceIn(0L, duration)
+    // 音量の適用先に合わせて先読み分だけ進めた位置でゲインを決める
+    val pos = (interpolatedPosition() + WRITE_AHEAD_MS).coerceIn(0L, duration)
     val half = duration / 2
     val fadeIn = maxOf(0L, minOf(seg.fadeInMs, half))
     val fadeOut = maxOf(0L, minOf(seg.fadeMs, half))
@@ -189,5 +223,6 @@ class SegmentController(private val player: Player) : Player.Listener {
 
     currentVolume = next.coerceIn(0f, 1f)
     player.volume = currentVolume
+
   }
 }
