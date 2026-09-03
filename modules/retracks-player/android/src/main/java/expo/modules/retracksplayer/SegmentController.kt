@@ -159,9 +159,16 @@ class SegmentController(private val player: Player) : Player.Listener {
     pausedDuringItem = false
     lastRawPos = -1L
 
-    // ここで音量を触らない。切り替わり直後はまだ前の曲の末尾が出力されているため、
-    // 1.0 に戻すとその末尾が鳴ってしまう。音量は applyFade のランプに任せる。
-    // フェードアウト後なら currentVolume は 0 付近にあり、そこから上がっていく。
+    // フェードインする設定なら、ここで先に絞っておく。
+    // 一覧から曲をタップした場合など、前の曲がフェードアウトせずに切り替わるときは
+    // 音量が 1.0 のまま新しい曲の頭が書き込まれ、一瞬大きく鳴ってしまう。
+    //
+    // 逆に 1.0 へ戻すことは決してしない。切り替わり直後はまだ前の曲の末尾が
+    // 出力されており、戻すとその末尾が鳴ってしまうため。
+    if ((segment?.fadeInMs ?: 0L) > 0L) {
+      currentVolume = 0f
+      player.volume = 0f
+    }
   }
 
   override fun onIsPlayingChanged(isPlaying: Boolean) {

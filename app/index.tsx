@@ -34,6 +34,12 @@ import {
 import { colors, formatDuration } from '../src/theme';
 import { Row } from '../src/components/Row';
 
+/**
+ * 下線をネイティブ側で動かすためのラッパ。
+ * JS スレッドで値を更新すると、イベントのたびに段付きの動きになる。
+ */
+const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
+
 type TabId = 'songs' | 'artists' | 'albums';
 
 const TABS: { id: TabId; label: string }[] = [
@@ -60,7 +66,9 @@ export default function LibraryScreen() {
 
   // 下線はページのスクロール量に追従させる。onPageSelected だけだと
   // 指を離してから動くため、一覧より遅れて見える。
-  const scroll = useRef(new Animated.Value(0)).current;
+  // position と offset をネイティブ駆動で受け取り、その和で位置を決める。
+  const position = useRef(new Animated.Value(0)).current;
+  const offset = useRef(new Animated.Value(0)).current;
   const tabWidth = width / TABS.length;
 
   useEffect(() => {
@@ -148,10 +156,10 @@ export default function LibraryScreen() {
               marginLeft: tabWidth * 0.25,
               transform: [
                 {
-                  translateX: scroll.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [0, tabWidth],
-                  }),
+                  translateX: Animated.multiply(
+                    Animated.add(position, offset),
+                    tabWidth
+                  ),
                 },
               ],
             },
@@ -159,14 +167,14 @@ export default function LibraryScreen() {
         />
       </View>
 
-      <PagerView
+      <AnimatedPagerView
         ref={pagerRef}
         style={styles.pager}
         initialPage={0}
-        onPageScroll={(event) => {
-          const { position, offset } = event.nativeEvent;
-          scroll.setValue(position + offset);
-        }}
+        onPageScroll={Animated.event(
+          [{ nativeEvent: { position, offset } }],
+          { useNativeDriver: true }
+        )}
         onPageSelected={(event) => setPage(event.nativeEvent.position)}
       >
         {/* 楽曲 */}
@@ -267,7 +275,7 @@ export default function LibraryScreen() {
             )}
           />
         </View>
-      </PagerView>
+      </AnimatedPagerView>
     </View>
   );
 }
