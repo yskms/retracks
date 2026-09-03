@@ -18,7 +18,9 @@
     },
     "plugins": [
       "expo-music-library",
-      "expo-splash-screen"
-    ]
+      "expo-splash-screen",
+      "expo-router"
+    ],
+    "scheme": "retracks"
   }
 }

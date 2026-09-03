@@ -131,3 +131,82 @@ export async function refreshLibrary(previous: Track[]): Promise<RefreshResult> 
     elapsedMs: Date.now() - started,
   };
 }
+
+// ---- アーティスト / アルバム -------------------------------------------
+
+export type Artist = {
+  id: string;
+  name: string;
+  albumCount: number;
+  trackCount: number;
+};
+
+export type Album = {
+  id: string;
+  title: string;
+  artist: string;
+  trackCount: number;
+  artworkUri: string | null;
+};
+
+export async function getArtists(): Promise<Artist[]> {
+  const list = await MusicLibrary.getArtistsAsync();
+  return list.map((a) => ({
+    id: a.id,
+    name: a.title || 'Unknown',
+    albumCount: a.albumSongs ?? 0,
+    trackCount: a.assetCount ?? 0,
+  }));
+}
+
+export async function getAlbums(): Promise<Album[]> {
+  const list = await MusicLibrary.getAlbumsAsync();
+  return list.map((a) => ({
+    id: a.id,
+    title: a.title || 'Unknown',
+    artist: a.artist || 'Unknown',
+    trackCount: a.assetCount ?? 0,
+    artworkUri: a.artworkUri ?? a.artwork ?? null,
+  }));
+}
+
+function toTrack(asset: MusicLibrary.Asset): Track {
+  return {
+    id: asset.id,
+    uri: asset.uri,
+    title: asset.title || asset.filename,
+    artist: asset.artist || 'Unknown',
+    album: asset.albumTitle ?? null,
+    durationMs: Math.round((asset.duration || 0) * 1000),
+  };
+}
+
+/** 指定したアーティスト群に属する曲を集める（重複は排除。要件 5.2）。 */
+export async function getTracksForArtists(ids: string[]): Promise<Track[]> {
+  const seen = new Set<string>();
+  const tracks: Track[] = [];
+  for (const id of ids) {
+    const page = await MusicLibrary.getArtistAssetsAsync(id, { first: PAGE_SIZE });
+    for (const asset of page.assets) {
+      if (seen.has(asset.id)) continue;
+      seen.add(asset.id);
+      tracks.push(toTrack(asset));
+    }
+  }
+  return tracks;
+}
+
+/** 指定したアルバム群に属する曲を集める（重複は排除）。 */
+export async function getTracksForAlbums(ids: string[]): Promise<Track[]> {
+  const seen = new Set<string>();
+  const tracks: Track[] = [];
+  for (const id of ids) {
+    const page = await MusicLibrary.getAlbumAssetsAsync(id, { first: PAGE_SIZE });
+    for (const asset of page.assets) {
+      if (seen.has(asset.id)) continue;
+      seen.add(asset.id);
+      tracks.push(toTrack(asset));
+    }
+  }
+  return tracks;
+}
