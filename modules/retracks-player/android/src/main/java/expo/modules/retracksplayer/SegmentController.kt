@@ -44,6 +44,16 @@ class SegmentController(private val player: Player) : Player.Listener {
     const val TICK_MS = 50L
 
     /**
+     * 音量を上げるときの最短時間。
+     *
+     * ExoPlayer は次の曲を先読みしてバッファに積むため、曲の切り替わりイベントが
+     * 届いた時点でもスピーカーからはまだ前の曲の末尾が出ている。そこで音量を
+     * 一気に 1.0 へ戻すと、フェードアウトで絞ったはずの末尾が一瞬フル音量で鳴る。
+     * 上げ方向に最低限の時間をかけることでこれを避ける。
+     */
+    const val MIN_RISE_MS = 200L
+
+    /**
      * 区間の解決。JS 側の src/rush.ts と同じ規則。両方を変更すること。
      *
      *  - 開始位置が曲の長さを超える場合は 0 から（要件 4.2）
@@ -129,9 +139,9 @@ class SegmentController(private val player: Player) : Player.Listener {
     itemExpectedMs = 0L
     pausedDuringItem = false
 
-    val fadeIn = segment?.fadeInMs ?: 0L
-    currentVolume = if (fadeIn > 0) 0f else 1f
-    player.volume = currentVolume
+    // ここで音量を触らない。切り替わり直後はまだ前の曲の末尾が出力されているため、
+    // 1.0 に戻すとその末尾が鳴ってしまう。音量は applyFade のランプに任せる。
+    // フェードアウト後なら currentVolume は 0 付近にあり、そこから上がっていく。
   }
 
   override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -167,10 +177,11 @@ class SegmentController(private val player: Player) : Player.Listener {
       else -> 1f
     }.coerceIn(0f, 1f)
 
-    // 上げるときはフェードインの速度を超えない。下げるときは即座に従う
+    // 上げるときは必ず時間をかける。下げるときは即座に従う
     // （フェードアウトはもともと連続的に下がるので制限しても影響しない）。
-    val next = if (target > currentVolume && fadeIn > 0) {
-      val maxStep = TICK_MS.toFloat() / fadeIn.toFloat()
+    val next = if (target > currentVolume) {
+      val riseMs = maxOf(fadeIn, MIN_RISE_MS)
+      val maxStep = TICK_MS.toFloat() / riseMs.toFloat()
       minOf(target, currentVolume + maxStep)
     } else {
       target
