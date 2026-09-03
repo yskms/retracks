@@ -1,7 +1,10 @@
 package expo.modules.retracksplayer
 
+import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -25,6 +28,11 @@ import androidx.media3.session.MediaSessionService
 class PlaybackService : MediaSessionService() {
 
   companion object {
+    private const val TAG = "RetracksService"
+
+    /** Media3 の DefaultMediaNotificationProvider が使う既定の通知ID。 */
+    private const val MEDIA_NOTIFICATION_ID = 1001
+
     /** モジュール側から SegmentController を触るための参照。同一プロセス内でのみ使う。 */
     @Volatile
     var instance: PlaybackService? = null
@@ -76,17 +84,27 @@ class PlaybackService : MediaSessionService() {
   override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
   /**
-   * 通知を出し直す。
+   * 通知が消えていたら出し直す。
    *
-   * 通知をスワイプで消すと、Media3 はプレイヤーの状態が変わるまで通知を出し直さない。
-   * 再生は続いているのに通知だけ無い状態になるため、アプリが前面に戻ったときに
-   * ここを呼んで復活させる。
+   * 通知をスワイプで消すと、Media3 はプレイヤーの状態が変わるまで出し直さないため、
+   * 再生は続いているのに通知だけ無い状態になる。
+   *
+   * 実際に消えているかを NotificationManager で確認してから出し直す。
+   * 毎回無条件に呼ぶと通知がちらつくため。
    */
   fun refreshNotification() {
     val session = mediaSession ?: return
-    if (session.player.playWhenReady) {
-      onUpdateNotification(session, /* startInForegroundRequired = */ true)
-    }
+    if (!session.player.playWhenReady) return
+
+    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+    val present = manager
+      ?.activeNotifications
+      ?.any { it.id == MEDIA_NOTIFICATION_ID } ?: false
+
+    if (present) return
+
+    Log.d(TAG, "通知が消えていたので出し直す")
+    onUpdateNotification(session, /* startInForegroundRequired = */ true)
   }
 
   override fun onTaskRemoved(rootIntent: Intent?) {
