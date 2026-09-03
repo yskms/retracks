@@ -7,6 +7,8 @@
 
 import * as MusicLibrary from 'expo-music-library';
 
+import { RetracksPlayer } from '../modules/retracks-player/src';
+
 import { readJson, StorageKeys, writeJson } from './storage';
 
 export type Track = {
@@ -165,6 +167,12 @@ export type Album = {
   artist: string;
   trackCount: number;
   artworkUri: string | null;
+  /**
+   * リリース年。音楽ファイルに埋め込まれた年を Android が取り込んだもの。
+   * expo-music-library が公開していないため、自前モジュールで MediaStore から読む。
+   * 年が入っていないファイルもあるため null になりうる。
+   */
+  year: number | null;
 };
 
 export async function getArtists(): Promise<Artist[]> {
@@ -183,16 +191,22 @@ export async function getArtists(): Promise<Artist[]> {
  * アーティスト名ごとの代表ジャケットを選ぶ。
  *
  * MediaStore はアーティストの写真を持っていないため、そのアーティストのアルバムの
- * ジャケットを流用する。リリース日は取得できないので「最新のアルバム」は選べず、
- * ジャケットを持つ最初のアルバムを使う。
+ * ジャケットを流用する。リリース年が分かるものは最も新しいアルバムを使い、
+ * 年が入っていない場合は最初に見つかったものを使う。
  */
 export function artworkByArtist(albums: Album[]): Map<string, string> {
-  const map = new Map<string, string>();
+  const best = new Map<string, { uri: string; year: number }>();
+
   for (const album of albums) {
     if (!album.artworkUri) continue;
-    if (!map.has(album.artist)) map.set(album.artist, album.artworkUri);
+    const year = album.year ?? 0;
+    const current = best.get(album.artist);
+    if (!current || year > current.year) {
+      best.set(album.artist, { uri: album.artworkUri, year });
+    }
   }
-  return map;
+
+  return new Map([...best].map(([artist, v]) => [artist, v.uri]));
 }
 
 /**
@@ -209,13 +223,18 @@ export function countAlbumsByArtist(albums: Album[]): Map<string, number> {
 }
 
 export async function getAlbums(): Promise<Album[]> {
-  const list = await MusicLibrary.getAlbumsAsync();
+  const [list, years] = await Promise.all([
+    MusicLibrary.getAlbumsAsync(),
+    RetracksPlayer.getAlbumYears().catch(() => ({}) as Record<string, number>),
+  ]);
+
   return list.map((a) => ({
     id: a.id,
     title: a.title || 'Unknown',
     artist: a.artist || 'Unknown',
     trackCount: a.assetCount ?? 0,
     artworkUri: a.artworkUri ?? a.artwork ?? null,
+    year: years[a.id] ?? null,
   }));
 }
 
@@ -262,6 +281,9 @@ export type ArtistDetail = {
 };
 
 export async function getArtistDetail(artistId: string): Promise<ArtistDetail> {
+  const years = await RetracksPlayer.getAlbumYears().catch(
+    () => ({}) as Record<string, number>
+  );
   const page = await MusicLibrary.getArtistAssetsAsync(artistId, {
     first: PAGE_SIZE,
     artwork: ARTWORK_MODE,
@@ -288,13 +310,21 @@ export async function getArtistDetail(artistId: string): Promise<ArtistDetail> {
       artist: asset.artist || 'Unknown',
       trackCount: 1,
       artworkUri: asset.artworkUri ?? asset.artwork ?? null,
+      year: null,
     });
   }
 
-  return {
-    albums: [...albums.values()].sort((a, b) => a.title.localeCompare(b.title)),
-    tracks,
-  };
+  // 年が分かるものは新しい順、分からないものは後ろへ
+  const sorted = [...albums.values()]
+    .map((album) => ({ ...album, year: years[album.id] ?? null }))
+    .sort((a, b) => {
+      if (a.year && b.year && a.year !== b.year) return b.year - a.year;
+      if (a.year && !b.year) return -1;
+      if (!a.year && b.year) return 1;
+      return a.title.localeCompare(b.title);
+    });
+
+  return { albums: sorted, tracks };
 }
 
 /** アルバム1枚ぶんの曲。 */

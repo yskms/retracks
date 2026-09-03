@@ -31,6 +31,8 @@ export const StorageKeys = {
    * ネイティブ側が「設定が変わった」と判定してキューを組み直してしまう。
    */
   settings: `${PREFIX}:settings:v1`,
+  /** アーティスト／アルバムタブの表示形式（一覧かグリッドか）。 */
+  layout: `${PREFIX}:layout:v1`,
 } as const;
 
 export async function readJson<T>(key: string): Promise<T | null> {

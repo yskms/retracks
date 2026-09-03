@@ -11,6 +11,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -20,6 +21,7 @@ import { usePlayback } from '../../src/playback';
 import { getArtistDetail, type Album, type Track } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
+import { Tile } from '../../src/components/Tile';
 import { useSelection } from '../../src/useSelection';
 
 /**
@@ -31,6 +33,7 @@ type Kind = 'songs';
 export default function ArtistScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const { playFrom, playTracks, currentTrack } = usePlayback();
   const {
@@ -46,6 +49,9 @@ export default function ArtistScreen() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // アルバムはタイルで見せる。ジャケットが並ぶ方が探しやすい
+  const tileSize = (width - 16 * 2 - 10 * 2) / 3;
 
   /** アルバム名 → 収録曲。アルバム行の選択に使う。 */
   const tracksByAlbum = useMemo(() => {
@@ -172,32 +178,38 @@ export default function ArtistScreen() {
               {albums.length > 0 && (
                 <>
                   <Text style={styles.sectionTitle}>アルバム</Text>
-                  {albums.map((album) => (
-                    <Row
-                      key={album.id}
-                      title={album.title}
-                      subtitle={`${album.trackCount}曲`}
-                      artworkUri={album.artworkUri}
-                      selected={areAllSelected('songs', albumTrackIds(album))}
-                      chevron
-                      onPress={() => {
-                        // 選択中はアルバムの収録曲をまとめて選ぶ／外す
-                        if (inSelection) return toggleMany('songs', albumTrackIds(album));
-                        router.push({
-                          pathname: '/album/[id]',
-                          params: {
-                            id: album.id,
-                            title: album.title,
-                            artist: album.artist,
-                            // アルバムIDが取れない曲もあるため、辿り直せるよう
-                            // アーティストIDも渡しておく
-                            artistId: id,
-                          },
-                        });
-                      }}
-                      onLongPress={() => toggleMany('songs', albumTrackIds(album))}
-                    />
-                  ))}
+                  <View style={styles.albumGrid}>
+                    {albums.map((album) => (
+                      <Tile
+                        key={album.id}
+                        title={album.title}
+                        subtitle={
+                          album.year ? `${album.year}` : `${album.trackCount}曲`
+                        }
+                        artworkUri={album.artworkUri}
+                        size={tileSize}
+                        selected={areAllSelected('songs', albumTrackIds(album))}
+                        onPress={() => {
+                          // 選択中はアルバムの収録曲をまとめて選ぶ／外す
+                          if (inSelection) {
+                            return toggleMany('songs', albumTrackIds(album));
+                          }
+                          router.push({
+                            pathname: '/album/[id]',
+                            params: {
+                              id: album.id,
+                              title: album.title,
+                              artist: album.artist,
+                              // アルバムIDが取れない曲もあるため、辿り直せるよう
+                              // アーティストIDも渡しておく
+                              artistId: id,
+                            },
+                          });
+                        }}
+                        onLongPress={() => toggleMany('songs', albumTrackIds(album))}
+                      />
+                    ))}
+                  </View>
                 </>
               )}
 
@@ -257,6 +269,12 @@ const styles = StyleSheet.create({
   actionText: { color: colors.text, fontSize: 12, fontWeight: '600' },
   actionPrimary: { backgroundColor: colors.accent },
   actionPrimaryText: { color: '#1a1206', fontSize: 12, fontWeight: '700' },
+  albumGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    paddingHorizontal: 16,
+  },
   sectionTitle: {
     color: colors.accent,
     fontSize: 12,

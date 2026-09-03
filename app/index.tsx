@@ -34,7 +34,9 @@ import {
 } from '../src/library';
 import { colors, formatDuration } from '../src/theme';
 import { Row } from '../src/components/Row';
+import { Tile } from '../src/components/Tile';
 import { useSelection } from '../src/useSelection';
+import { readJson, StorageKeys, writeJson } from '../src/storage';
 
 /**
  * 下線をネイティブ側で動かすためのラッパ。
@@ -43,6 +45,13 @@ import { useSelection } from '../src/useSelection';
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
 
 type TabId = 'songs' | 'artists' | 'albums';
+
+type Layout = 'list' | 'grid';
+
+/** グリッドの列数と余白。 */
+const GRID_COLUMNS = 3;
+const GRID_PADDING = 12;
+const GRID_GAP = 10;
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'songs', label: '楽曲' },
@@ -63,6 +72,26 @@ export default function LibraryScreen() {
   const [page, setPage] = useState(0);
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [layout, setLayout] = useState<Layout>('grid');
+
+  // 表示形式は覚えておく
+  useEffect(() => {
+    void (async () => {
+      const saved = await readJson<Layout>(StorageKeys.layout);
+      if (saved === 'list' || saved === 'grid') setLayout(saved);
+    })();
+  }, []);
+
+  const toggleLayout = useCallback(() => {
+    setLayout((prev) => {
+      const next: Layout = prev === 'grid' ? 'list' : 'grid';
+      void writeJson(StorageKeys.layout, next);
+      return next;
+    });
+  }, []);
+
+  const tileSize =
+    (width - GRID_PADDING * 2 - GRID_GAP * (GRID_COLUMNS - 1)) / GRID_COLUMNS;
 
   const albumCounts = useMemo(() => countAlbumsByArtist(albums), [albums]);
   // アーティストの写真は持っていないので、そのアーティストのアルバムから流用する
@@ -137,9 +166,16 @@ export default function LibraryScreen() {
       ) : (
         <View style={styles.header}>
           <Text style={styles.brand}>RE:TR4CKS</Text>
-          <Pressable hitSlop={10} onPress={() => router.push('/debug')}>
-            <Text style={styles.headerIcon}>⋮</Text>
-          </Pressable>
+          <View style={styles.headerRight}>
+            {page > 0 && (
+              <Pressable hitSlop={10} onPress={toggleLayout}>
+                <Text style={styles.headerIcon}>{layout === 'grid' ? '☰' : '▦'}</Text>
+              </Pressable>
+            )}
+            <Pressable hitSlop={10} onPress={() => router.push('/debug')}>
+              <Text style={styles.headerIcon}>⋮</Text>
+            </Pressable>
+          </View>
         </View>
       )}
 
@@ -242,54 +278,100 @@ export default function LibraryScreen() {
         {/* アーティスト */}
         <View key="artists" style={styles.page}>
           <FlatList
+            // numColumns は途中で変えられないので、key を変えて作り直す
+            key={layout}
             data={artists}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => (
-              <Row
-                title={item.name}
-                subtitle={subtitleForArtist(albumCounts.get(item.name), item.trackCount)}
-                artworkUri={artistArtwork.get(item.name) ?? null}
-                chevron
-                selected={isSelected('artists', item.id)}
-                onPress={() => {
-                  if (inSelection) return toggle('artists', item.id);
-                  router.push({
-                    pathname: '/artist/[id]',
-                    params: { id: item.id, name: item.name },
-                  });
-                }}
-                onLongPress={() => toggle('artists', item.id)}
-              />
-            )}
+            numColumns={layout === 'grid' ? GRID_COLUMNS : 1}
+            columnWrapperStyle={layout === 'grid' ? styles.gridRow : undefined}
+            contentContainerStyle={
+              layout === 'grid' ? styles.gridContent : styles.listContent
+            }
+            renderItem={({ item }) =>
+              layout === 'grid' ? (
+                <Tile
+                  title={item.name}
+                  subtitle={subtitleForArtist(albumCounts.get(item.name), item.trackCount)}
+                  artworkUri={artistArtwork.get(item.name) ?? null}
+                  size={tileSize}
+                  selected={isSelected('artists', item.id)}
+                  onPress={() => {
+                    if (inSelection) return toggle('artists', item.id);
+                    router.push({
+                      pathname: '/artist/[id]',
+                      params: { id: item.id, name: item.name },
+                    });
+                  }}
+                  onLongPress={() => toggle('artists', item.id)}
+                />
+              ) : (
+                <Row
+                  title={item.name}
+                  subtitle={subtitleForArtist(albumCounts.get(item.name), item.trackCount)}
+                  artworkUri={artistArtwork.get(item.name) ?? null}
+                  chevron
+                  selected={isSelected('artists', item.id)}
+                  onPress={() => {
+                    if (inSelection) return toggle('artists', item.id);
+                    router.push({
+                      pathname: '/artist/[id]',
+                      params: { id: item.id, name: item.name },
+                    });
+                  }}
+                  onLongPress={() => toggle('artists', item.id)}
+                />
+              )
+            }
           />
         </View>
 
         {/* アルバム */}
         <View key="albums" style={styles.page}>
           <FlatList
+            key={layout}
             data={albums}
             keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => (
-              <Row
-                title={item.title}
-                subtitle={`${item.artist} · ${item.trackCount}曲`}
-                artworkUri={item.artworkUri}
-                chevron
-                selected={isSelected('albums', item.id)}
-                onPress={() => {
-                  if (inSelection) return toggle('albums', item.id);
-                  router.push({
-                    pathname: '/album/[id]',
-                    params: { id: item.id, title: item.title, artist: item.artist },
-                  });
-                }}
-                onLongPress={() => toggle('albums', item.id)}
-              />
-            )}
+            numColumns={layout === 'grid' ? GRID_COLUMNS : 1}
+            columnWrapperStyle={layout === 'grid' ? styles.gridRow : undefined}
+            contentContainerStyle={
+              layout === 'grid' ? styles.gridContent : styles.listContent
+            }
+            renderItem={({ item }) => {
+              const subtitle = item.year
+                ? `${item.artist} · ${item.year}`
+                : `${item.artist} · ${item.trackCount}曲`;
+              const open = () => {
+                if (inSelection) return toggle('albums', item.id);
+                router.push({
+                  pathname: '/album/[id]',
+                  params: { id: item.id, title: item.title, artist: item.artist },
+                });
+              };
+              return layout === 'grid' ? (
+                <Tile
+                  title={item.title}
+                  subtitle={subtitle}
+                  artworkUri={item.artworkUri}
+                  size={tileSize}
+                  selected={isSelected('albums', item.id)}
+                  onPress={open}
+                  onLongPress={() => toggle('albums', item.id)}
+                />
+              ) : (
+                <Row
+                  title={item.title}
+                  subtitle={subtitle}
+                  artworkUri={item.artworkUri}
+                  chevron
+                  selected={isSelected('albums', item.id)}
+                  onPress={open}
+                  onLongPress={() => toggle('albums', item.id)}
+                />
+              );
+            }}
           />
         </View>
+
       </AnimatedPagerView>
     </View>
   );
@@ -320,6 +402,7 @@ const styles = StyleSheet.create({
     height: 52,
   },
   brand: { color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 18 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
   headerIcon: { color: colors.text, fontSize: 18 },
   headerActions: { flexDirection: 'row', gap: 8 },
@@ -340,6 +423,8 @@ const styles = StyleSheet.create({
   pager: { flex: 1 },
   page: { flex: 1 },
   listContent: { paddingBottom: 24 },
+  gridContent: { padding: GRID_PADDING, paddingBottom: 24 },
+  gridRow: { gap: GRID_GAP },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
