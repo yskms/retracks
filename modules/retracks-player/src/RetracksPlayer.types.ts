@@ -7,6 +7,8 @@ export type TrackInput = {
   album?: string | null;
   /** 曲の長さ（ミリ秒）。区間解決に使うので、判っているなら必ず渡す。 */
   durationMs: number;
+  /** ジャケットの URI。通知とロック画面に表示される。 */
+  artworkUri?: string | null;
 };
 
 /** RUSH の区間設定。null を渡すと RUSH OFF（フル再生）。 */

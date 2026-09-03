@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 
 import { usePlayback } from '../playback';
 import { colors } from '../theme';
+import { Artwork } from './Artwork';
 
 /**
  * 全画面共通の簡易プレイヤー（要件 10.5）。
@@ -25,6 +26,7 @@ export function MiniPlayer() {
         <View style={[styles.progressFill, { width: `${ratio * 100}%` }]} />
       </View>
       <Pressable style={styles.row} onPress={() => router.push('/player')}>
+        <Artwork uri={currentTrack.artworkUri} size={40} />
         <View style={styles.info}>
           <Text style={styles.title} numberOfLines={1}>
             {currentTrack.title}

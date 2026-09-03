@@ -16,10 +16,15 @@ export type Track = {
   artist: string;
   album: string | null;
   durationMs: number;
+  /**
+   * 音楽ファイルに埋め込まれているアートワークの URI。
+   * ネットワークからの取得は一切しない。無ければ null。
+   */
+  artworkUri: string | null;
 };
 
 export type LibrarySnapshot = {
-  version: 1;
+  version: 2;
   scannedAt: number;
   tracks: Track[];
 };
@@ -29,6 +34,26 @@ const PAGE_SIZE = 1000;
 
 /** 異常なライブラリで無限に回らないための保険。 */
 const MAX_PAGES = 50;
+
+/**
+ * アートワークの取得方法。'uri' は遅延URIを返すだけなので走査は軽い。
+ * 取得そのものを止めたい場合は 'none' にする。
+ * 設定でON/OFFできるようにするときは、ここを差し替える。
+ */
+const ARTWORK_MODE = 'uri' as const;
+
+function toTrack(asset: MusicLibrary.Asset): Track {
+  return {
+    id: asset.id,
+    uri: asset.uri,
+    title: asset.title || asset.filename,
+    artist: asset.artist || 'Unknown',
+    album: asset.albumTitle ?? null,
+    // expo-music-library の duration は秒
+    durationMs: Math.round((asset.duration || 0) * 1000),
+    artworkUri: asset.artworkUri ?? null,
+  };
+}
 
 export async function requestPermission(): Promise<boolean> {
   const res = await MusicLibrary.requestPermissionsAsync();
@@ -46,18 +71,11 @@ export async function scanLibrary(): Promise<Track[]> {
       first: PAGE_SIZE,
       after,
       sortBy: 'title',
+      artwork: ARTWORK_MODE,
     });
 
     for (const asset of page.assets) {
-      tracks.push({
-        id: asset.id,
-        uri: asset.uri,
-        title: asset.title || asset.filename,
-        artist: asset.artist || 'Unknown',
-        album: asset.albumTitle ?? null,
-        // expo-music-library の duration は秒
-        durationMs: Math.round((asset.duration || 0) * 1000),
-      });
+      tracks.push(toTrack(asset));
     }
 
     pages += 1;
@@ -70,13 +88,14 @@ export async function scanLibrary(): Promise<Track[]> {
 
 export async function readCache(): Promise<LibrarySnapshot | null> {
   const cached = await readJson<LibrarySnapshot>(StorageKeys.library);
-  if (!cached || cached.version !== 1 || !Array.isArray(cached.tracks)) return null;
+  // 版が上がったらキャッシュを捨てて走査し直す（アートワーク追加など）
+  if (!cached || cached.version !== 2 || !Array.isArray(cached.tracks)) return null;
   return cached;
 }
 
 export async function writeCache(tracks: Track[]): Promise<LibrarySnapshot> {
   const snapshot: LibrarySnapshot = {
-    version: 1,
+    version: 2,
     scannedAt: Date.now(),
     tracks,
   };
@@ -170,23 +189,15 @@ export async function getAlbums(): Promise<Album[]> {
   }));
 }
 
-function toTrack(asset: MusicLibrary.Asset): Track {
-  return {
-    id: asset.id,
-    uri: asset.uri,
-    title: asset.title || asset.filename,
-    artist: asset.artist || 'Unknown',
-    album: asset.albumTitle ?? null,
-    durationMs: Math.round((asset.duration || 0) * 1000),
-  };
-}
-
 /** 指定したアーティスト群に属する曲を集める（重複は排除。要件 5.2）。 */
 export async function getTracksForArtists(ids: string[]): Promise<Track[]> {
   const seen = new Set<string>();
   const tracks: Track[] = [];
   for (const id of ids) {
-    const page = await MusicLibrary.getArtistAssetsAsync(id, { first: PAGE_SIZE });
+    const page = await MusicLibrary.getArtistAssetsAsync(id, {
+      first: PAGE_SIZE,
+      artwork: ARTWORK_MODE,
+    });
     for (const asset of page.assets) {
       if (seen.has(asset.id)) continue;
       seen.add(asset.id);
@@ -201,7 +212,10 @@ export async function getTracksForAlbums(ids: string[]): Promise<Track[]> {
   const seen = new Set<string>();
   const tracks: Track[] = [];
   for (const id of ids) {
-    const page = await MusicLibrary.getAlbumAssetsAsync(id, { first: PAGE_SIZE });
+    const page = await MusicLibrary.getAlbumAssetsAsync(id, {
+      first: PAGE_SIZE,
+      artwork: ARTWORK_MODE,
+    });
     for (const asset of page.assets) {
       if (seen.has(asset.id)) continue;
       seen.add(asset.id);
@@ -218,7 +232,10 @@ export type ArtistDetail = {
 };
 
 export async function getArtistDetail(artistId: string): Promise<ArtistDetail> {
-  const page = await MusicLibrary.getArtistAssetsAsync(artistId, { first: PAGE_SIZE });
+  const page = await MusicLibrary.getArtistAssetsAsync(artistId, {
+    first: PAGE_SIZE,
+    artwork: ARTWORK_MODE,
+  });
 
   const tracks: Track[] = [];
   const albums = new Map<string, Album>();
@@ -252,6 +269,9 @@ export async function getArtistDetail(artistId: string): Promise<ArtistDetail> {
 
 /** アルバム1枚ぶんの曲。 */
 export async function getAlbumTracks(albumId: string): Promise<Track[]> {
-  const page = await MusicLibrary.getAlbumAssetsAsync(albumId, { first: PAGE_SIZE });
+  const page = await MusicLibrary.getAlbumAssetsAsync(albumId, {
+    first: PAGE_SIZE,
+    artwork: ARTWORK_MODE,
+  });
   return page.assets.map(toTrack);
 }

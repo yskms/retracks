@@ -247,6 +247,7 @@ export default function LibraryScreen() {
               <Row
                 title={item.title}
                 subtitle={`${item.artist} · ${item.trackCount}曲`}
+                artworkUri={item.artworkUri}
                 chevron
                 selected={selection?.kind === 'albums' && selection.ids.includes(item.id)}
                 onPress={() => {

@@ -1,6 +1,7 @@
 package expo.modules.retracksplayer
 
 import android.content.ComponentName
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.OptIn
@@ -25,6 +26,8 @@ class TrackInput : Record {
   @Field var artist: String = ""
   @Field var album: String? = null
   @Field var durationMs: Double = 0.0
+  /** 音楽ファイルに埋め込まれたジャケットの URI。通知とロック画面に出す。 */
+  @Field var artworkUri: String? = null
 }
 
 class SegmentInput : Record {

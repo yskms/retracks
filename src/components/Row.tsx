@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../theme';
+import { Artwork } from './Artwork';
 
 export function Row({
   title,
@@ -9,6 +10,7 @@ export function Row({
   selected,
   playing,
   chevron,
+  artworkUri,
   onPress,
   onLongPress,
 }: {
@@ -18,6 +20,8 @@ export function Row({
   selected?: boolean;
   playing?: boolean;
   chevron?: boolean;
+  /** 指定するとジャケットを左に出す。undefined なら枠ごと出さない。 */
+  artworkUri?: string | null;
   onPress: () => void;
   onLongPress?: () => void;
 }) {
@@ -28,6 +32,7 @@ export function Row({
       onLongPress={onLongPress}
       delayLongPress={300}
     >
+      {artworkUri !== undefined ? <Artwork uri={artworkUri} size={44} /> : null}
       <View style={styles.rowText}>
         <Text style={[styles.rowTitle, playing && styles.rowTitlePlaying]} numberOfLines={1}>
           {title}

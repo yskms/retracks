@@ -4,7 +4,7 @@
  */
 
 import { useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -13,6 +13,7 @@ import { usePlayback } from '../src/playback';
 import type { Track } from '../src/library';
 import { resolveSegment, type SegmentSetting } from '../src/rush';
 import { colors, formatDuration } from '../src/theme';
+import { Artwork } from '../src/components/Artwork';
 
 const SEGMENT_ROWS: {
   key: keyof SegmentSetting;
@@ -50,6 +51,7 @@ export default function PlayerScreen() {
   } = usePlayback();
 
   const listRef = useRef<FlatList<Track>>(null);
+  const { width } = useWindowDimensions();
 
   // シークバーをつまんでいる間は、再生位置の自動更新で戻らないようにする
   const [seeking, setSeeking] = useState<number | null>(null);
@@ -98,9 +100,7 @@ export default function PlayerScreen() {
         )}
         ListHeaderComponent={
           <View style={styles.body}>
-            <View style={styles.artwork}>
-              <Text style={styles.artworkGlyph}>♪</Text>
-            </View>
+            <Artwork uri={currentTrack?.artworkUri} size={width - 40} radius={14} />
 
             <View style={styles.meta}>
               <Text style={styles.title} numberOfLines={2}>
@@ -253,6 +253,7 @@ function QueueRow({
       <Text style={[styles.queueIndex, active && styles.queueTextActive]}>
         {index + 1}
       </Text>
+      <Artwork uri={track.artworkUri} size={38} />
       <View style={styles.queueText}>
         <Text
           style={[styles.queueTitle, active && styles.queueTextActive]}
