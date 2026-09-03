@@ -8,17 +8,18 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { usePlayback } from '../../src/playback';
-import { getAlbumTracks, type Track } from '../../src/library';
+import { getAlbumTracks, getArtistDetail, type Track } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
 
 export default function AlbumScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { id, title, artist } = useLocalSearchParams<{
+  const { id, title, artist, artistId } = useLocalSearchParams<{
     id: string;
     title?: string;
     artist?: string;
+    artistId?: string;
   }>();
   const { playFrom, playTracks, currentTrack } = usePlayback();
 
@@ -28,12 +29,24 @@ export default function AlbumScreen() {
   useEffect(() => {
     void (async () => {
       try {
-        setTracks(await getAlbumTracks(id));
+        const direct = await getAlbumTracks(id);
+        if (direct.length > 0) {
+          setTracks(direct);
+          return;
+        }
+        // アルバムIDを持たない曲はアルバム名で束ねているため、
+        // ID による取得が空になることがある。アーティスト経由で拾い直す。
+        if (artistId && title) {
+          const detail = await getArtistDetail(artistId);
+          setTracks(detail.tracks.filter((t) => t.album === title));
+          return;
+        }
+        setTracks(direct);
       } finally {
         setLoading(false);
       }
     })();
-  }, [id]);
+  }, [id, artistId, title]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>

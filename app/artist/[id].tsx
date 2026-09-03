@@ -62,15 +62,26 @@ export default function ArtistScreen() {
                 <Text style={styles.summary}>
                   {albums.length}アルバム · {tracks.length}曲
                 </Text>
-                <Pressable
-                  style={styles.playAll}
-                  onPress={async () => {
-                    await playTracks('artist', [id], tracks);
-                    router.push('/player');
-                  }}
-                >
-                  <Text style={styles.playAllText}>⤮ シャッフル</Text>
-                </Pressable>
+                <View style={styles.actions}>
+                  <Pressable
+                    style={styles.action}
+                    onPress={async () => {
+                      await playFrom(tracks, 0);
+                      router.push('/player');
+                    }}
+                  >
+                    <Text style={styles.actionText}>▶ 順番に</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.action, styles.actionPrimary]}
+                    onPress={async () => {
+                      await playTracks('artist', [id], tracks);
+                      router.push('/player');
+                    }}
+                  >
+                    <Text style={styles.actionPrimaryText}>⤮ シャッフル</Text>
+                  </Pressable>
+                </View>
               </View>
 
               {albums.length > 0 && (
@@ -89,6 +100,9 @@ export default function ArtistScreen() {
                             id: album.id,
                             title: album.title,
                             artist: album.artist,
+                            // アルバムIDが取れない曲もあるため、辿り直せるよう
+                            // アーティストIDも渡しておく
+                            artistId: id,
                           },
                         })
                       }
@@ -140,13 +154,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   summary: { color: colors.textDim, fontSize: 12 },
-  playAll: {
-    backgroundColor: colors.accent,
+  actions: { flexDirection: 'row', gap: 8 },
+  action: {
+    backgroundColor: colors.surfaceHigh,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 18,
   },
-  playAllText: { color: '#1a1206', fontSize: 12, fontWeight: '700' },
+  actionText: { color: colors.text, fontSize: 12, fontWeight: '600' },
+  actionPrimary: { backgroundColor: colors.accent },
+  actionPrimaryText: { color: '#1a1206', fontSize: 12, fontWeight: '700' },
   sectionTitle: {
     color: colors.accent,
     fontSize: 12,

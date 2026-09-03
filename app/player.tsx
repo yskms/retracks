@@ -46,6 +46,12 @@ export default function PlayerScreen() {
   // スライダー操作中は再生位置の自動更新でつままれた位置が戻らないようにする
   const [seeking, setSeeking] = useState<number | null>(null);
 
+  // 区間設定のスライダーは、つまんでいる間の値を表示に反映する。
+  // native への反映は指を離したときだけ（毎フレーム送るとキューを作り直してしまう）。
+  const [dragging, setDragging] = useState<Partial<Record<keyof SegmentSetting, number>>>(
+    {}
+  );
+
   const positionMs = seeking ?? status?.positionMs ?? 0;
   const durationMs = status?.durationMs ?? 0;
 
@@ -138,7 +144,7 @@ export default function PlayerScreen() {
                 <View style={styles.segmentHead}>
                   <Text style={styles.segmentLabel}>{row.label}</Text>
                   <Text style={styles.segmentValue}>
-                    {setting[row.key].toFixed(1)}s
+                    {(dragging[row.key] ?? setting[row.key]).toFixed(1)}s
                   </Text>
                 </View>
                 <Slider
@@ -150,9 +156,17 @@ export default function PlayerScreen() {
                   minimumTrackTintColor={colors.accent}
                   maximumTrackTintColor={colors.border}
                   thumbTintColor={colors.accent}
-                  onSlidingComplete={(value) =>
-                    setSetting((prev) => ({ ...prev, [row.key]: value }))
+                  onValueChange={(value) =>
+                    setDragging((prev) => ({ ...prev, [row.key]: value }))
                   }
+                  onSlidingComplete={(value) => {
+                    setSetting((prev) => ({ ...prev, [row.key]: value }));
+                    setDragging((prev) => {
+                      const next = { ...prev };
+                      delete next[row.key];
+                      return next;
+                    });
+                  }}
                 />
               </View>
             ))}
