@@ -29,15 +29,20 @@ export type Layouts = Record<LayoutKey, Layout>;
 
 const DEFAULTS: Layouts = {
   artists: 'grid3',
-  albums: 'grid3',
-  artistAlbums: 'grid3',
+  albums: 'grid4',
+  artistAlbums: 'grid4',
 };
 
 export function columnsOf(layout: Layout): number {
   return layout === 'grid3' ? 3 : layout === 'grid4' ? 4 : 1;
 }
 
-/** 画面幅から1枠の大きさを求める。 */
+/**
+ * 画面幅から1枠の大きさを求める。
+ *
+ * 割り切れない場合に端数を切り上げると、列の合計が使える幅をわずかに超えて
+ * 折り返してしまう（3列のはずが2列になる）。必ず切り捨てて余裕を持たせる。
+ */
 export function tileSizeOf(
   width: number,
   layout: Layout,
@@ -45,7 +50,7 @@ export function tileSizeOf(
   gap: number
 ): number {
   const columns = columnsOf(layout);
-  return (width - padding * 2 - gap * (columns - 1)) / columns;
+  return Math.floor((width - padding * 2 - gap * (columns - 1)) / columns);
 }
 
 function normalize(value: unknown): Layouts {
