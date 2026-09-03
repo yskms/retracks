@@ -199,8 +199,9 @@ export default function LibraryScreen() {
                   playing={currentTrack?.id === item.id}
                   onPress={async () => {
                     if (inSelection) return toggleSelect('songs', item.id);
+                    // 曲を直接タップしたときは画面を移さない。
+                    // 一覧を見ながら次々選べるようにするため。
                     await playFrom(tracks, index);
-                    router.push('/player');
                   }}
                   onLongPress={() => toggleSelect('songs', item.id)}
                 />

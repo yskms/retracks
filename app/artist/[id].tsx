@@ -122,10 +122,8 @@ export default function ArtistScreen() {
               trailing={formatDuration(item.durationMs)}
               artworkUri={item.artworkUri}
               playing={currentTrack?.id === item.id}
-              onPress={async () => {
-                await playFrom(tracks, index);
-                router.push('/player');
-              }}
+              // 曲を直接タップしたときは画面を移さない
+              onPress={() => void playFrom(tracks, index)}
             />
           )}
         />

@@ -106,9 +106,27 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const shuffleRef = useRef<ShuffleState | null>(null);
   const lastIndexRef = useRef(-1);
 
-  queueRef.current = queue;
-  tracksRef.current = tracks;
-  shuffleRef.current = shuffle;
+  /**
+   * state と ref を同時に更新する。
+   *
+   * レンダリング時に ref へ代入する方式だと、再生中の曲が変わるイベントが
+   * 再レンダリングより先に届いたときに古い値を参照してしまう。実際、全曲シャッフル中に
+   * 別のキューを再生すると、進捗の分母が前のキューのまま（例: 2/1025）になっていた。
+   */
+  const applyShuffle = useCallback((next: ShuffleState | null) => {
+    shuffleRef.current = next;
+    setShuffle(next);
+  }, []);
+
+  const applyQueue = useCallback((next: Track[]) => {
+    queueRef.current = next;
+    setQueue(next);
+  }, []);
+
+  const applyTracks = useCallback((next: Track[]) => {
+    tracksRef.current = next;
+    setTracks(next);
+  }, []);
 
   const addLog = useCallback((line: string) => {
     const stamp = new Date().toISOString().slice(14, 23);
@@ -140,7 +158,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
         const result = await loadLibrary();
         if (cancelled) return;
-        setTracks(result.tracks);
+        applyTracks(result.tracks);
         addLog(
           `ライブラリ ${result.tracks.length}曲 / ${result.elapsedMs}ms` +
             `（${result.source === 'cache' ? 'キャッシュ' : '走査'}）`
@@ -153,11 +171,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           const restored = await loadShuffle(queueKeyRef.current);
           if (restored) {
             const adopted = { ...restored, cursor: Math.max(0, current.index) };
-            setShuffle(adopted);
+            applyShuffle(adopted);
             lastIndexRef.current = adopted.cursor;
 
             const byId = new Map(result.tracks.map((t) => [t.id, t]));
-            setQueue(
+            applyQueue(
               adopted.order.map((id) => byId.get(id)).filter((t): t is Track => t != null)
             );
           }
@@ -171,7 +189,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [addLog]);
+  }, [addLog, applyShuffle, applyQueue, applyTracks]);
 
   // ---- 再生イベント ----------------------------------------------------
   useEffect(() => {
@@ -188,14 +206,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         void (async () => {
           const ids = queueRef.current.map((t) => t.id);
           const nextState = await startNextCycle(queueKeyRef.current, ids, lastPlayed);
-          setShuffle(nextState);
+          applyShuffle(nextState);
           lastIndexRef.current = 0;
 
           const byId = new Map(queueRef.current.map((t) => [t.id, t]));
           const ordered = nextState.order
             .map((id) => byId.get(id))
             .filter((t): t is Track => t != null);
-          setQueue(ordered);
+          applyQueue(ordered);
 
           await RetracksPlayer.setQueue(ordered, 0);
           RetracksPlayer.play();
@@ -204,7 +222,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setShuffle({ ...state, cursor: event.index });
+      applyShuffle({ ...state, cursor: event.index });
       void saveCursor(queueKeyRef.current, event.index);
       void writeJson(StorageKeys.playbackPosition(queueKeyRef.current), 0);
     });
@@ -227,7 +245,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       clearInterval(timer);
       clearInterval(saver);
     };
-  }, [addLog]);
+  }, [addLog, applyShuffle, applyQueue]);
 
   // ---- 区間設定 --------------------------------------------------------
   useEffect(() => {
@@ -264,14 +282,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         key,
         source.map((t) => t.id)
       );
-      setShuffle(state);
+      applyShuffle(state);
       lastIndexRef.current = state.cursor;
 
       const byId = new Map(source.map((t) => [t.id, t]));
       const ordered = state.order
         .map((id) => byId.get(id))
         .filter((t): t is Track => t != null);
-      setQueue(ordered);
+      applyQueue(ordered);
 
       await RetracksPlayer.setQueue(ordered, state.cursor);
       RetracksPlayer.setRepeatMode(RepeatMode.All);
@@ -287,7 +305,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       const { played, total } = progressOf(state);
       addLog(resumed ? `続きから再開 ${played}/${total}` : `新しい順列 ${total}曲`);
     },
-    [ready, addLog]
+    [ready, addLog, applyShuffle, applyQueue]
   );
 
   const playAll = useCallback(async () => {
@@ -300,34 +318,34 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
       // 一覧をそのままキューにする。順列の1巡管理からは外れるので、
       // シャッフル状態は持たない（曲の切り替わりでカーソルも保存しない）。
-      setShuffle(null);
+      applyShuffle(null);
       lastIndexRef.current = -1;
-      setQueue(source);
+      applyQueue(source);
 
       await RetracksPlayer.setQueue(source, Math.max(0, index));
       RetracksPlayer.setRepeatMode(RepeatMode.All);
       RetracksPlayer.play();
       addLog(`一覧から再生 ${index + 1}/${source.length}`);
     },
-    [ready, addLog]
+    [ready, addLog, applyShuffle, applyQueue]
   );
 
   const rescan = useCallback(async () => {
     const result = await refreshLibrary(tracksRef.current);
-    setTracks(result.tracks);
+    applyTracks(result.tracks);
     addLog(
       `再走査 ${result.tracks.length}曲 / ${result.elapsedMs}ms ` +
         `(追加${result.added.length} 削除${result.removed.length})`
     );
-  }, [addLog]);
+  }, [addLog, applyTracks]);
 
   const clearStorage = useCallback(async () => {
     await clearAll();
-    setShuffle(null);
-    setQueue([]);
+    applyShuffle(null);
+    applyQueue([]);
     lastIndexRef.current = -1;
     addLog('保存内容を消去しました');
-  }, [addLog]);
+  }, [addLog, applyShuffle, applyQueue]);
 
   const currentTrack = useMemo(() => {
     if (!status || status.index < 0) return null;
