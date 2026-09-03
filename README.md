@@ -4,6 +4,8 @@ Offline music player for rediscovering your local music.
 
 > Remember. Replay. Rediscover. Revisit.
 
+[English version](README_EN.md)
+
 ## これは何
 
 端末内のローカル音楽ファイルを対象にした Android 向け音楽プレイヤー。
