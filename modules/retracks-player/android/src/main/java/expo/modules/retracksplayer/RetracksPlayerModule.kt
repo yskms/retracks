@@ -263,9 +263,60 @@ class RetracksPlayerModule : Module() {
       onMain { controller?.repeatMode = mode.coerceIn(0, 2) }
     }
 
-    /** 消えてしまった通知を出し直す。アプリが前面に戻ったときに呼ぶ。 */
+    /** 消えてしまった通知を出し直す。 */
     Function("refreshNotification") {
-      onMain { PlaybackService.instance?.refreshNotification() }
+      onMain {
+        val service = PlaybackService.instance
+        if (service == null) {
+          android.util.Log.d("RetracksService", "refresh: service が null")
+        } else {
+          service.refreshNotification()
+        }
+      }
+    }
+
+    /**
+     * アルバムごとのリリース年。
+     *
+     * expo-music-library は MediaStore の YEAR 系カラムを一切公開していないため、
+     * ここで直接問い合わせる。音楽ファイルに埋め込まれた年をAndroidが取り込んだもの。
+     */
+    AsyncFunction("getAlbumYears") { promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.reject(CodedException("React context is not available"))
+        return@AsyncFunction
+      }
+      try {
+        val result = mutableMapOf<String, Int>()
+        val projection = arrayOf(
+          android.provider.MediaStore.Audio.Albums._ID,
+          android.provider.MediaStore.Audio.Albums.FIRST_YEAR,
+          android.provider.MediaStore.Audio.Albums.LAST_YEAR
+        )
+        context.contentResolver.query(
+          android.provider.MediaStore.Audio.Albums.EXTERNAL_CONTENT_URI,
+          projection,
+          null,
+          null,
+          null
+        )?.use { cursor ->
+          val idIndex = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Albums._ID)
+          val firstIndex = cursor.getColumnIndex(android.provider.MediaStore.Audio.Albums.FIRST_YEAR)
+          val lastIndex = cursor.getColumnIndex(android.provider.MediaStore.Audio.Albums.LAST_YEAR)
+          while (cursor.moveToNext()) {
+            val id = cursor.getLong(idIndex).toString()
+            val first = if (firstIndex >= 0) cursor.getInt(firstIndex) else 0
+            val last = if (lastIndex >= 0) cursor.getInt(lastIndex) else 0
+            // 収録年が幅を持つ場合は新しい方を採る
+            val year = maxOf(first, last)
+            if (year > 0) result[id] = year
+          }
+        }
+        promise.resolve(result)
+      } catch (e: Exception) {
+        promise.reject(CodedException("Failed to read album years", e))
+      }
     }
 
     Function("play") { onMain { controller?.play() } }

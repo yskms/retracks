@@ -248,18 +248,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const timer = setInterval(() => setStatus(RetracksPlayer.getStatus()), 250);
 
     // 再生位置を定期保存。サービスごと終了した場合に途中から再開できる。
-    // あわせて通知の生存も確認する。通知シェードから消した場合はアプリが前面のままで
-    // AppState が変化しないため、前面復帰だけを見ていると復活できない。
     const saver = setInterval(() => {
       const current = RetracksPlayer.getStatus();
-      if (current?.isPlaying) {
-        RetracksPlayer.refreshNotification();
-        if (current.positionMs > 0) {
-          void writeJson(
-            StorageKeys.playbackPosition(queueKeyRef.current),
-            Math.round(current.positionMs)
-          );
-        }
+      if (current?.isPlaying && current.positionMs > 0) {
+        void writeJson(
+          StorageKeys.playbackPosition(queueKeyRef.current),
+          Math.round(current.positionMs)
+        );
       }
     }, 5000);
 

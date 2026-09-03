@@ -84,27 +84,27 @@ class PlaybackService : MediaSessionService() {
   override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
   /**
-   * 通知が消えていたら出し直す。
+   * 通知を出し直す。
    *
-   * 通知をスワイプで消すと、Media3 はプレイヤーの状態が変わるまで出し直さないため、
-   * 再生は続いているのに通知だけ無い状態になる。
+   * フォアグラウンドサービスの通知はスワイプで消しても posted のまま残り、
+   * システムからは「表示中」に見える（実測で activeNotifications に残っていた）。
+   * そのため同じ内容を出し直しても再表示されない。
+   * いったん cancel してから出し直すことで新しい通知として扱わせる。
    *
-   * 実際に消えているかを NotificationManager で確認してから出し直す。
-   * 毎回無条件に呼ぶと通知がちらつくため。
+   * 定期的に呼ぶと通知がちらつくので、アプリが前面に戻ったときだけ呼ぶこと。
    */
   fun refreshNotification() {
     val session = mediaSession ?: return
     if (!session.player.playWhenReady) return
 
     val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-    val present = manager
-      ?.activeNotifications
-      ?.any { it.id == MEDIA_NOTIFICATION_ID } ?: false
-
-    if (present) return
-
-    Log.d(TAG, "通知が消えていたので出し直す")
-    onUpdateNotification(session, /* startInForegroundRequired = */ true)
+    try {
+      manager?.cancel(MEDIA_NOTIFICATION_ID)
+      onUpdateNotification(session, /* startInForegroundRequired = */ true)
+      Log.d(TAG, "通知を出し直した")
+    } catch (e: Exception) {
+      Log.e(TAG, "通知の出し直しに失敗: $e")
+    }
   }
 
   override fun onTaskRemoved(rootIntent: Intent?) {

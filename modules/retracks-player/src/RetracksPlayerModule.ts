@@ -17,6 +17,11 @@ declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
   setRepeatMode(mode: number): void;
   /** 消えてしまった通知を出し直す。 */
   refreshNotification(): void;
+  /**
+   * アルバムIDごとのリリース年。expo-music-library が MediaStore の YEAR を
+   * 公開していないため、こちらで直接読む。
+   */
+  getAlbumYears(): Promise<Record<string, number>>;
   play(): void;
   pause(): void;
   next(): void;
