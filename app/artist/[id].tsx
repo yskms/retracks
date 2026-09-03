@@ -22,6 +22,7 @@ import { getArtistDetail, type Album, type Track } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
 import { Tile } from '../../src/components/Tile';
+import { columnsOf, LAYOUT_ICON, tileSizeOf, useLayouts } from '../../src/layout';
 import { useSelection } from '../../src/useSelection';
 
 /**
@@ -50,8 +51,9 @@ export default function ArtistScreen() {
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // アルバムはタイルで見せる。ジャケットが並ぶ方が探しやすい
-  const tileSize = (width - 16 * 2 - 10 * 2) / 3;
+  const { layouts, cycle } = useLayouts();
+  const albumLayout = layouts.artistAlbums;
+  const tileSize = tileSizeOf(width, albumLayout, 16, 10);
 
   /** アルバム名 → 収録曲。アルバム行の選択に使う。 */
   const tracksByAlbum = useMemo(() => {
@@ -128,7 +130,9 @@ export default function ArtistScreen() {
           <Text style={styles.headerTitle} numberOfLines={1}>
             {name ?? 'アーティスト'}
           </Text>
-          <View style={{ width: 20 }} />
+          <Pressable hitSlop={10} onPress={() => cycle('artistAlbums')}>
+            <Text style={styles.headerIcon}>{LAYOUT_ICON[albumLayout]}</Text>
+          </Pressable>
         </View>
       )}
 
@@ -178,37 +182,52 @@ export default function ArtistScreen() {
               {albums.length > 0 && (
                 <>
                   <Text style={styles.sectionTitle}>アルバム</Text>
-                  <View style={styles.albumGrid}>
-                    {albums.map((album) => (
-                      <Tile
-                        key={album.id}
-                        title={album.title}
-                        subtitle={
-                          album.year ? `${album.year}` : `${album.trackCount}曲`
+                  <View style={albumLayout === 'list' ? undefined : styles.albumGrid}>
+                    {albums.map((album) => {
+                      const subtitle = album.year
+                        ? `${album.year}`
+                        : `${album.trackCount}曲`;
+                      const open = () => {
+                        // 選択中はアルバムの収録曲をまとめて選ぶ／外す
+                        if (inSelection) {
+                          return toggleMany('songs', albumTrackIds(album));
                         }
-                        artworkUri={album.artworkUri}
-                        size={tileSize}
-                        selected={areAllSelected('songs', albumTrackIds(album))}
-                        onPress={() => {
-                          // 選択中はアルバムの収録曲をまとめて選ぶ／外す
-                          if (inSelection) {
-                            return toggleMany('songs', albumTrackIds(album));
-                          }
-                          router.push({
-                            pathname: '/album/[id]',
-                            params: {
-                              id: album.id,
-                              title: album.title,
-                              artist: album.artist,
-                              // アルバムIDが取れない曲もあるため、辿り直せるよう
-                              // アーティストIDも渡しておく
-                              artistId: id,
-                            },
-                          });
-                        }}
-                        onLongPress={() => toggleMany('songs', albumTrackIds(album))}
-                      />
-                    ))}
+                        router.push({
+                          pathname: '/album/[id]',
+                          params: {
+                            id: album.id,
+                            title: album.title,
+                            artist: album.artist,
+                            // アルバムIDが取れない曲もあるため、辿り直せるよう
+                            // アーティストIDも渡しておく
+                            artistId: id,
+                          },
+                        });
+                      };
+                      return albumLayout === 'list' ? (
+                        <Row
+                          key={album.id}
+                          title={album.title}
+                          subtitle={subtitle}
+                          artworkUri={album.artworkUri}
+                          selected={areAllSelected('songs', albumTrackIds(album))}
+                          chevron
+                          onPress={open}
+                          onLongPress={() => toggleMany('songs', albumTrackIds(album))}
+                        />
+                      ) : (
+                        <Tile
+                          key={album.id}
+                          title={album.title}
+                          subtitle={subtitle}
+                          artworkUri={album.artworkUri}
+                          size={tileSize}
+                          selected={areAllSelected('songs', albumTrackIds(album))}
+                          onPress={open}
+                          onLongPress={() => toggleMany('songs', albumTrackIds(album))}
+                        />
+                      );
+                    })}
                   </View>
                 </>
               )}

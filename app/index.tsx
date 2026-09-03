@@ -36,7 +36,12 @@ import { colors, formatDuration } from '../src/theme';
 import { Row } from '../src/components/Row';
 import { Tile } from '../src/components/Tile';
 import { useSelection } from '../src/useSelection';
-import { readJson, StorageKeys, writeJson } from '../src/storage';
+import {
+  columnsOf,
+  LAYOUT_ICON,
+  tileSizeOf,
+  useLayouts,
+} from '../src/layout';
 
 /**
  * 下線をネイティブ側で動かすためのラッパ。
@@ -46,27 +51,8 @@ const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
 
 type TabId = 'songs' | 'artists' | 'albums';
 
-/** 一覧の表示形式。タブごとに独立して持つ。 */
-type Layout = 'grid3' | 'grid4' | 'list';
-
-const LAYOUT_ORDER: Layout[] = ['grid3', 'grid4', 'list'];
-const LAYOUT_LABEL: Record<Layout, string> = {
-  grid3: '3列',
-  grid4: '4列',
-  list: '一覧',
-};
-
 const GRID_PADDING = 12;
 const GRID_GAP = 10;
-
-/** その表示形式での列数。一覧は1列。 */
-function columnsOf(layout: Layout): number {
-  return layout === 'grid3' ? 3 : layout === 'grid4' ? 4 : 1;
-}
-
-type LayoutByTab = { artists: Layout; albums: Layout };
-
-const DEFAULT_LAYOUTS: LayoutByTab = { artists: 'grid3', albums: 'grid3' };
 
 const TABS: { id: TabId; label: string }[] = [
   { id: 'songs', label: '楽曲' },
@@ -87,44 +73,10 @@ export default function LibraryScreen() {
   const [page, setPage] = useState(0);
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
-  const [layouts, setLayouts] = useState<LayoutByTab>(DEFAULT_LAYOUTS);
-
-  // 表示形式はタブごとに覚えておく
-  useEffect(() => {
-    void (async () => {
-      const saved = await readJson<Partial<LayoutByTab>>(StorageKeys.layout);
-      if (saved && typeof saved === 'object') {
-        setLayouts({
-          artists: LAYOUT_ORDER.includes(saved.artists as Layout)
-            ? (saved.artists as Layout)
-            : DEFAULT_LAYOUTS.artists,
-          albums: LAYOUT_ORDER.includes(saved.albums as Layout)
-            ? (saved.albums as Layout)
-            : DEFAULT_LAYOUTS.albums,
-        });
-      }
-    })();
-  }, []);
-
-  /** いま見ているタブの表示形式を 3列 → 4列 → 一覧 と切り替える。 */
-  const cycleLayout = useCallback(() => {
-    const tab: keyof LayoutByTab = page === 1 ? 'artists' : 'albums';
-    setLayouts((prev) => {
-      const current = prev[tab];
-      const next = LAYOUT_ORDER[(LAYOUT_ORDER.indexOf(current) + 1) % LAYOUT_ORDER.length];
-      const updated = { ...prev, [tab]: next };
-      void writeJson(StorageKeys.layout, updated);
-      return updated;
-    });
-  }, [page]);
-
-  const tileSizeFor = useCallback(
-    (layout: Layout) => {
-      const columns = columnsOf(layout);
-      return (width - GRID_PADDING * 2 - GRID_GAP * (columns - 1)) / columns;
-    },
-    [width]
-  );
+  const { layouts, cycle } = useLayouts();
+  const currentLayoutKey = page === 1 ? 'artists' : 'albums';
+  const tileSizeFor = (layout: (typeof layouts)['artists']) =>
+    tileSizeOf(width, layout, GRID_PADDING, GRID_GAP);
 
   const albumCounts = useMemo(() => countAlbumsByArtist(albums), [albums]);
   // アーティストの写真は持っていないので、そのアーティストのアルバムから流用する
@@ -201,9 +153,9 @@ export default function LibraryScreen() {
           <Text style={styles.brand}>RE:TR4CKS</Text>
           <View style={styles.headerRight}>
             {page > 0 && (
-              <Pressable style={styles.layoutButton} hitSlop={8} onPress={cycleLayout}>
-                <Text style={styles.layoutButtonText}>
-                  {LAYOUT_LABEL[page === 1 ? layouts.artists : layouts.albums]}
+              <Pressable hitSlop={10} onPress={() => cycle(currentLayoutKey)}>
+                <Text style={styles.headerIcon}>
+                  {LAYOUT_ICON[layouts[currentLayoutKey]]}
                 </Text>
               </Pressable>
             )}
@@ -440,13 +392,6 @@ const styles = StyleSheet.create({
   },
   brand: { color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  layoutButton: {
-    backgroundColor: colors.surfaceHigh,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
-  },
-  layoutButtonText: { color: colors.text, fontSize: 11, fontWeight: '600' },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
   headerIcon: { color: colors.text, fontSize: 18 },
   headerActions: { flexDirection: 'row', gap: 8 },
