@@ -263,18 +263,6 @@ class RetracksPlayerModule : Module() {
       onMain { controller?.repeatMode = mode.coerceIn(0, 2) }
     }
 
-    /** 消えてしまった通知を出し直す。 */
-    Function("refreshNotification") {
-      onMain {
-        val service = PlaybackService.instance
-        if (service == null) {
-          android.util.Log.d("RetracksService", "refresh: service が null")
-        } else {
-          service.refreshNotification()
-        }
-      }
-    }
-
     /**
      * アルバムごとのリリース年。
      *

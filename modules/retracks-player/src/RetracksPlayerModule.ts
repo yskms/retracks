@@ -15,8 +15,6 @@ declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
   /** null で RUSH OFF。 */
   setSegment(segment: SegmentInput | null): void;
   setRepeatMode(mode: number): void;
-  /** 消えてしまった通知を出し直す。 */
-  refreshNotification(): void;
   /**
    * アルバムIDごとのリリース年。expo-music-library が MediaStore の YEAR を
    * 公開していないため、こちらで直接読む。

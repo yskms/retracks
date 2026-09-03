@@ -5,7 +5,6 @@
  * 画面側は表示と操作に専念できるようにする。
  */
 
-import { AppState } from 'react-native';
 import {
   createContext,
   useCallback,
@@ -264,16 +263,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       clearInterval(saver);
     };
   }, [addLog, applyShuffle, applyQueue]);
-
-  // ---- 通知の復帰 ------------------------------------------------------
-  useEffect(() => {
-    // 通知をスワイプで消すと Media3 は出し直さない。再生は続いているのに
-    // 通知だけ無い状態になるため、アプリが前面に戻ったときに復活させる。
-    const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') RetracksPlayer.refreshNotification();
-    });
-    return () => subscription.remove();
-  }, []);
 
   // ---- 区間設定 --------------------------------------------------------
   useEffect(() => {

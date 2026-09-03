@@ -1,10 +1,7 @@
 package expo.modules.retracksplayer
 
-import android.app.NotificationManager
 import android.app.PendingIntent
-import android.content.Context
 import android.content.Intent
-import android.util.Log
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -28,11 +25,6 @@ import androidx.media3.session.MediaSessionService
 class PlaybackService : MediaSessionService() {
 
   companion object {
-    private const val TAG = "RetracksService"
-
-    /** Media3 の DefaultMediaNotificationProvider が使う既定の通知ID。 */
-    private const val MEDIA_NOTIFICATION_ID = 1001
-
     /** モジュール側から SegmentController を触るための参照。同一プロセス内でのみ使う。 */
     @Volatile
     var instance: PlaybackService? = null
@@ -82,30 +74,6 @@ class PlaybackService : MediaSessionService() {
   }
 
   override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
-
-  /**
-   * 通知を出し直す。
-   *
-   * フォアグラウンドサービスの通知はスワイプで消しても posted のまま残り、
-   * システムからは「表示中」に見える（実測で activeNotifications に残っていた）。
-   * そのため同じ内容を出し直しても再表示されない。
-   * いったん cancel してから出し直すことで新しい通知として扱わせる。
-   *
-   * 定期的に呼ぶと通知がちらつくので、アプリが前面に戻ったときだけ呼ぶこと。
-   */
-  fun refreshNotification() {
-    val session = mediaSession ?: return
-    if (!session.player.playWhenReady) return
-
-    val manager = getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
-    try {
-      manager?.cancel(MEDIA_NOTIFICATION_ID)
-      onUpdateNotification(session, /* startInForegroundRequired = */ true)
-      Log.d(TAG, "通知を出し直した")
-    } catch (e: Exception) {
-      Log.e(TAG, "通知の出し直しに失敗: $e")
-    }
-  }
 
   override fun onTaskRemoved(rootIntent: Intent?) {
     // タスク一覧からスワイプで消されたとき、再生していなければサービスを畳む
