@@ -92,6 +92,7 @@ export default function ArtistScreen() {
                       key={album.id}
                       title={album.title}
                       subtitle={`${album.trackCount}曲`}
+                      artworkUri={album.artworkUri}
                       chevron
                       onPress={() =>
                         router.push({
@@ -119,6 +120,7 @@ export default function ArtistScreen() {
               title={item.title}
               subtitle={item.album ?? undefined}
               trailing={formatDuration(item.durationMs)}
+              artworkUri={item.artworkUri}
               playing={currentTrack?.id === item.id}
               onPress={async () => {
                 await playFrom(tracks, index);

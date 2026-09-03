@@ -105,6 +105,7 @@ export default function AlbumScreen() {
               title={item.title}
               subtitle={item.artist}
               trailing={formatDuration(item.durationMs)}
+              artworkUri={item.artworkUri}
               playing={currentTrack?.id === item.id}
               onPress={async () => {
                 await playFrom(tracks, index);

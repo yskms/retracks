@@ -175,13 +175,15 @@ export default function LibraryScreen() {
               data={tracks}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.listContent}
-              initialNumToRender={20}
-              windowSize={11}
+              initialNumToRender={14}
+              windowSize={7}
+              removeClippedSubviews
               renderItem={({ item, index }) => (
                 <Row
                   title={item.title}
                   subtitle={item.artist}
                   trailing={formatDuration(item.durationMs)}
+                  artworkUri={item.artworkUri}
                   selected={selection?.kind === 'songs' && selection.ids.includes(item.id)}
                   playing={currentTrack?.id === item.id}
                   onPress={async () => {

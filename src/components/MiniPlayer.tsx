@@ -26,7 +26,7 @@ export function MiniPlayer() {
         <View style={[styles.progressFill, { width: `${ratio * 100}%` }]} />
       </View>
       <Pressable style={styles.row} onPress={() => router.push('/player')}>
-        <Artwork uri={currentTrack.artworkUri} size={40} />
+        <Artwork uri={currentTrack.artworkUri} size={64} radius={6} />
         <View style={styles.info}>
           <Text style={styles.title} numberOfLines={1}>
             {currentTrack.title}
@@ -68,10 +68,10 @@ const styles = StyleSheet.create({
   },
   progressTrack: { height: 2, backgroundColor: colors.border },
   progressFill: { height: 2, backgroundColor: colors.accent },
-  row: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 8 },
+  row: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
   info: { flex: 1 },
-  title: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  artist: { color: colors.textDim, fontSize: 12, marginTop: 2 },
+  title: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  artist: { color: colors.textDim, fontSize: 13, marginTop: 3 },
   button: { paddingHorizontal: 12, paddingVertical: 6 },
-  glyph: { color: colors.text, fontSize: 15 },
+  glyph: { color: colors.text, fontSize: 18 },
 });
