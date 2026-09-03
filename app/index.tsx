@@ -84,24 +84,32 @@ export default function LibraryScreen() {
   }, [tracks.length]);
 
   /** 選択したものからキューを作って再生する（要件 10.3）。 */
-  const playSelection = useCallback(async () => {
+  const playSelection = useCallback(async (shuffled: boolean) => {
     if (!selection) return;
     const { kind, ids } = selection;
 
-    if (kind === 'songs') {
+    if (kind === 'songs' && !shuffled) {
+      // 一覧の並び順のまま先頭から
+      const picked = tracks.filter((t) => ids.includes(t.id));
+      await playFrom(picked, 0);
+    } else if (kind === 'songs') {
       const byId = new Map(tracks.map((t) => [t.id, t]));
       const picked = ids.map((id) => byId.get(id)).filter((t): t is Track => t != null);
       // 'all' を使うと全曲シャッフルの1巡状態を上書きしてしまうため専用のキーにする
       await playTracks('selection', ids, picked);
     } else if (kind === 'artists') {
-      await playTracks('artist', ids, await getTracksForArtists(ids));
+      const picked = await getTracksForArtists(ids);
+      if (shuffled) await playTracks('artist', ids, picked);
+      else await playFrom(picked, 0);
     } else {
-      await playTracks('album', ids, await getTracksForAlbums(ids));
+      const picked = await getTracksForAlbums(ids);
+      if (shuffled) await playTracks('album', ids, picked);
+      else await playFrom(picked, 0);
     }
 
     clear();
     router.push('/player');
-  }, [selection, tracks, playTracks, clear, router]);
+  }, [selection, tracks, playTracks, playFrom, clear, router]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -111,9 +119,17 @@ export default function LibraryScreen() {
             <Text style={styles.headerIcon}>✕</Text>
           </Pressable>
           <Text style={styles.headerTitle}>{selection?.ids.length ?? 0}件選択</Text>
-          <Pressable style={styles.headerShuffle} onPress={playSelection}>
-            <Text style={styles.headerShuffleText}>⤮ シャッフル</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            <Pressable style={styles.headerAction} onPress={() => void playSelection(false)}>
+              <Text style={styles.headerActionText}>▶ 順番に</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.headerAction, styles.headerActionPrimary]}
+              onPress={() => void playSelection(true)}
+            >
+              <Text style={styles.headerActionPrimaryText}>⤮ シャッフル</Text>
+            </Pressable>
+          </View>
         </View>
       ) : (
         <View style={styles.header}>
@@ -165,7 +181,11 @@ export default function LibraryScreen() {
           [{ nativeEvent: { position, offset } }],
           { useNativeDriver: true }
         )}
-        onPageSelected={(event) => setPage(event.nativeEvent.position)}
+        onPageSelected={(event) => {
+          setPage(event.nativeEvent.position);
+          // タブを移ると選択対象の種類が変わってしまうので解除する
+          clear();
+        }}
       >
         {/* 楽曲 */}
         <View key="songs" style={styles.page}>
@@ -298,13 +318,16 @@ const styles = StyleSheet.create({
   brand: { color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
   headerIcon: { color: colors.text, fontSize: 18 },
-  headerShuffle: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: 14,
+  headerActions: { flexDirection: 'row', gap: 8 },
+  headerAction: {
+    backgroundColor: colors.surfaceHigh,
+    paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 18,
   },
-  headerShuffleText: { color: '#1a1206', fontSize: 12, fontWeight: '700' },
+  headerActionText: { color: colors.text, fontSize: 12, fontWeight: '600' },
+  headerActionPrimary: { backgroundColor: colors.accent },
+  headerActionPrimaryText: { color: '#1a1206', fontSize: 12, fontWeight: '700' },
   tabBar: { flexDirection: 'row' },
   tab: { flex: 1, alignItems: 'center' },
   tabLabel: { color: colors.textDim, fontSize: 13, paddingVertical: 12 },

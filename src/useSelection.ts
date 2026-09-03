@@ -27,6 +27,26 @@ export function useSelection<K extends string>() {
     });
   }, []);
 
+  /**
+   * 複数のIDをまとめて切り替える。全部入っていれば外し、そうでなければ全部入れる。
+   * アルバムを選んだらその収録曲を全部選ぶ、といった用途で使う。
+   */
+  const toggleMany = useCallback((kind: K, ids: string[]) => {
+    if (ids.length === 0) return;
+    setSelection((prev) => {
+      if (!prev || prev.kind !== kind) return { kind, ids: [...ids] };
+      const current = new Set(prev.ids);
+      const allIncluded = ids.every((id) => current.has(id));
+      if (allIncluded) {
+        ids.forEach((id) => current.delete(id));
+      } else {
+        ids.forEach((id) => current.add(id));
+      }
+      const next = [...current];
+      return next.length === 0 ? null : { kind, ids: next };
+    });
+  }, []);
+
   const isSelected = useCallback(
     (kind: K, id: string) => selection?.kind === kind && selection.ids.includes(id),
     [selection]
@@ -41,11 +61,22 @@ export function useSelection<K extends string>() {
     return () => subscription.remove();
   }, [selection, clear]);
 
+  /** 渡したIDが全て選択済みか。アルバム行の選択状態の判定に使う。 */
+  const areAllSelected = useCallback(
+    (kind: K, ids: string[]) =>
+      ids.length > 0 &&
+      selection?.kind === kind &&
+      ids.every((id) => selection.ids.includes(id)),
+    [selection]
+  );
+
   return {
     selection,
     active: selection != null,
     toggle,
+    toggleMany,
     clear,
     isSelected,
+    areAllSelected,
   };
 }

@@ -4,7 +4,7 @@
  * 長押しで複数選択に入り、まとめて再生できる。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -17,29 +17,53 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { usePlayback } from '../../src/playback';
-import {
-  getArtistDetail,
-  getTracksForAlbums,
-  type Album,
-  type Track,
-} from '../../src/library';
+import { getArtistDetail, type Album, type Track } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
 import { useSelection } from '../../src/useSelection';
 
-type Kind = 'albums' | 'songs';
+/**
+ * 選択の単位は常に曲。アルバムを選んだときは収録曲をまとめて選ぶ。
+ * こうするとアルバムと曲が混ざった選択も自然に扱える。
+ */
+type Kind = 'songs';
 
 export default function ArtistScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
   const { playFrom, playTracks, currentTrack } = usePlayback();
-  const { selection, active: inSelection, toggle, clear, isSelected } =
-    useSelection<Kind>();
+  const {
+    selection,
+    active: inSelection,
+    toggle,
+    toggleMany,
+    clear,
+    isSelected,
+    areAllSelected,
+  } = useSelection<Kind>();
 
   const [albums, setAlbums] = useState<Album[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(true);
+
+  /** アルバム名 → 収録曲。アルバム行の選択に使う。 */
+  const tracksByAlbum = useMemo(() => {
+    const map = new Map<string, Track[]>();
+    for (const track of tracks) {
+      const key = track.album ?? '';
+      if (!key) continue;
+      const list = map.get(key);
+      if (list) list.push(track);
+      else map.set(key, [track]);
+    }
+    return map;
+  }, [tracks]);
+
+  const albumTrackIds = useCallback(
+    (album: Album) => (tracksByAlbum.get(album.title) ?? []).map((t) => t.id),
+    [tracksByAlbum]
+  );
 
   useEffect(() => {
     void (async () => {
@@ -53,26 +77,22 @@ export default function ArtistScreen() {
     })();
   }, [id]);
 
-  /**
-   * 選択したものをまとめて再生する。
-   * アルバムと曲は同時に選べない（useSelection が種類ごとに切り替える）ので、
-   * 混在したときの扱いを考える必要がない。
-   */
-  const playSelection = useCallback(async () => {
-    if (!selection) return;
-    const { kind, ids } = selection;
+  /** 選択した曲をまとめて再生する。 */
+  const playSelection = useCallback(
+    async (shuffled: boolean) => {
+      if (!selection) return;
+      const ids = selection.ids;
+      // 一覧の並び順を保つため、選択順ではなく表示順で拾う
+      const picked = tracks.filter((t) => ids.includes(t.id));
 
-    if (kind === 'albums') {
-      await playTracks('album', ids, await getTracksForAlbums(ids));
-    } else {
-      const byId = new Map(tracks.map((t) => [t.id, t]));
-      const picked = ids.map((x) => byId.get(x)).filter((t): t is Track => t != null);
-      await playTracks('selection', ids, picked);
-    }
+      if (shuffled) await playTracks('selection', ids, picked);
+      else await playFrom(picked, 0);
 
-    clear();
-    router.push('/player');
-  }, [selection, tracks, playTracks, clear, router]);
+      clear();
+      router.push('/player');
+    },
+    [selection, tracks, playTracks, playFrom, clear, router]
+  );
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -81,10 +101,18 @@ export default function ArtistScreen() {
           <Pressable hitSlop={12} onPress={clear}>
             <Text style={styles.headerIcon}>✕</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>{selection?.ids.length ?? 0}件選択</Text>
-          <Pressable style={styles.headerShuffle} onPress={playSelection}>
-            <Text style={styles.headerShuffleText}>⤮ シャッフル</Text>
-          </Pressable>
+          <Text style={styles.headerTitle}>{selection?.ids.length ?? 0}曲選択</Text>
+          <View style={styles.actions}>
+            <Pressable style={styles.action} onPress={() => void playSelection(false)}>
+              <Text style={styles.actionText}>▶ 順番に</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.action, styles.actionPrimary]}
+              onPress={() => void playSelection(true)}
+            >
+              <Text style={styles.actionPrimaryText}>⤮ シャッフル</Text>
+            </Pressable>
+          </View>
         </View>
       ) : (
         <View style={styles.header}>
@@ -116,26 +144,29 @@ export default function ArtistScreen() {
                 <Text style={styles.summary}>
                   {albums.length}アルバム · {tracks.length}曲
                 </Text>
-                <View style={styles.actions}>
-                  <Pressable
-                    style={styles.action}
-                    onPress={async () => {
-                      await playFrom(tracks, 0);
-                      router.push('/player');
-                    }}
-                  >
-                    <Text style={styles.actionText}>▶ 順番に</Text>
-                  </Pressable>
-                  <Pressable
-                    style={[styles.action, styles.actionPrimary]}
-                    onPress={async () => {
-                      await playTracks('artist', [id], tracks);
-                      router.push('/player');
-                    }}
-                  >
-                    <Text style={styles.actionPrimaryText}>⤮ シャッフル</Text>
-                  </Pressable>
-                </View>
+                {/* 選択中はヘッダー側に再生操作が出るので、こちらは隠す */}
+                {!inSelection && (
+                  <View style={styles.actions}>
+                    <Pressable
+                      style={styles.action}
+                      onPress={async () => {
+                        await playFrom(tracks, 0);
+                        router.push('/player');
+                      }}
+                    >
+                      <Text style={styles.actionText}>▶ 順番に</Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.action, styles.actionPrimary]}
+                      onPress={async () => {
+                        await playTracks('artist', [id], tracks);
+                        router.push('/player');
+                      }}
+                    >
+                      <Text style={styles.actionPrimaryText}>⤮ シャッフル</Text>
+                    </Pressable>
+                  </View>
+                )}
               </View>
 
               {albums.length > 0 && (
@@ -147,10 +178,11 @@ export default function ArtistScreen() {
                       title={album.title}
                       subtitle={`${album.trackCount}曲`}
                       artworkUri={album.artworkUri}
-                      selected={isSelected('albums', album.id)}
+                      selected={areAllSelected('songs', albumTrackIds(album))}
                       chevron
                       onPress={() => {
-                        if (inSelection) return toggle('albums', album.id);
+                        // 選択中はアルバムの収録曲をまとめて選ぶ／外す
+                        if (inSelection) return toggleMany('songs', albumTrackIds(album));
                         router.push({
                           pathname: '/album/[id]',
                           params: {
@@ -163,7 +195,7 @@ export default function ArtistScreen() {
                           },
                         });
                       }}
-                      onLongPress={() => toggle('albums', album.id)}
+                      onLongPress={() => toggleMany('songs', albumTrackIds(album))}
                     />
                   ))}
                 </>
@@ -205,13 +237,6 @@ const styles = StyleSheet.create({
   },
   headerIcon: { color: colors.text, fontSize: 18 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '700', flex: 1 },
-  headerShuffle: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 18,
-  },
-  headerShuffleText: { color: '#1a1206', fontSize: 12, fontWeight: '700' },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listContent: { paddingBottom: 24 },
   summaryRow: {
