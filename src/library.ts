@@ -156,6 +156,7 @@ export async function refreshLibrary(previous: Track[]): Promise<RefreshResult> 
 export type Artist = {
   id: string;
   name: string;
+  albumCount: number;
   trackCount: number;
 };
 
@@ -169,27 +170,12 @@ export type Album = {
 
 export async function getArtists(): Promise<Artist[]> {
   const list = await MusicLibrary.getArtistsAsync();
-  // 注意: Artist の albumSongs は MediaStore の NUMBER_OF_TRACKS（曲数）であって
-  // アルバム数ではない。アルバム数は公開されていないため、アルバム一覧から数える
-  // （→ countAlbumsByArtist）。
   return list.map((a) => ({
     id: a.id,
     name: a.title || 'Unknown',
+    albumCount: a.albumSongs ?? 0,
     trackCount: a.assetCount ?? 0,
   }));
-}
-
-/**
- * アーティスト名ごとのアルバム数を数える。
- * MediaStore がアーティストのアルバム数を返さないため、アルバム一覧から求める。
- * コンピレーションなどアルバム側のアーティスト名が異なる場合は数えられない。
- */
-export function countAlbumsByArtist(albums: Album[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const album of albums) {
-    counts.set(album.artist, (counts.get(album.artist) ?? 0) + 1);
-  }
-  return counts;
 }
 
 export async function getAlbums(): Promise<Album[]> {

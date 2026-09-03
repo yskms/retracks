@@ -5,7 +5,7 @@
  * タブ構成ではなく、配列から組み立てるページャにしている。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -22,7 +22,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { usePlayback } from '../src/playback';
 import {
-  countAlbumsByArtist,
   getAlbums,
   getArtists,
   getTracksForAlbums,
@@ -55,8 +54,6 @@ export default function LibraryScreen() {
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [selection, setSelection] = useState<Selection>(null);
-
-  const albumCounts = useMemo(() => countAlbumsByArtist(albums), [albums]);
 
   // 下線はページのスクロール量に追従させる。onPageSelected だけだと
   // 指を離してから動くため、一覧より遅れて見える。
@@ -226,7 +223,7 @@ export default function LibraryScreen() {
             renderItem={({ item }) => (
               <Row
                 title={item.name}
-                subtitle={subtitleForArtist(albumCounts.get(item.name), item.trackCount)}
+                subtitle={`${item.trackCount}曲`}
                 chevron
                 selected={selection?.kind === 'artists' && selection.ids.includes(item.id)}
                 onPress={() => {
@@ -270,12 +267,6 @@ export default function LibraryScreen() {
       </PagerView>
     </View>
   );
-}
-
-/** 「3アルバム · 22曲」のように出す。アルバム数が数えられない場合は曲数だけ。 */
-function subtitleForArtist(albumCount: number | undefined, trackCount: number): string {
-  const songs = `${trackCount}曲`;
-  return albumCount ? `${albumCount}アルバム · ${songs}` : songs;
 }
 
 function Loading() {
