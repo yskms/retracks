@@ -8,10 +8,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import PagerView from 'react-native-pager-view';
@@ -29,6 +31,7 @@ import {
   type Track,
 } from '../src/library';
 import { colors, formatDuration } from '../src/theme';
+import { Row } from '../src/components/Row';
 
 type TabId = 'songs' | 'artists' | 'albums';
 
@@ -43,7 +46,8 @@ type Selection = { kind: TabId; ids: string[] } | null;
 export default function LibraryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { tracks, playFrom, playTracks, playAll, currentTrack } = usePlayback();
+  const { width } = useWindowDimensions();
+  const { tracks, playFrom, playTracks, playAll, currentTrack, progress } = usePlayback();
 
   const pagerRef = useRef<PagerView>(null);
   const [page, setPage] = useState(0);
@@ -51,13 +55,18 @@ export default function LibraryScreen() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [selection, setSelection] = useState<Selection>(null);
 
+  // 下線はページのスクロール量に追従させる。onPageSelected だけだと
+  // 指を離してから動くため、一覧より遅れて見える。
+  const scroll = useRef(new Animated.Value(0)).current;
+  const tabWidth = width / TABS.length;
+
   useEffect(() => {
     void (async () => {
       try {
         setArtists(await getArtists());
         setAlbums(await getAlbums());
       } catch {
-        // 権限が無い場合など。曲一覧側でエラーを出しているのでここでは黙る
+        // 権限が無い場合など。曲一覧側で状態が分かるのでここでは黙る
       }
     })();
   }, [tracks.length]);
@@ -108,35 +117,56 @@ export default function LibraryScreen() {
       ) : (
         <View style={styles.header}>
           <Text style={styles.brand}>RE:TR4CKS</Text>
-          <View style={styles.headerRight}>
-            <Pressable hitSlop={10} onPress={() => router.push('/debug')}>
-              <Text style={styles.headerIcon}>⋮</Text>
-            </Pressable>
-          </View>
+          <Pressable hitSlop={10} onPress={() => router.push('/debug')}>
+            <Text style={styles.headerIcon}>⋮</Text>
+          </Pressable>
         </View>
       )}
 
-      <View style={styles.tabBar}>
-        {TABS.map((tab, index) => (
-          <Pressable
-            key={tab.id}
-            style={styles.tab}
-            onPress={() => pagerRef.current?.setPage(index)}
-          >
-            <Text style={[styles.tabLabel, page === index && styles.tabLabelActive]}>
-              {tab.label}
-            </Text>
-            <View style={[styles.tabRule, page === index && styles.tabRuleActive]} />
-          </Pressable>
-        ))}
+      <View>
+        <View style={styles.tabBar}>
+          {TABS.map((tab, index) => (
+            <Pressable
+              key={tab.id}
+              style={styles.tab}
+              onPress={() => pagerRef.current?.setPage(index)}
+            >
+              <Text style={[styles.tabLabel, page === index && styles.tabLabelActive]}>
+                {tab.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <Animated.View
+          style={[
+            styles.indicator,
+            {
+              width: tabWidth * 0.5,
+              marginLeft: tabWidth * 0.25,
+              transform: [
+                {
+                  translateX: scroll.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0, tabWidth],
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
       </View>
 
       <PagerView
         ref={pagerRef}
         style={styles.pager}
         initialPage={0}
+        onPageScroll={(event) => {
+          const { position, offset } = event.nativeEvent;
+          scroll.setValue(position + offset);
+        }}
         onPageSelected={(event) => setPage(event.nativeEvent.position)}
       >
+        {/* 楽曲 */}
         <View key="songs" style={styles.page}>
           {tracks.length === 0 ? (
             <Loading />
@@ -147,127 +177,92 @@ export default function LibraryScreen() {
               contentContainerStyle={styles.listContent}
               initialNumToRender={20}
               windowSize={11}
-              renderItem={({ item, index }) => {
-                const selected = selection?.kind === 'songs' && selection.ids.includes(item.id);
-                return (
-                  <Row
-                    title={item.title}
-                    subtitle={item.artist}
-                    trailing={formatDuration(item.durationMs)}
-                    selected={selected}
-                    playing={currentTrack?.id === item.id}
-                    onPress={() =>
-                      inSelection
-                        ? toggleSelect('songs', item.id)
-                        : void playFrom(tracks, index)
-                    }
-                    onLongPress={() => toggleSelect('songs', item.id)}
-                  />
-                );
-              }}
+              renderItem={({ item, index }) => (
+                <Row
+                  title={item.title}
+                  subtitle={item.artist}
+                  trailing={formatDuration(item.durationMs)}
+                  selected={selection?.kind === 'songs' && selection.ids.includes(item.id)}
+                  playing={currentTrack?.id === item.id}
+                  onPress={async () => {
+                    if (inSelection) return toggleSelect('songs', item.id);
+                    await playFrom(tracks, index);
+                    router.push('/player');
+                  }}
+                  onLongPress={() => toggleSelect('songs', item.id)}
+                />
+              )}
             />
           )}
-          {!inSelection && (
-            <Pressable style={styles.fab} onPress={() => void playAll()}>
+          {!inSelection && tracks.length > 0 && (
+            <Pressable
+              style={styles.fab}
+              onPress={async () => {
+                await playAll();
+                router.push('/player');
+              }}
+            >
               <Text style={styles.fabGlyph}>⤮</Text>
+              <Text style={styles.fabLabel}>
+                {progress && progress.played > 1
+                  ? `続きから ${progress.played}/${progress.total}`
+                  : '全曲シャッフル'}
+              </Text>
             </Pressable>
           )}
         </View>
 
+        {/* アーティスト */}
         <View key="artists" style={styles.page}>
           <FlatList
             data={artists}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => {
-              const selected =
-                selection?.kind === 'artists' && selection.ids.includes(item.id);
-              return (
-                <Row
-                  title={item.name}
-                  subtitle={`${item.trackCount}曲`}
-                  selected={selected}
-                  onPress={async () => {
-                    if (inSelection) return toggleSelect('artists', item.id);
-                    await playTracks('artist', [item.id], await getTracksForArtists([item.id]));
-                    router.push('/player');
-                  }}
-                  onLongPress={() => toggleSelect('artists', item.id)}
-                />
-              );
-            }}
+            renderItem={({ item }) => (
+              <Row
+                title={item.name}
+                subtitle={`${item.trackCount}曲`}
+                chevron
+                selected={selection?.kind === 'artists' && selection.ids.includes(item.id)}
+                onPress={() => {
+                  if (inSelection) return toggleSelect('artists', item.id);
+                  router.push({
+                    pathname: '/artist/[id]',
+                    params: { id: item.id, name: item.name },
+                  });
+                }}
+                onLongPress={() => toggleSelect('artists', item.id)}
+              />
+            )}
           />
         </View>
 
+        {/* アルバム */}
         <View key="albums" style={styles.page}>
           <FlatList
             data={albums}
             keyExtractor={(item) => item.id}
             contentContainerStyle={styles.listContent}
-            renderItem={({ item }) => {
-              const selected =
-                selection?.kind === 'albums' && selection.ids.includes(item.id);
-              return (
-                <Row
-                  title={item.title}
-                  subtitle={`${item.artist} · ${item.trackCount}曲`}
-                  selected={selected}
-                  onPress={async () => {
-                    if (inSelection) return toggleSelect('albums', item.id);
-                    await playTracks('album', [item.id], await getTracksForAlbums([item.id]));
-                    router.push('/player');
-                  }}
-                  onLongPress={() => toggleSelect('albums', item.id)}
-                />
-              );
-            }}
+            renderItem={({ item }) => (
+              <Row
+                title={item.title}
+                subtitle={`${item.artist} · ${item.trackCount}曲`}
+                chevron
+                selected={selection?.kind === 'albums' && selection.ids.includes(item.id)}
+                onPress={() => {
+                  if (inSelection) return toggleSelect('albums', item.id);
+                  router.push({
+                    pathname: '/album/[id]',
+                    params: { id: item.id, title: item.title, artist: item.artist },
+                  });
+                }}
+                onLongPress={() => toggleSelect('albums', item.id)}
+              />
+            )}
           />
         </View>
       </PagerView>
     </View>
-  );
-}
-
-function Row({
-  title,
-  subtitle,
-  trailing,
-  selected,
-  playing,
-  onPress,
-  onLongPress,
-}: {
-  title: string;
-  subtitle?: string;
-  trailing?: string;
-  selected?: boolean;
-  playing?: boolean;
-  onPress: () => void;
-  onLongPress: () => void;
-}) {
-  return (
-    <Pressable
-      style={[styles.row, selected && styles.rowSelected]}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      delayLongPress={300}
-    >
-      <View style={styles.rowText}>
-        <Text
-          style={[styles.rowTitle, playing && styles.rowTitlePlaying]}
-          numberOfLines={1}
-        >
-          {title}
-        </Text>
-        {subtitle ? (
-          <Text style={styles.rowSubtitle} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        ) : null}
-      </View>
-      {selected ? <Text style={styles.check}>✓</Text> : null}
-      {trailing ? <Text style={styles.rowTrailing}>{trailing}</Text> : null}
-    </Pressable>
   );
 }
 
@@ -289,17 +284,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 52,
   },
-  headerRight: { flexDirection: 'row', gap: 18 },
   brand: { color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
   headerIcon: { color: colors.text, fontSize: 18 },
   headerAction: { color: colors.accent, fontSize: 15, fontWeight: '700' },
-  tabBar: { flexDirection: 'row', borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  tabBar: { flexDirection: 'row' },
   tab: { flex: 1, alignItems: 'center' },
   tabLabel: { color: colors.textDim, fontSize: 13, paddingVertical: 12 },
   tabLabelActive: { color: colors.text, fontWeight: '700' },
-  tabRule: { height: 2, width: '60%', backgroundColor: 'transparent' },
-  tabRuleActive: { backgroundColor: colors.accent },
+  indicator: { height: 2, backgroundColor: colors.accent },
   pager: { flex: 1 },
   page: { flex: 1 },
   listContent: { paddingBottom: 24 },
@@ -316,19 +309,22 @@ const styles = StyleSheet.create({
   rowTitlePlaying: { color: colors.accent, fontWeight: '700' },
   rowSubtitle: { color: colors.textDim, fontSize: 12, marginTop: 2 },
   rowTrailing: { color: colors.textDim, fontSize: 12 },
+  chevron: { color: colors.textDim, fontSize: 20 },
   check: { color: colors.accent, fontSize: 16, fontWeight: '700' },
   fab: {
     position: 'absolute',
-    right: 20,
-    bottom: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: colors.accent,
+    right: 16,
+    bottom: 16,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.accent,
   },
-  fabGlyph: { color: '#1a1206', fontSize: 22, fontWeight: '700' },
+  fabGlyph: { color: '#1a1206', fontSize: 18, fontWeight: '700' },
+  fabLabel: { color: '#1a1206', fontSize: 13, fontWeight: '700' },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: colors.textDim, fontSize: 13 },
 });

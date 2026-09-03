@@ -210,3 +210,48 @@ export async function getTracksForAlbums(ids: string[]): Promise<Track[]> {
   }
   return tracks;
 }
+
+/** アーティスト1人ぶんの内訳。アルバム単位でまとめつつ、全曲も返す。 */
+export type ArtistDetail = {
+  albums: Album[];
+  tracks: Track[];
+};
+
+export async function getArtistDetail(artistId: string): Promise<ArtistDetail> {
+  const page = await MusicLibrary.getArtistAssetsAsync(artistId, { first: PAGE_SIZE });
+
+  const tracks: Track[] = [];
+  const albums = new Map<string, Album>();
+
+  for (const asset of page.assets) {
+    tracks.push(toTrack(asset));
+
+    // アルバムIDが取れない曲もあるので、その場合はアルバム名で束ねる
+    const key = asset.albumId || asset.albumTitle || '';
+    if (!key) continue;
+
+    const existing = albums.get(key);
+    if (existing) {
+      existing.trackCount += 1;
+      continue;
+    }
+    albums.set(key, {
+      id: asset.albumId || key,
+      title: asset.albumTitle || 'Unknown',
+      artist: asset.artist || 'Unknown',
+      trackCount: 1,
+      artworkUri: asset.artworkUri ?? asset.artwork ?? null,
+    });
+  }
+
+  return {
+    albums: [...albums.values()].sort((a, b) => a.title.localeCompare(b.title)),
+    tracks,
+  };
+}
+
+/** アルバム1枚ぶんの曲。 */
+export async function getAlbumTracks(albumId: string): Promise<Track[]> {
+  const page = await MusicLibrary.getAlbumAssetsAsync(albumId, { first: PAGE_SIZE });
+  return page.assets.map(toTrack);
+}
