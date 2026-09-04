@@ -11,6 +11,7 @@ import {
   Animated,
   FlatList,
   Pressable,
+  RefreshControl,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -64,7 +65,7 @@ export default function LibraryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { tracks, playFrom, playTracks, playAll, currentTrack, allProgress } =
+  const { tracks, playFrom, playTracks, playAll, currentTrack, allProgress, rescan } =
     usePlayback();
   const { selection, active: inSelection, toggle, clear, isSelected } =
     useSelection<TabId>();
@@ -73,6 +74,32 @@ export default function LibraryScreen() {
   const [page, setPage] = useState(0);
   const [artists, setArtists] = useState<Artist[]>([]);
   const [albums, setAlbums] = useState<Album[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
+
+  /** 一覧の一番上から引っ張って更新。裏の自動走査とは別に、明示的に走らせる。 */
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      await rescan();
+      setArtists(await getArtists());
+      setAlbums(await getAlbums());
+    } catch {
+      // 走査に失敗しても既存の一覧はそのまま使える
+    } finally {
+      setRefreshing(false);
+    }
+  }, [rescan]);
+
+  const refreshControl = (
+    <RefreshControl
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      tintColor={colors.accent}
+      colors={[colors.accent]}
+      progressBackgroundColor={colors.surface}
+    />
+  );
+
   const { layouts, cycle } = useLayouts();
   const currentLayoutKey = page === 1 ? 'artists' : 'albums';
   const tileSizeFor = (layout: (typeof layouts)['artists']) =>
@@ -225,6 +252,7 @@ export default function LibraryScreen() {
               initialNumToRender={14}
               windowSize={7}
               removeClippedSubviews
+              refreshControl={refreshControl}
               renderItem={({ item, index }) => (
                 <Row
                   title={item.title}
@@ -276,6 +304,7 @@ export default function LibraryScreen() {
             contentContainerStyle={
               layouts.artists === 'list' ? styles.listContent : styles.gridContent
             }
+            refreshControl={refreshControl}
             renderItem={({ item }) =>
               layouts.artists !== 'list' ? (
                 <Tile
@@ -325,6 +354,7 @@ export default function LibraryScreen() {
             contentContainerStyle={
               layouts.albums === 'list' ? styles.listContent : styles.gridContent
             }
+            refreshControl={refreshControl}
             renderItem={({ item }) => {
               const subtitle = item.year
                 ? `${item.artist} · ${item.year}`
