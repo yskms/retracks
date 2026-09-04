@@ -221,12 +221,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (previous === state.order.length - 1 && event.index === 0) {
         const lastPlayed = state.order[previous] ?? null;
         void (async () => {
-          const ids = queueRef.current.map((t) => t.id);
+          // 全曲キューの2巡目は、その時点のライブラリを元に作り直す。
+          // 1巡の途中で増えた曲も次の巡から出てくるようにするため。
+          // アーティストやアルバムのキューは対象が決まっているのでそのまま使う。
+          const source =
+            queueKeyRef.current === ALL_KEY ? tracksRef.current : queueRef.current;
+          const ids = source.map((t) => t.id);
           const nextState = await startNextCycle(queueKeyRef.current, ids, lastPlayed);
           applyShuffle(nextState);
           lastIndexRef.current = 0;
 
-          const byId = new Map(queueRef.current.map((t) => [t.id, t]));
+          const byId = new Map(source.map((t) => [t.id, t]));
           const ordered = nextState.order
             .map((id) => byId.get(id))
             .filter((t): t is Track => t != null);

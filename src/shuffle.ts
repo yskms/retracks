@@ -9,7 +9,7 @@
  * そこで順列と現在位置を永続化し、1巡し切るまで既再生曲を出さない。
  */
 
-import { readJson, StorageKeys, writeJson } from './storage';
+import { readJson, remove, StorageKeys, writeJson } from './storage';
 
 export type ShuffleState = {
   /** 曲IDの並び。1巡ぶんの順列。 */
@@ -118,6 +118,45 @@ export function progressOf(state: ShuffleState): { played: number; total: number
 
 // ---- 永続化 -----------------------------------------------------------
 
+/**
+ * 順列を保存しておくキューの上限。
+ *
+ * キューは生成条件ごとに順列を持つため、放っておくと際限なく増える。
+ * 最後に使った順に残し、あふれた分は捨てる。
+ */
+const MAX_KEPT_QUEUES = 20;
+
+/**
+ * その場限りのキューか。
+ *
+ * 曲を選んで再生した場合、まったく同じ組み合わせを選び直すことは考えにくく、
+ * 1巡の続きを保存しておく価値がない。キー自体も選んだ曲のIDを全部繋げたもので
+ * 長くなるため、保存の対象から外す。
+ */
+function isEphemeral(queueKey: string): boolean {
+  return queueKey.startsWith('selection:');
+}
+
+/** キューを使ったことを記録し、古いものを捨てる。 */
+async function touchQueue(queueKey: string): Promise<void> {
+  if (isEphemeral(queueKey)) return;
+
+  const index = (await readJson<Record<string, number>>(StorageKeys.shuffleIndex)) ?? {};
+  index[queueKey] = Date.now();
+
+  const sorted = Object.entries(index).sort((a, b) => b[1] - a[1]);
+  const keep = sorted.slice(0, MAX_KEPT_QUEUES);
+  const drop = sorted.slice(MAX_KEPT_QUEUES);
+
+  for (const [key] of drop) {
+    await remove(StorageKeys.shuffle(key));
+    await remove(StorageKeys.shuffleCursor(key));
+    await remove(StorageKeys.playbackPosition(key));
+  }
+
+  await writeJson(StorageKeys.shuffleIndex, Object.fromEntries(keep));
+}
+
 export async function loadShuffle(queueKey: string): Promise<ShuffleState | null> {
   const order = await readJson<string[]>(StorageKeys.shuffle(queueKey));
   if (!Array.isArray(order) || order.length === 0) return null;
@@ -132,8 +171,10 @@ export async function loadShuffle(queueKey: string): Promise<ShuffleState | null
 }
 
 export async function saveShuffle(queueKey: string, state: ShuffleState): Promise<void> {
+  if (isEphemeral(queueKey)) return;
   await writeJson(StorageKeys.shuffle(queueKey), state.order);
   await writeJson(StorageKeys.shuffleCursor(queueKey), state.cursor);
+  await touchQueue(queueKey);
 }
 
 /**
@@ -141,6 +182,7 @@ export async function saveShuffle(queueKey: string, state: ShuffleState): Promis
  * 順列本体（1025曲なら数十KB）を書き直さずに済むようキーを分けている。
  */
 export async function saveCursor(queueKey: string, cursor: number): Promise<void> {
+  if (isEphemeral(queueKey)) return;
   await writeJson(StorageKeys.shuffleCursor(queueKey), cursor);
 }
 

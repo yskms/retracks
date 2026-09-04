@@ -33,6 +33,8 @@ export const StorageKeys = {
   settings: `${PREFIX}:settings:v1`,
   /** アーティスト／アルバムタブの表示形式（一覧かグリッドか）。 */
   layout: `${PREFIX}:layout:v1`,
+  /** 順列を保存しているキューの一覧と最終利用時刻。古いものを捨てるために使う。 */
+  shuffleIndex: `${PREFIX}:shuffle-index:v1`,
 } as const;
 
 export async function readJson<T>(key: string): Promise<T | null> {
