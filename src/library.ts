@@ -109,6 +109,8 @@ export type LoadResult = {
   tracks: Track[];
   /** キャッシュから読んだか、走査したか */
   source: 'cache' | 'scan';
+  /** キャッシュを作った時刻。裏で走査し直すかの判断に使う。 */
+  scannedAt: number;
   elapsedMs: number;
 };
 
@@ -121,12 +123,22 @@ export async function loadLibrary(): Promise<LoadResult> {
 
   const cached = await readCache();
   if (cached && cached.tracks.length > 0) {
-    return { tracks: cached.tracks, source: 'cache', elapsedMs: Date.now() - started };
+    return {
+      tracks: cached.tracks,
+      source: 'cache',
+      scannedAt: cached.scannedAt,
+      elapsedMs: Date.now() - started,
+    };
   }
 
   const tracks = await scanLibrary();
-  await writeCache(tracks);
-  return { tracks, source: 'scan', elapsedMs: Date.now() - started };
+  const snapshot = await writeCache(tracks);
+  return {
+    tracks,
+    source: 'scan',
+    scannedAt: snapshot.scannedAt,
+    elapsedMs: Date.now() - started,
+  };
 }
 
 export type RefreshResult = {

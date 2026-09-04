@@ -78,6 +78,12 @@ type PlaybackValue = {
   clearStorage: () => Promise<void>;
 };
 
+/**
+ * 裏での再走査を行う間隔。
+ * アプリを開くたびに走らせると無駄なので、前回からこれだけ経っていたら行う。
+ */
+const RESCAN_AFTER_MS = 5 * 60 * 1000;
+
 const PlaybackContext = createContext<PlaybackValue | null>(null);
 
 export function usePlayback(): PlaybackValue {
@@ -176,6 +182,24 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // 再生していなくても FAB に「続きから」を出せるよう、保存済みの1巡を読む
         const savedAll = await loadShuffle(ALL_KEY);
         if (!cancelled && savedAll) setAllProgress(progressOf(savedAll));
+
+        // 走査は待たせず裏で行い、差分があったときだけ静かに反映する。
+        // 起動のたびに2〜4秒待たされるのを避けつつ、曲の増減には追従する。
+        if (Date.now() - result.scannedAt > RESCAN_AFTER_MS) {
+          void (async () => {
+            try {
+              const refreshed = await refreshLibrary(result.tracks);
+              if (cancelled) return;
+              if (refreshed.added.length === 0 && refreshed.removed.length === 0) return;
+              applyTracks(refreshed.tracks);
+              addLog(
+                `裏で再走査（追加${refreshed.added.length} 削除${refreshed.removed.length}）`
+              );
+            } catch {
+              // 走査に失敗してもキャッシュで動くので黙って諦める
+            }
+          })();
+        }
         addLog(
           `ライブラリ ${result.tracks.length}曲 / ${result.elapsedMs}ms` +
             `（${result.source === 'cache' ? 'キャッシュ' : '走査'}）`
