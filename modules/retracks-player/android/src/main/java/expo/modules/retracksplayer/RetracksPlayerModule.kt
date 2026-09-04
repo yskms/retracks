@@ -249,6 +249,8 @@ class RetracksPlayerModule : Module() {
           return@onMain
         }
         tracks = list
+        // ウィジェットから復元できるよう、ネイティブ側にも控えておく
+        appContext.reactContext?.let { QueueStore.saveTracks(it, list) }
         val items = buildItems(list, currentSegment)
         c.setMediaItems(items, startIndex.coerceIn(0, maxOf(0, items.size - 1)), 0L)
         c.prepare()
@@ -276,6 +278,7 @@ class RetracksPlayerModule : Module() {
         // フェードの長さは今の曲にも即座に効かせてよい（区間の境界は変わらない）
         PlaybackService.instance?.segmentController?.segment = next
         applySegmentFromNextItem()
+        PlaybackService.instance?.saveState()
       }
     }
 

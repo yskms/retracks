@@ -17,9 +17,8 @@ import androidx.media3.common.util.UnstableApi
  * 表示の更新は PlaybackService から呼ばれる（再生状態や曲が変わったとき）。
  * 操作ボタンはブロードキャストで自分自身に戻し、サービスのプレイヤーを直接動かす。
  *
- * サービスが動いていない（アプリが完全に終了している）場合は操作できないので、
- * その状態ではタップでアプリを開く。ウィジェットから再生を復元するには
- * キューの読み込みが要るため、JS 側の起動が必要になる。
+ * アプリが完全に終了していてもサービスを起こして再生できる。キューはネイティブ側にも
+ * 控えてあり（QueueStore）、サービスが単独で復元するため JS の起動を待たなくてよい。
  */
 @OptIn(UnstableApi::class)
 class RetracksWidgetProvider : AppWidgetProvider() {
@@ -127,10 +126,22 @@ class RetracksWidgetProvider : AppWidgetProvider() {
     super.onReceive(context, intent)
 
     val player = PlaybackService.instance?.playerOrNull()
+
+    // サービスが寝ている（アプリが終了している）場合は起こす。
+    // サービス側が保存済みのキューを復元し、そのまま再生する。
+    if (player == null || player.mediaItemCount == 0) {
+      if (intent.action == ACTION_TOGGLE) {
+        val start = Intent(context, PlaybackService::class.java)
+          .putExtra(PlaybackService.EXTRA_PLAY_ON_START, true)
+        context.startForegroundService(start)
+      }
+      return
+    }
+
     when (intent.action) {
-      ACTION_PREV -> player?.seekToPreviousMediaItem()
-      ACTION_TOGGLE -> if (player?.isPlaying == true) player.pause() else player?.play()
-      ACTION_NEXT -> player?.seekToNextMediaItem()
+      ACTION_PREV -> player.seekToPreviousMediaItem()
+      ACTION_TOGGLE -> if (player.isPlaying) player.pause() else player.play()
+      ACTION_NEXT -> player.seekToNextMediaItem()
       else -> return
     }
 
