@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="retracks_widget_label">RE:TR4CKS</string>
+  <string name="retracks_widget_idle_title">再生していません</string>
+  <string name="retracks_widget_idle_artist">タップしてアプリを開く</string>
+  <string name="retracks_widget_artwork_description">アルバムジャケット</string>
+  <string name="retracks_widget_prev_description">前の曲</string>
+  <string name="retracks_widget_toggle_description">再生／一時停止</string>
+  <string name="retracks_widget_next_description">次の曲</string>
+</resources>

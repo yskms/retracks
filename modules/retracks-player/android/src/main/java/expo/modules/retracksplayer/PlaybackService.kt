@@ -6,6 +6,8 @@ import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -32,6 +34,38 @@ class PlaybackService : MediaSessionService() {
   }
 
   private var mediaSession: MediaSession? = null
+
+  /** ウィジェットに出す最低限の情報。 */
+  data class Snapshot(
+    val title: String,
+    val artist: String,
+    val artworkUri: String?,
+    val isPlaying: Boolean
+  )
+
+  /** ウィジェットの表示を再生状態に追従させる。 */
+  private val widgetListener = object : Player.Listener {
+    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+      RetracksWidgetProvider.updateAll(this@PlaybackService)
+    }
+
+    override fun onIsPlayingChanged(isPlaying: Boolean) {
+      RetracksWidgetProvider.updateAll(this@PlaybackService)
+    }
+  }
+
+  fun playerOrNull(): Player? = mediaSession?.player
+
+  fun currentPlayerSnapshot(): Snapshot? {
+    val player = mediaSession?.player ?: return null
+    val metadata = player.currentMediaItem?.mediaMetadata ?: return null
+    return Snapshot(
+      title = metadata.title?.toString() ?: "",
+      artist = metadata.artist?.toString() ?: "",
+      artworkUri = metadata.artworkUri?.toString(),
+      isPlaying = player.isPlaying
+    )
+  }
   var segmentController: SegmentController? = null
     private set
 
@@ -51,6 +85,7 @@ class PlaybackService : MediaSessionService() {
       .build()
 
     segmentController = SegmentController(player).apply { attach() }
+    player.addListener(widgetListener)
 
     // 通知やロック画面をタップしたときにアプリを開くための遷移先。
     // これを渡さないとタップしても何も起きない。
@@ -71,6 +106,7 @@ class PlaybackService : MediaSessionService() {
       .build()
 
     instance = this
+    RetracksWidgetProvider.updateAll(this)
   }
 
   override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
@@ -85,6 +121,7 @@ class PlaybackService : MediaSessionService() {
 
   override fun onDestroy() {
     instance = null
+    mediaSession?.player?.removeListener(widgetListener)
     segmentController?.detach()
     segmentController = null
     mediaSession?.run {
@@ -92,6 +129,7 @@ class PlaybackService : MediaSessionService() {
       release()
     }
     mediaSession = null
+    RetracksWidgetProvider.updateAll(this)
     super.onDestroy()
   }
 }
