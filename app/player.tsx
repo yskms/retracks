@@ -48,6 +48,7 @@ export default function PlayerScreen() {
     previous,
     seekTo,
     skipTo,
+    playCurrentToEnd,
   } = usePlayback();
 
   const listRef = useRef<FlatList<Track>>(null);
@@ -61,6 +62,16 @@ export default function PlayerScreen() {
   const [dragging, setDragging] = useState<Partial<Record<keyof SegmentSetting, number>>>(
     {}
   );
+
+  /** スライダーの微調整用。段はスライダーと同じ刻みに合わせる。 */
+  const bump = (key: keyof SegmentSetting, delta: number) => {
+    const row = SEGMENT_ROWS.find((r) => r.key === key);
+    setSetting((prev) => {
+      const raw = prev[key] + delta;
+      const clamped = Math.min(row?.max ?? raw, Math.max(row?.min ?? 0, raw));
+      return { ...prev, [key]: Math.round(clamped * 2) / 2 };
+    });
+  };
 
   const positionMs = seeking ?? status?.positionMs ?? 0;
   const durationMs = status?.durationMs ?? 0;
@@ -100,7 +111,23 @@ export default function PlayerScreen() {
         )}
         ListHeaderComponent={
           <View style={styles.body}>
-            <Artwork uri={currentTrack?.artworkUri} size={width - 40} radius={14} />
+            <Pressable
+              disabled={!currentTrack?.album}
+              onPress={() =>
+                router.push({
+                  pathname: '/album/[id]',
+                  params: {
+                    // アルバムIDは持っていないのでタイトルで辿る。
+                    // アルバム詳細側がIDで引けない場合の経路を持っている
+                    id: currentTrack?.album ?? '',
+                    title: currentTrack?.album ?? '',
+                    artist: currentTrack?.artist ?? '',
+                  },
+                })
+              }
+            >
+              <Artwork uri={currentTrack?.artworkUri} size={width - 40} radius={14} />
+            </Pressable>
 
             <View style={styles.meta}>
               <Text style={styles.title} numberOfLines={2}>
@@ -151,17 +178,40 @@ export default function PlayerScreen() {
               </Pressable>
             </View>
 
-            <Pressable
-              style={[styles.rush, rushOn ? styles.rushOn : styles.rushOff]}
-              onPress={() => setRushOn(!rushOn)}
-            >
-              <Text style={[styles.rushLabel, rushOn && styles.rushLabelOn]}>
-                RUSH {rushOn ? 'ON' : 'OFF'}
-              </Text>
-              <Text style={styles.rushHint}>
-                {rushOn ? '区間だけ再生して次の曲へ' : '曲を最後まで再生'}
-              </Text>
-            </Pressable>
+            <View style={styles.modeRow}>
+              <Pressable
+                style={[styles.rush, rushOn ? styles.rushOn : styles.rushOff]}
+                onPress={() => setRushOn(!rushOn)}
+              >
+                <Text style={[styles.rushLabel, rushOn && styles.rushLabelOn]}>
+                  RUSH {rushOn ? 'ON' : 'OFF'}
+                </Text>
+                <Text style={styles.rushHint}>
+                  {rushOn ? '区間だけ再生して次の曲へ' : '曲を最後まで再生'}
+                </Text>
+              </Pressable>
+
+              {/* RUSH を切らずに、この曲だけ通しで聴きたいとき */}
+              {rushOn && (
+                <Pressable
+                  style={[styles.oneShot, status?.fullPlayback && styles.oneShotOn]}
+                  onPress={playCurrentToEnd}
+                  disabled={status?.fullPlayback}
+                >
+                  <Text
+                    style={[
+                      styles.oneShotLabel,
+                      status?.fullPlayback && styles.oneShotLabelOn,
+                    ]}
+                  >
+                    {status?.fullPlayback ? 'この曲は最後まで' : 'この曲だけ最後まで'}
+                  </Text>
+                  <Text style={styles.rushHint}>
+                    {status?.fullPlayback ? '次の曲から元に戻ります' : 'RUSH はそのまま'}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
 
             {rushOn && (
               <View style={styles.card}>
@@ -170,9 +220,25 @@ export default function PlayerScreen() {
                   <View key={row.key} style={styles.segmentRow}>
                     <View style={styles.segmentHead}>
                       <Text style={styles.segmentLabel}>{row.label}</Text>
-                      <Text style={styles.segmentValue}>
-                        {(dragging[row.key] ?? setting[row.key]).toFixed(1)}s
-                      </Text>
+                      <View style={styles.steppers}>
+                        <Pressable
+                          style={styles.stepper}
+                          hitSlop={6}
+                          onPress={() => bump(row.key, -row.step)}
+                        >
+                          <Text style={styles.stepperText}>−</Text>
+                        </Pressable>
+                        <Text style={styles.segmentValue}>
+                          {(dragging[row.key] ?? setting[row.key]).toFixed(1)}s
+                        </Text>
+                        <Pressable
+                          style={styles.stepper}
+                          hitSlop={6}
+                          onPress={() => bump(row.key, row.step)}
+                        >
+                          <Text style={styles.stepperText}>＋</Text>
+                        </Pressable>
+                      </View>
                     </View>
                     <Slider
                       style={styles.segmentSlider}
@@ -214,20 +280,32 @@ export default function PlayerScreen() {
             {queue.length > 0 && (
               <View style={styles.queueHeader}>
                 <Text style={styles.queueHeaderTitle}>再生キュー {queue.length}曲</Text>
-                {status && status.index >= 0 && (
+                <View style={styles.queueHeaderActions}>
                   <Pressable
-                    hitSlop={8}
+                    style={styles.queueHeaderButton}
+                    hitSlop={6}
                     onPress={() =>
-                      listRef.current?.scrollToIndex({
-                        index: status.index,
-                        viewPosition: 0.3,
-                        animated: true,
-                      })
+                      listRef.current?.scrollToOffset({ offset: 0, animated: true })
                     }
                   >
-                    <Text style={styles.queueHeaderAction}>現在の曲へ</Text>
+                    <Text style={styles.queueHeaderAction}>先頭へ</Text>
                   </Pressable>
-                )}
+                  {status && status.index >= 0 && (
+                    <Pressable
+                      style={styles.queueHeaderButton}
+                      hitSlop={6}
+                      onPress={() =>
+                        listRef.current?.scrollToIndex({
+                          index: status.index,
+                          viewPosition: 0.3,
+                          animated: true,
+                        })
+                      }
+                    >
+                      <Text style={styles.queueHeaderAction}>再生中へ</Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
             )}
           </View>
@@ -316,7 +394,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   controlMainGlyph: { color: '#1a1206', fontSize: 26, fontWeight: '700' },
-  rush: { borderRadius: 12, padding: 14, gap: 2, borderWidth: 1 },
+  modeRow: { flexDirection: 'row', gap: 10 },
+  rush: { flex: 1, borderRadius: 12, padding: 14, gap: 2, borderWidth: 1 },
+  oneShot: {
+    flex: 1,
+    borderRadius: 12,
+    padding: 14,
+    gap: 2,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  oneShotOn: { borderColor: colors.accent, backgroundColor: colors.accentDim },
+  oneShotLabel: { color: colors.textDim, fontSize: 13, fontWeight: '700' },
+  oneShotLabelOn: { color: colors.text },
   rushOn: { backgroundColor: colors.accentDim, borderColor: colors.accent },
   rushOff: { backgroundColor: colors.surface, borderColor: colors.border },
   rushLabel: { color: colors.textDim, fontSize: 15, fontWeight: '700', letterSpacing: 1 },
@@ -327,7 +418,7 @@ const styles = StyleSheet.create({
   segmentRow: { gap: 2 },
   segmentHead: { flexDirection: 'row', justifyContent: 'space-between' },
   segmentLabel: { color: colors.textDim, fontSize: 12 },
-  segmentValue: { color: colors.text, fontSize: 12 },
+  segmentValue: { color: colors.text, fontSize: 12, width: 44, textAlign: 'center' },
   segmentSlider: { width: '100%', height: 32 },
   previewText: { color: colors.textDim, fontSize: 11, lineHeight: 17 },
   note: { color: colors.textDim, fontSize: 10 },
@@ -338,7 +429,24 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   queueHeaderTitle: { color: colors.accent, fontSize: 12, fontWeight: '700' },
-  queueHeaderAction: { color: colors.textDim, fontSize: 12 },
+  queueHeaderActions: { flexDirection: 'row', gap: 6 },
+  queueHeaderButton: {
+    backgroundColor: colors.surfaceHigh,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+  },
+  queueHeaderAction: { color: colors.text, fontSize: 11 },
+  steppers: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepper: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.surfaceHigh,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperText: { color: colors.text, fontSize: 14, fontWeight: '700' },
   queueRow: {
     height: QUEUE_ROW_HEIGHT,
     flexDirection: 'row',

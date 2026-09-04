@@ -20,6 +20,8 @@ declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
    * 公開していないため、こちらで直接読む。
    */
   getAlbumYears(): Promise<Record<string, number>>;
+  /** いまの曲だけ区間を外して最後まで再生する。次の曲からは元に戻る。 */
+  playCurrentToEnd(): void;
   play(): void;
   pause(): void;
   next(): void;

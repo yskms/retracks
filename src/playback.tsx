@@ -71,6 +71,8 @@ type PlaybackValue = {
   previous: () => void;
   skipTo: (index: number) => void;
   seekTo: (positionMs: number) => void;
+  /** いまの曲だけ最後まで再生する。次の曲からは元に戻る。 */
+  playCurrentToEnd: () => void;
 
   rescan: () => Promise<void>;
   clearStorage: () => Promise<void>;
@@ -397,6 +399,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     previous: () => RetracksPlayer.previous(),
     skipTo: (index: number) => RetracksPlayer.skipTo(index),
     seekTo: (positionMs: number) => void RetracksPlayer.seekTo(positionMs),
+    playCurrentToEnd: () => RetracksPlayer.playCurrentToEnd(),
     rescan,
     clearStorage,
   };

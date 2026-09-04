@@ -28,6 +28,8 @@ export type PlayerStatus = {
   positionMs: number;
   durationMs: number;
   queueSize: number;
+  /** いまの曲が「最後まで再生」に切り替わっているか。 */
+  fullPlayback: boolean;
 };
 
 /** Player.REPEAT_MODE_* と同じ値 */

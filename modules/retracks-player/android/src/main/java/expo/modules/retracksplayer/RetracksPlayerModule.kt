@@ -62,6 +62,12 @@ class RetracksPlayerModule : Module() {
   private var tracks: List<TrackInput> = emptyList()
   private var currentSegment: Segment? = null
 
+  /**
+   * 「この曲だけ最後まで」で区間を外した曲の位置。
+   * その曲を離れたら元の区間に戻す。
+   */
+  private var fullPlaybackIndex: Int? = null
+
   @Volatile
   private var snapshot: Map<String, Any?> = emptySnapshot()
 
@@ -71,7 +77,8 @@ class RetracksPlayerModule : Module() {
     "index" to -1,
     "positionMs" to 0.0,
     "durationMs" to 0.0,
-    "queueSize" to 0
+    "queueSize" to 0,
+    "fullPlayback" to false
   )
 
   /**
@@ -140,15 +147,29 @@ class RetracksPlayerModule : Module() {
           "index" to c.currentMediaItemIndex,
           "positionMs" to c.currentPosition.toDouble(),
           "durationMs" to (c.duration.takeIf { it > 0 }?.toDouble() ?: 0.0),
-          "queueSize" to c.mediaItemCount
+          "queueSize" to c.mediaItemCount,
+          "fullPlayback" to (fullPlaybackIndex != null &&
+            fullPlaybackIndex == c.currentMediaItemIndex)
         )
       }
       if (polling) mainHandler.postDelayed(this, SNAPSHOT_INTERVAL_MS)
     }
   }
 
+  /** 区間を外した曲から離れたら、元の区間に戻す。 */
+  private fun restoreFullPlaybackItem() {
+    val index = fullPlaybackIndex ?: return
+    val c = controller ?: return
+    if (c.currentMediaItemIndex == index) return
+
+    fullPlaybackIndex = null
+    if (index < 0 || index >= tracks.size || index >= c.mediaItemCount) return
+    c.replaceMediaItem(index, buildItems(listOf(tracks[index]), currentSegment).first())
+  }
+
   private val playerListener = object : Player.Listener {
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+      restoreFullPlaybackItem()
       sendEvent(
         "onTrackChange",
         mapOf(
@@ -304,6 +325,30 @@ class RetracksPlayerModule : Module() {
         promise.resolve(result)
       } catch (e: Exception) {
         promise.reject(CodedException("Failed to read album years", e))
+      }
+    }
+
+    /**
+     * いま鳴っている曲だけ、区間を外して最後まで再生する。
+     *
+     * 区間は MediaItem に焼き込まれているため、その曲だけ区間なしの項目へ差し替え、
+     * 同じ音の位置へシークし直す。次の曲へ移ったら元に戻す。
+     */
+    Function("playCurrentToEnd") {
+      onMain {
+        val c = controller ?: return@onMain
+        val segment = currentSegment ?: return@onMain
+        val index = c.currentMediaItemIndex
+        if (index < 0 || index >= tracks.size) return@onMain
+
+        val track = tracks[index]
+        val resolved = SegmentController.resolve(track.durationMs.toLong(), segment)
+        // 区間内の位置を、曲全体での位置に読み替える
+        val positionInTrack = resolved.start + c.currentPosition
+
+        c.replaceMediaItem(index, buildItems(listOf(track), null).first())
+        c.seekTo(index, positionInTrack)
+        fullPlaybackIndex = index
       }
     }
 
