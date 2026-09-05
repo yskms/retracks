@@ -28,7 +28,7 @@ export type PlayerStatus = {
   positionMs: number;
   durationMs: number;
   queueSize: number;
-  /** いまの曲が「最後まで再生」に切り替わっているか。 */
+  /** いまの曲が「通しで再生」に切り替わっているか。 */
   fullPlayback: boolean;
 };
 

@@ -332,25 +332,23 @@ class RetracksPlayerModule : Module() {
     }
 
     /**
-     * いま鳴っている曲だけ、区間を外して最後まで再生する。
+     * いま鳴っている曲を、区間を外して最初から通しで再生する。
      *
-     * 区間は MediaItem に焼き込まれているため、その曲だけ区間なしの項目へ差し替え、
-     * 同じ音の位置へシークし直す。次の曲へ移ったら元に戻す。
+     * 区間は MediaItem に焼き込まれているため、その曲だけ区間なしの項目へ差し替える。
+     * 途中の位置へ引き継ぐと差し替えの継ぎ目が耳につくので、頭から鳴らし直す。
+     * 曲が変わったように聞こえるぶん、継ぎ目が気にならない。
+     * 次の曲へ移ったら元の区間に戻す。
      */
-    Function("playCurrentToEnd") {
+    Function("playCurrentFromStart") {
       onMain {
         val c = controller ?: return@onMain
-        val segment = currentSegment ?: return@onMain
+        if (currentSegment == null) return@onMain
         val index = c.currentMediaItemIndex
         if (index < 0 || index >= tracks.size) return@onMain
 
-        val track = tracks[index]
-        val resolved = SegmentController.resolve(track.durationMs.toLong(), segment)
-        // 区間内の位置を、曲全体での位置に読み替える
-        val positionInTrack = resolved.start + c.currentPosition
-
-        c.replaceMediaItem(index, buildItems(listOf(track), null).first())
-        c.seekTo(index, positionInTrack)
+        c.replaceMediaItem(index, buildItems(listOf(tracks[index]), null).first())
+        c.seekTo(index, 0L)
+        c.play()
         fullPlaybackIndex = index
       }
     }

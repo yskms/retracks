@@ -48,7 +48,7 @@ export default function PlayerScreen() {
     previous,
     seekTo,
     skipTo,
-    playCurrentToEnd,
+    playCurrentFromStart,
   } = usePlayback();
 
   const listRef = useRef<FlatList<Track>>(null);
@@ -195,7 +195,7 @@ export default function PlayerScreen() {
               {rushOn && (
                 <Pressable
                   style={[styles.oneShot, status?.fullPlayback && styles.oneShotOn]}
-                  onPress={playCurrentToEnd}
+                  onPress={playCurrentFromStart}
                   disabled={status?.fullPlayback}
                 >
                   <Text
@@ -204,10 +204,12 @@ export default function PlayerScreen() {
                       status?.fullPlayback && styles.oneShotLabelOn,
                     ]}
                   >
-                    {status?.fullPlayback ? 'この曲は最後まで' : 'この曲だけ最後まで'}
+                    {status?.fullPlayback ? 'この曲は通しで再生中' : 'この曲を最初から'}
                   </Text>
                   <Text style={styles.rushHint}>
-                    {status?.fullPlayback ? '次の曲から元に戻ります' : 'RUSH はそのまま'}
+                    {status?.fullPlayback
+                      ? '次の曲から元に戻ります'
+                      : '頭から最後まで。RUSH はそのまま'}
                   </Text>
                 </Pressable>
               )}
