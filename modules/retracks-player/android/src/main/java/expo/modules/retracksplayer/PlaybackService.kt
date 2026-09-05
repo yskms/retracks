@@ -50,6 +50,7 @@ class PlaybackService : MediaSessionService() {
   /** ウィジェットの表示を追従させ、あわせて再生位置を控える。 */
   private val widgetListener = object : Player.Listener {
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+      restoreClippedItem()
       RetracksWidgetProvider.updateAll(this@PlaybackService)
       saveState()
     }
@@ -121,6 +122,58 @@ class PlaybackService : MediaSessionService() {
   }
 
   fun playerOrNull(): Player? = mediaSession?.player
+
+  /** 「この曲を最初から」で区間を外した曲の位置と、戻すための元の項目。 */
+  private var fullPlaybackIndex: Int? = null
+  private var clippedItemBeforeFullPlayback: MediaItem? = null
+
+  fun isFullPlayback(): Boolean {
+    val player = mediaSession?.player ?: return false
+    return fullPlaybackIndex != null && fullPlaybackIndex == player.currentMediaItemIndex
+  }
+
+  /**
+   * いま鳴っている曲を、区間を外して最初から通しで再生する。
+   *
+   * 区間は MediaItem に焼き込まれているので、その項目から区間指定だけを外した
+   * ものへ差し替える。元の項目は控えておき、次の曲へ移ったら戻す。
+   *
+   * ウィジェットからも呼べるよう、曲の一覧を必要としない作りにしてある
+   * （いまの MediaItem を組み替えるだけで済ませる）。
+   */
+  fun playCurrentFromStart() {
+    val player = mediaSession?.player ?: return
+    val item = player.currentMediaItem ?: return
+    val index = player.currentMediaItemIndex
+    if (index < 0) return
+
+    clippedItemBeforeFullPlayback = item
+    fullPlaybackIndex = index
+
+    player.replaceMediaItem(
+      index,
+      item.buildUpon()
+        .setClippingConfiguration(MediaItem.ClippingConfiguration.UNSET)
+        .build()
+    )
+    player.seekTo(index, 0L)
+    player.play()
+  }
+
+  /** 区間を外した曲から離れたら元に戻す。 */
+  private fun restoreClippedItem() {
+    val index = fullPlaybackIndex ?: return
+    val player = mediaSession?.player ?: return
+    if (player.currentMediaItemIndex == index) return
+
+    val original = clippedItemBeforeFullPlayback
+    fullPlaybackIndex = null
+    clippedItemBeforeFullPlayback = null
+
+    if (original != null && index < player.mediaItemCount) {
+      player.replaceMediaItem(index, original)
+    }
+  }
 
   fun currentPlayerSnapshot(): Snapshot? {
     val player = mediaSession?.player ?: return null

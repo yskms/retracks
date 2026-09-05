@@ -6,6 +6,8 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.RemoteViews
 import androidx.annotation.OptIn
@@ -27,6 +29,10 @@ class RetracksWidgetProvider : AppWidgetProvider() {
     private const val ACTION_PREV = "expo.modules.retracksplayer.WIDGET_PREV"
     private const val ACTION_TOGGLE = "expo.modules.retracksplayer.WIDGET_TOGGLE"
     private const val ACTION_NEXT = "expo.modules.retracksplayer.WIDGET_NEXT"
+    private const val ACTION_REPLAY = "expo.modules.retracksplayer.WIDGET_REPLAY"
+
+    /** ウィジェットへ渡すジャケットの目標サイズ。大きすぎると転送に失敗する。 */
+    private const val ARTWORK_TARGET_PX = 256
 
     /** 表示中のウィジェットをすべて更新する。 */
     fun updateAll(context: Context) {
@@ -65,8 +71,11 @@ class RetracksWidgetProvider : AppWidgetProvider() {
           R.id.retracks_widget_toggle,
           if (player.isPlaying) R.drawable.retracks_ic_pause else R.drawable.retracks_ic_play
         )
-        if (player.artworkUri != null) {
-          views.setImageViewUri(R.id.retracks_widget_artwork, Uri.parse(player.artworkUri))
+        // ランチャーは別アプリなので MediaStore の URI を読む権限がない。
+        // こちらで画像を読み込んでビットマップとして渡す。
+        val artwork = loadArtwork(context, player.artworkUri)
+        if (artwork != null) {
+          views.setImageViewBitmap(R.id.retracks_widget_artwork, artwork)
         } else {
           views.setImageViewResource(
             R.id.retracks_widget_artwork,
@@ -78,6 +87,10 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       views.setOnClickPendingIntent(R.id.retracks_widget_prev, command(context, ACTION_PREV))
       views.setOnClickPendingIntent(R.id.retracks_widget_toggle, command(context, ACTION_TOGGLE))
       views.setOnClickPendingIntent(R.id.retracks_widget_next, command(context, ACTION_NEXT))
+      views.setOnClickPendingIntent(
+        R.id.retracks_widget_replay,
+        command(context, ACTION_REPLAY)
+      )
 
       // ジャケットや曲名をタップしたらアプリを開く
       openAppIntent(context)?.let { intent ->
@@ -87,6 +100,28 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       }
 
       return views
+    }
+
+    /** ジャケットを縮小して読み込む。読めなければ null。 */
+    private fun loadArtwork(context: Context, uriString: String?): Bitmap? {
+      if (uriString.isNullOrEmpty()) return null
+
+      return runCatching {
+        val uri = Uri.parse(uriString)
+
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use {
+          BitmapFactory.decodeStream(it, null, bounds)
+        }
+
+        var sample = 1
+        while (bounds.outWidth / sample > ARTWORK_TARGET_PX * 2) sample *= 2
+
+        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+        context.contentResolver.openInputStream(uri)?.use {
+          BitmapFactory.decodeStream(it, null, options)
+        }
+      }.getOrNull()
     }
 
     private fun command(context: Context, action: String): PendingIntent {
@@ -142,6 +177,7 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       ACTION_PREV -> player.seekToPreviousMediaItem()
       ACTION_TOGGLE -> if (player.isPlaying) player.pause() else player.play()
       ACTION_NEXT -> player.seekToNextMediaItem()
+      ACTION_REPLAY -> PlaybackService.instance?.playCurrentFromStart()
       else -> return
     }
 

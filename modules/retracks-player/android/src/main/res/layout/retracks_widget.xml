@@ -85,6 +85,15 @@
           android:background="?android:attr/selectableItemBackgroundBorderless"
           android:src="@drawable/retracks_ic_next"
           android:contentDescription="@string/retracks_widget_next_description" />
+
+      <ImageButton
+          android:id="@+id/retracks_widget_replay"
+          android:layout_width="0dp"
+          android:layout_height="40dp"
+          android:layout_weight="1"
+          android:background="?android:attr/selectableItemBackgroundBorderless"
+          android:src="@drawable/retracks_ic_replay"
+          android:contentDescription="@string/retracks_widget_replay_description" />
     </LinearLayout>
   </LinearLayout>
 </LinearLayout>

@@ -7,4 +7,5 @@
   <string name="retracks_widget_prev_description">前の曲</string>
   <string name="retracks_widget_toggle_description">再生／一時停止</string>
   <string name="retracks_widget_next_description">次の曲</string>
+  <string name="retracks_widget_replay_description">この曲を最初から</string>
 </resources>

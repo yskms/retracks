@@ -62,11 +62,6 @@ class RetracksPlayerModule : Module() {
   private var tracks: List<TrackInput> = emptyList()
   private var currentSegment: Segment? = null
 
-  /**
-   * 「この曲だけ最後まで」で区間を外した曲の位置。
-   * その曲を離れたら元の区間に戻す。
-   */
-  private var fullPlaybackIndex: Int? = null
 
   @Volatile
   private var snapshot: Map<String, Any?> = emptySnapshot()
@@ -148,28 +143,15 @@ class RetracksPlayerModule : Module() {
           "positionMs" to c.currentPosition.toDouble(),
           "durationMs" to (c.duration.takeIf { it > 0 }?.toDouble() ?: 0.0),
           "queueSize" to c.mediaItemCount,
-          "fullPlayback" to (fullPlaybackIndex != null &&
-            fullPlaybackIndex == c.currentMediaItemIndex)
+          "fullPlayback" to (PlaybackService.instance?.isFullPlayback() ?: false)
         )
       }
       if (polling) mainHandler.postDelayed(this, SNAPSHOT_INTERVAL_MS)
     }
   }
 
-  /** 区間を外した曲から離れたら、元の区間に戻す。 */
-  private fun restoreFullPlaybackItem() {
-    val index = fullPlaybackIndex ?: return
-    val c = controller ?: return
-    if (c.currentMediaItemIndex == index) return
-
-    fullPlaybackIndex = null
-    if (index < 0 || index >= tracks.size || index >= c.mediaItemCount) return
-    c.replaceMediaItem(index, buildItems(listOf(tracks[index]), currentSegment).first())
-  }
-
   private val playerListener = object : Player.Listener {
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-      restoreFullPlaybackItem()
       sendEvent(
         "onTrackChange",
         mapOf(
@@ -331,26 +313,9 @@ class RetracksPlayerModule : Module() {
       }
     }
 
-    /**
-     * いま鳴っている曲を、区間を外して最初から通しで再生する。
-     *
-     * 区間は MediaItem に焼き込まれているため、その曲だけ区間なしの項目へ差し替える。
-     * 途中の位置へ引き継ぐと差し替えの継ぎ目が耳につくので、頭から鳴らし直す。
-     * 曲が変わったように聞こえるぶん、継ぎ目が気にならない。
-     * 次の曲へ移ったら元の区間に戻す。
-     */
+    /** いまの曲を最初から通しで再生する。実処理はサービス側にある。 */
     Function("playCurrentFromStart") {
-      onMain {
-        val c = controller ?: return@onMain
-        if (currentSegment == null) return@onMain
-        val index = c.currentMediaItemIndex
-        if (index < 0 || index >= tracks.size) return@onMain
-
-        c.replaceMediaItem(index, buildItems(listOf(tracks[index]), null).first())
-        c.seekTo(index, 0L)
-        c.play()
-        fullPlaybackIndex = index
-      }
+      onMain { PlaybackService.instance?.playCurrentFromStart() }
     }
 
     Function("play") { onMain { controller?.play() } }
