@@ -34,8 +34,13 @@ class RetracksWidgetProvider : AppWidgetProvider() {
     private const val ACTION_NEXT = "expo.modules.retracksplayer.WIDGET_NEXT"
     private const val ACTION_REPLAY = "expo.modules.retracksplayer.WIDGET_REPLAY"
 
-    /** ウィジェットへ渡すジャケットの目標サイズ。大きすぎると転送に失敗する。 */
-    private const val ARTWORK_TARGET_PX = 256
+    /**
+     * ウィジェットへ渡すジャケットの目標サイズ。
+     *
+     * RemoteViews は転送量に上限があり、超えると画像が黙って落とされる。
+     * レイアウトを2つ渡すぶん同じ絵が2回載るので、控えめにしておく。
+     */
+    private const val ARTWORK_TARGET_PX = 192
 
     /** 正方形でないジャケットを収めたときの余白の色。 */
     private const val ARTWORK_PADDING_COLOR = 0xFF1C1C22.toInt()
@@ -57,14 +62,26 @@ class RetracksWidgetProvider : AppWidgetProvider() {
      * 小さいときは横並び、大きいときはジャケットを上に置いた縦並びにする。
      */
     private fun buildViews(context: Context): RemoteViews {
-      val compact = fill(context, RemoteViews(context.packageName, R.layout.retracks_widget))
+      // ジャケットの読み込みは一度だけ。レイアウトごとに読み直すと
+      // 同じ絵を二度デコードすることになり、転送量も無駄に増える。
+      val artwork = loadArtwork(
+        context,
+        PlaybackService.instance?.currentPlayerSnapshot()?.artworkUri
+      )
+
+      val compact = fill(
+        context,
+        RemoteViews(context.packageName, R.layout.retracks_widget),
+        artwork
+      )
 
       // サイズごとの出し分けは Android 12 から
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return compact
 
       val large = fill(
         context,
-        RemoteViews(context.packageName, R.layout.retracks_widget_large)
+        RemoteViews(context.packageName, R.layout.retracks_widget_large),
+        artwork
       )
       return RemoteViews(
         mapOf(
@@ -75,7 +92,11 @@ class RetracksWidgetProvider : AppWidgetProvider() {
     }
 
     /** 与えられたレイアウトに曲の情報と操作を流し込む。ID は両レイアウト共通。 */
-    private fun fill(context: Context, views: RemoteViews): RemoteViews {
+    private fun fill(
+      context: Context,
+      views: RemoteViews,
+      artwork: Bitmap?
+    ): RemoteViews {
       val player = PlaybackService.instance?.currentPlayerSnapshot()
 
       if (player == null) {
@@ -100,8 +121,7 @@ class RetracksWidgetProvider : AppWidgetProvider() {
           if (player.isPlaying) R.drawable.retracks_ic_pause else R.drawable.retracks_ic_play
         )
         // ランチャーは別アプリなので MediaStore の URI を読む権限がない。
-        // こちらで画像を読み込んでビットマップとして渡す。
-        val artwork = loadArtwork(context, player.artworkUri)
+        // こちらで読み込んだビットマップを渡す。
         if (artwork != null) {
           views.setImageViewBitmap(R.id.retracks_widget_artwork, artwork)
         } else {
@@ -145,7 +165,11 @@ class RetracksWidgetProvider : AppWidgetProvider() {
         var sample = 1
         while (bounds.outWidth / sample > ARTWORK_TARGET_PX * 2) sample *= 2
 
-        val options = BitmapFactory.Options().apply { inSampleSize = sample }
+        val options = BitmapFactory.Options().apply {
+          inSampleSize = sample
+          // 透過は不要なので、容量が半分になる形式で読む
+          inPreferredConfig = Bitmap.Config.RGB_565
+        }
         val decoded = context.contentResolver.openInputStream(uri)?.use {
           BitmapFactory.decodeStream(it, null, options)
         }
@@ -164,7 +188,7 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       if (source.width == source.height) return source
 
       val side = maxOf(source.width, source.height)
-      val square = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+      val square = Bitmap.createBitmap(side, side, Bitmap.Config.RGB_565)
       Canvas(square).apply {
         drawColor(ARTWORK_PADDING_COLOR)
         drawBitmap(
