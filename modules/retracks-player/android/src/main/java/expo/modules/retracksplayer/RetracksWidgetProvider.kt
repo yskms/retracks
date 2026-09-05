@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
 import android.net.Uri
 import android.widget.RemoteViews
 import androidx.annotation.OptIn
@@ -33,6 +34,9 @@ class RetracksWidgetProvider : AppWidgetProvider() {
 
     /** ウィジェットへ渡すジャケットの目標サイズ。大きすぎると転送に失敗する。 */
     private const val ARTWORK_TARGET_PX = 256
+
+    /** 正方形でないジャケットを収めたときの余白の色。 */
+    private const val ARTWORK_PADDING_COLOR = 0xFF1C1C22.toInt()
 
     /** 表示中のウィジェットをすべて更新する。 */
     fun updateAll(context: Context) {
@@ -121,20 +125,32 @@ class RetracksWidgetProvider : AppWidgetProvider() {
         val decoded = context.contentResolver.openInputStream(uri)?.use {
           BitmapFactory.decodeStream(it, null, options)
         }
-        decoded?.let(::cropToSquare)
+        decoded?.let(::padToSquare)
       }.getOrNull()
     }
 
     /**
-     * 中央を正方形に切り出す。
-     * ジャケットが正方形でない場合に、枠へ収めたとき余白が出るのを避ける。
+     * 正方形の枠に収まるよう、足りない側に余白を足す。
+     *
+     * 切り出すと絵が欠けるので、ジャケットは全体を見せて余白で調整する。
+     * 枠を正方形に保つのはこの詰め物によるもので、ImageView 側は
+     * adjustViewBounds でビットマップの縦横比に従う。
      */
-    private fun cropToSquare(source: Bitmap): Bitmap {
-      val side = minOf(source.width, source.height)
+    private fun padToSquare(source: Bitmap): Bitmap {
       if (source.width == source.height) return source
-      val x = (source.width - side) / 2
-      val y = (source.height - side) / 2
-      return Bitmap.createBitmap(source, x, y, side, side)
+
+      val side = maxOf(source.width, source.height)
+      val square = Bitmap.createBitmap(side, side, Bitmap.Config.ARGB_8888)
+      Canvas(square).apply {
+        drawColor(ARTWORK_PADDING_COLOR)
+        drawBitmap(
+          source,
+          ((side - source.width) / 2).toFloat(),
+          ((side - source.height) / 2).toFloat(),
+          null
+        )
+      }
+      return square
     }
 
     private fun command(context: Context, action: String): PendingIntent {
