@@ -118,10 +118,23 @@ class RetracksWidgetProvider : AppWidgetProvider() {
         while (bounds.outWidth / sample > ARTWORK_TARGET_PX * 2) sample *= 2
 
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        context.contentResolver.openInputStream(uri)?.use {
+        val decoded = context.contentResolver.openInputStream(uri)?.use {
           BitmapFactory.decodeStream(it, null, options)
         }
+        decoded?.let(::cropToSquare)
       }.getOrNull()
+    }
+
+    /**
+     * 中央を正方形に切り出す。
+     * ジャケットが正方形でない場合に、枠へ収めたとき余白が出るのを避ける。
+     */
+    private fun cropToSquare(source: Bitmap): Bitmap {
+      val side = minOf(source.width, source.height)
+      if (source.width == source.height) return source
+      val x = (source.width - side) / 2
+      val y = (source.height - side) / 2
+      return Bitmap.createBitmap(source, x, y, side, side)
     }
 
     private fun command(context: Context, action: String): PendingIntent {
