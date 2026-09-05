@@ -10,6 +10,8 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.net.Uri
+import android.os.Build
+import android.util.SizeF
 import android.widget.RemoteViews
 import androidx.annotation.OptIn
 import androidx.media3.common.util.UnstableApi
@@ -50,8 +52,30 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       }
     }
 
+    /**
+     * 大きさに応じてレイアウトを出し分ける。
+     * 小さいときは横並び、大きいときはジャケットを上に置いた縦並びにする。
+     */
     private fun buildViews(context: Context): RemoteViews {
-      val views = RemoteViews(context.packageName, R.layout.retracks_widget)
+      val compact = fill(context, RemoteViews(context.packageName, R.layout.retracks_widget))
+
+      // サイズごとの出し分けは Android 12 から
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return compact
+
+      val large = fill(
+        context,
+        RemoteViews(context.packageName, R.layout.retracks_widget_large)
+      )
+      return RemoteViews(
+        mapOf(
+          SizeF(180f, 80f) to compact,
+          SizeF(180f, 200f) to large
+        )
+      )
+    }
+
+    /** 与えられたレイアウトに曲の情報と操作を流し込む。ID は両レイアウト共通。 */
+    private fun fill(context: Context, views: RemoteViews): RemoteViews {
       val player = PlaybackService.instance?.currentPlayerSnapshot()
 
       if (player == null) {
