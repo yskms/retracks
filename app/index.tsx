@@ -55,6 +55,12 @@ type TabId = 'songs' | 'artists' | 'albums';
 const GRID_PADDING = 12;
 const GRID_GAP = 10;
 
+/**
+ * 一覧の行の高さ。getItemLayout を与えると、FlatList が各行を測らずに
+ * 位置を決められるため、描画範囲の管理が正確になり保持する行数が減る。
+ */
+const ROW_HEIGHT = 66;
+
 const TABS: { id: TabId; label: string }[] = [
   { id: 'songs', label: '楽曲' },
   { id: 'artists', label: 'アーティスト' },
@@ -249,9 +255,16 @@ export default function LibraryScreen() {
               data={tracks}
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.listContent}
-              initialNumToRender={14}
-              windowSize={7}
+              initialNumToRender={12}
+              windowSize={4}
+              maxToRenderPerBatch={8}
+              updateCellsBatchingPeriod={50}
               removeClippedSubviews
+              getItemLayout={(_, index) => ({
+                length: ROW_HEIGHT,
+                offset: ROW_HEIGHT * index,
+                index,
+              })}
               refreshControl={refreshControl}
               renderItem={({ item, index }) => (
                 <Row
@@ -298,6 +311,9 @@ export default function LibraryScreen() {
             data={artists}
             keyExtractor={(item) => item.id}
             numColumns={columnsOf(layouts.artists)}
+            windowSize={4}
+            maxToRenderPerBatch={12}
+            removeClippedSubviews
             columnWrapperStyle={
               layouts.artists === 'list' ? undefined : styles.gridRow
             }
@@ -350,6 +366,9 @@ export default function LibraryScreen() {
             data={albums}
             keyExtractor={(item) => item.id}
             numColumns={columnsOf(layouts.albums)}
+            windowSize={4}
+            maxToRenderPerBatch={12}
+            removeClippedSubviews
             columnWrapperStyle={layouts.albums === 'list' ? undefined : styles.gridRow}
             contentContainerStyle={
               layouts.albums === 'list' ? styles.listContent : styles.gridContent
