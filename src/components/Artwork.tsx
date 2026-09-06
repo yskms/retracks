@@ -1,10 +1,16 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image } from 'expo-image';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../theme';
 
 /**
  * アルバムジャケット。音楽ファイルに埋め込まれているものだけを表示し、
  * ネットワークからの取得はしない。無い場合はプレースホルダを出す。
+ *
+ * expo-image を使っているのはメモリのため。React Native の Image では
+ * 一覧をスクロールしただけでネイティブヒープが 160MB まで膨らみ（実測）、
+ * メモリ不足でプロセスごと終了させられていた。
+ * こちらは表示サイズに合わせて縮小し、キャッシュの上限も持つ。
  */
 export function Artwork({
   uri,
@@ -25,7 +31,18 @@ export function Artwork({
     );
   }
 
-  return <Image source={{ uri }} style={[styles.image, box]} resizeMode="cover" />;
+  return (
+    <Image
+      source={{ uri }}
+      style={[styles.image, box]}
+      contentFit="cover"
+      cachePolicy="memory-disk"
+      // 一覧では同じ枠が使い回される。曲が変わったことを伝えて
+      // 前の絵が残らないようにする
+      recyclingKey={uri}
+      transition={0}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
