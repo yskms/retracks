@@ -5,6 +5,8 @@
  * 画面側は表示と操作に専念できるようにする。
  */
 
+import { AppState } from 'react-native';
+import { Image } from 'expo-image';
 import {
   createContext,
   useCallback,
@@ -294,6 +296,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       clearInterval(saver);
     };
   }, [addLog, applyShuffle, applyQueue]);
+
+  // ---- 背景に回ったら画像のキャッシュを捨てる --------------------------
+  useEffect(() => {
+    // 一覧の画像はメモリの大半を占める（実測でビットマップ790枚・79MB）。
+    // 背景では誰も見ていないうえ、使用量が大きいアプリほどシステムに
+    // 終了させられやすい。再生はサービス側で続くので、捨てて困らない。
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'background') Image.clearMemoryCache();
+    });
+    return () => subscription.remove();
+  }, []);
 
   // ---- 区間設定 --------------------------------------------------------
   useEffect(() => {
