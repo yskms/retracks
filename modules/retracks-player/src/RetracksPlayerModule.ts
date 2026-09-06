@@ -20,6 +20,13 @@ declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
    * 公開していないため、こちらで直接読む。
    */
   getAlbumYears(): Promise<Record<string, number>>;
+  /**
+   * プロセスが前回どう終わったかの履歴。新しい順に最大10件。
+   * 再生が勝手に止まる症状の原因調査に使う。
+   */
+  getExitReasons(): Promise<
+    { timestamp: number; reason: string; description: string; importance: number }[]
+  >;
   /** いまの曲を区間を外して最初から通しで再生する。次の曲からは元に戻る。 */
   playCurrentFromStart(): void;
   play(): void;

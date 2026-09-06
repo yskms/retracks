@@ -3,11 +3,13 @@
  * 製品の画面ではないので、設定の奥に置く想定。
  */
 
+import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { usePlayback } from '../src/playback';
+import { RetracksPlayer } from '../modules/retracks-player/src';
 import { colors } from '../src/theme';
 
 export default function DebugScreen() {
@@ -15,6 +17,17 @@ export default function DebugScreen() {
   const insets = useSafeAreaInsets();
   const { tracks, queue, status, progress, log, rescan, clearStorage, playAll } =
     usePlayback();
+
+  // 再生が勝手に止まる症状の調査用。Android が記録している終了理由を読む。
+  const [exits, setExits] = useState<
+    { timestamp: number; reason: string; description: string }[]
+  >([]);
+
+  useEffect(() => {
+    void RetracksPlayer.getExitReasons()
+      .then(setExits)
+      .catch(() => setExits([]));
+  }, []);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -55,6 +68,20 @@ export default function DebugScreen() {
               <Text style={styles.buttonText}>保存を消去</Text>
             </Pressable>
           </View>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>プロセスの終了履歴</Text>
+          {exits.length === 0 ? (
+            <Text style={styles.mono}>記録なし</Text>
+          ) : (
+            exits.map((exit, index) => (
+              <Text key={index} style={styles.logLine}>
+                {new Date(exit.timestamp).toLocaleString('ja-JP')}　{exit.reason}
+                {exit.description ? `　${exit.description}` : ''}
+              </Text>
+            ))
+          )}
         </View>
 
         <View style={styles.card}>

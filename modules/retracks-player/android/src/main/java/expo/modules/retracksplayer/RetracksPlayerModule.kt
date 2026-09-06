@@ -47,6 +47,26 @@ class SegmentInput : Record {
  * getStatus は JS 側から高頻度で呼ばれるので、毎回スレッドを跨がずに済むよう
  * メインスレッドで更新したスナップショットを返す。
  */
+/** 終了理由の数値を読める文字列にする。 */
+private fun describeExitReason(reason: Int): String = when (reason) {
+  android.app.ApplicationExitInfo.REASON_ANR -> "応答なし(ANR)"
+  android.app.ApplicationExitInfo.REASON_CRASH -> "クラッシュ"
+  android.app.ApplicationExitInfo.REASON_CRASH_NATIVE -> "ネイティブのクラッシュ"
+  android.app.ApplicationExitInfo.REASON_DEPENDENCY_DIED -> "依存プロセスの終了"
+  android.app.ApplicationExitInfo.REASON_EXCESSIVE_RESOURCE_USAGE -> "資源の使いすぎ"
+  android.app.ApplicationExitInfo.REASON_EXIT_SELF -> "自分で終了"
+  android.app.ApplicationExitInfo.REASON_FREEZER -> "凍結(freezer)"
+  android.app.ApplicationExitInfo.REASON_LOW_MEMORY -> "メモリ不足"
+  android.app.ApplicationExitInfo.REASON_OTHER -> "その他(システム判断)"
+  android.app.ApplicationExitInfo.REASON_PACKAGE_STATE_CHANGE -> "アプリの状態変更"
+  android.app.ApplicationExitInfo.REASON_PACKAGE_UPDATED -> "アプリの更新"
+  android.app.ApplicationExitInfo.REASON_PERMISSION_CHANGE -> "権限の変更"
+  android.app.ApplicationExitInfo.REASON_SIGNALED -> "シグナルで終了"
+  android.app.ApplicationExitInfo.REASON_USER_REQUESTED -> "ユーザー操作"
+  android.app.ApplicationExitInfo.REASON_USER_STOPPED -> "ユーザーが停止"
+  else -> "不明($reason)"
+}
+
 @OptIn(UnstableApi::class)
 class RetracksPlayerModule : Module() {
 
@@ -267,6 +287,41 @@ class RetracksPlayerModule : Module() {
     /** リピート。0=OFF, 1=1曲, 2=全曲（Player.REPEAT_MODE_* と同じ） */
     Function("setRepeatMode") { mode: Int ->
       onMain { controller?.repeatMode = mode.coerceIn(0, 2) }
+    }
+
+    /**
+     * アプリのプロセスが前回どう終わったかの履歴。
+     *
+     * 再生が勝手に止まる、ウィジェットの表示が消える、といった症状は
+     * プロセスが落ちていることが多い。Android が理由を記録しているので、
+     * 端末を繋がなくても確認できるようにしておく。
+     */
+    AsyncFunction("getExitReasons") { promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.reject(CodedException("React context is not available"))
+        return@AsyncFunction
+      }
+      if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+        promise.resolve(emptyList<Map<String, Any?>>())
+        return@AsyncFunction
+      }
+      try {
+        val manager = context.getSystemService(android.app.ActivityManager::class.java)
+        val records = manager.getHistoricalProcessExitReasons(context.packageName, 0, 10)
+        promise.resolve(
+          records.map { record ->
+            mapOf(
+              "timestamp" to record.timestamp.toDouble(),
+              "reason" to describeExitReason(record.reason),
+              "description" to (record.description ?: ""),
+              "importance" to record.importance
+            )
+          }
+        )
+      } catch (e: Exception) {
+        promise.reject(CodedException("Failed to read exit reasons", e))
+      }
     }
 
     /**

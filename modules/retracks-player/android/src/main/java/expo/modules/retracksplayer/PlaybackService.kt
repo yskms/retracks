@@ -1,7 +1,11 @@
 package expo.modules.retracksplayer
 
+import android.app.Notification
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -30,6 +34,11 @@ class PlaybackService : MediaSessionService() {
   companion object {
     /** ウィジェットから起こされたときに、復元後すぐ再生するかどうか。 */
     const val EXTRA_PLAY_ON_START = "expo.modules.retracksplayer.PLAY_ON_START"
+
+    /** Media3 の既定の通知ID。仮の通知もこれに合わせ、後から差し替わるようにする。 */
+    private const val MEDIA_NOTIFICATION_ID = 1001
+
+    private const val CHANNEL_ID = "retracks_playback"
 
     /** モジュール側から SegmentController を触るための参照。同一プロセス内でのみ使う。 */
     @Volatile
@@ -230,11 +239,49 @@ class PlaybackService : MediaSessionService() {
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-    // ウィジェットから起こされた場合は、復元済みのキューをそのまま再生する
     if (intent?.getBooleanExtra(EXTRA_PLAY_ON_START, false) == true) {
-      mediaSession?.player?.play()
+      // startForegroundService で起こされた場合、数秒以内に startForeground を
+      // 呼ばないとシステムがアプリを落とす。Media3 が通知を出すのを待っていると
+      // 間に合わず、復元する曲が無い場合は必ず落ちていた。
+      // まず仮の通知で前面に入り、Media3 の通知が出たら差し替わる。
+      startForegroundPlaceholder()
+
+      val player = mediaSession?.player
+      if (player != null && player.mediaItemCount > 0) {
+        player.play()
+      } else {
+        // 復元できるものが無いので前面から降りて終わる
+        stopSelf()
+      }
     }
     return super.onStartCommand(intent, flags, startId)
+  }
+
+  /** 期限内に前面へ入るための最小限の通知。 */
+  private fun startForegroundPlaceholder() {
+    val manager = getSystemService(NotificationManager::class.java) ?: return
+
+    if (manager.getNotificationChannel(CHANNEL_ID) == null) {
+      manager.createNotificationChannel(
+        NotificationChannel(
+          CHANNEL_ID,
+          getString(R.string.retracks_widget_label),
+          NotificationManager.IMPORTANCE_LOW
+        )
+      )
+    }
+
+    val notification = Notification.Builder(this, CHANNEL_ID)
+      .setContentTitle(getString(R.string.retracks_widget_label))
+      .setSmallIcon(R.drawable.retracks_ic_play)
+      .setOngoing(true)
+      .build()
+
+    startForeground(
+      MEDIA_NOTIFICATION_ID,
+      notification,
+      ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+    )
   }
 
   override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
