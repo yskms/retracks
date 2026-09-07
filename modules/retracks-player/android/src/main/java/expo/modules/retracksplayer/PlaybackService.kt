@@ -12,6 +12,7 @@ import androidx.media3.common.C
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
@@ -67,6 +68,46 @@ class PlaybackService : MediaSessionService() {
     override fun onIsPlayingChanged(isPlaying: Boolean) {
       RetracksWidgetProvider.updateAll(this@PlaybackService)
       if (!isPlaying) saveState()
+    }
+  }
+
+  /**
+   * 読めない曲に当たった回数。1曲でも鳴らせたら数え直す。
+   * 全部読めない場合に送り続けないための歯止めに使う。
+   */
+  private var consecutiveErrors = 0
+
+  /**
+   * 読めなくなった曲は飛ばして再生を続ける。
+   *
+   * 別のアプリでファイルを消しても、こちらのキューにはその曲が残っている。
+   * ExoPlayer はその項目に来ると読み込みに失敗して停止するが、聴いている側からは
+   * 理由もなく再生が止まったようにしか見えない。黙って次の曲へ送る。
+   *
+   * エラーの後プレイヤーは待機状態に戻るので、送ったうえで prepare をやり直し、
+   * 元の再生状態に復帰させる必要がある。
+   */
+  private val skipUnplayableListener = object : Player.Listener {
+    override fun onPlayerError(error: PlaybackException) {
+      val player = mediaSession?.player ?: return
+
+      // リピートが有効だと次の項目は必ず存在するため、
+      // キューを一周しても鳴らせなければそこで諦める
+      consecutiveErrors++
+      if (consecutiveErrors > player.mediaItemCount || !player.hasNextMediaItem()) {
+        consecutiveErrors = 0
+        player.playWhenReady = false
+        return
+      }
+
+      val wasPlaying = player.playWhenReady
+      player.seekToNextMediaItem()
+      player.prepare()
+      player.playWhenReady = wasPlaying
+    }
+
+    override fun onPlaybackStateChanged(playbackState: Int) {
+      if (playbackState == Player.STATE_READY) consecutiveErrors = 0
     }
   }
 
@@ -214,6 +255,7 @@ class PlaybackService : MediaSessionService() {
 
     segmentController = SegmentController(player).apply { attach() }
     player.addListener(widgetListener)
+    player.addListener(skipUnplayableListener)
 
     // 通知やロック画面をタップしたときにアプリを開くための遷移先。
     // これを渡さないとタップしても何も起きない。
@@ -298,6 +340,7 @@ class PlaybackService : MediaSessionService() {
     saveState()
     instance = null
     mediaSession?.player?.removeListener(widgetListener)
+    mediaSession?.player?.removeListener(skipUnplayableListener)
     segmentController?.detach()
     segmentController = null
     mediaSession?.run {
