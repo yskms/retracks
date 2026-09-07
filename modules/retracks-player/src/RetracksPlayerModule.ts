@@ -11,7 +11,12 @@ declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
   /** サービスに接続する。他の API を呼ぶ前に一度だけ実行する。 */
   prepareAsync(): Promise<boolean>;
   /** キューを差し替える。戻り値は積まれた曲数。 */
-  setQueue(tracks: TrackInput[], startIndex: number): Promise<number>;
+  setQueue(tracks: TrackInput[], startIndex: number, queueKey: string): Promise<number>;
+  /**
+   * ネイティブ側に控えてあるキュー。サービスだけが生きている状態から
+   * 起動したときに、鳴っているキューをそのまま画面へ戻すために使う。
+   */
+  getSavedQueue(): Promise<{ key: string; tracks: TrackInput[] }>;
   /** null で RUSH OFF。 */
   setSegment(segment: SegmentInput | null): void;
   setRepeatMode(mode: number): void;

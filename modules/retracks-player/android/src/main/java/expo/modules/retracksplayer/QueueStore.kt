@@ -21,6 +21,15 @@ object QueueStore {
   private const val TRACKS_FILE = "retracks-queue-tracks.json"
   private const val STATE_FILE = "retracks-queue-state.json"
 
+  /**
+   * どのキュー（全曲／アーティスト／選択）を鳴らしているかの識別子。
+   *
+   * JS 側は1巡の順列をこの識別子ごとに保存している。サービスだけが生きている
+   * 状態から JS が起動したとき、これが無いと「何のキューを鳴らしているか」が
+   * 分からず、別のキューの順列に番号だけを当てはめてしまう。
+   */
+  private const val KEY_FILE = "retracks-queue-key.txt"
+
   data class StoredTrack(
     val id: String,
     val uri: String,
@@ -37,8 +46,9 @@ object QueueStore {
     val segment: Segment?
   )
 
-  fun saveTracks(context: Context, tracks: List<TrackInput>) {
+  fun saveTracks(context: Context, tracks: List<TrackInput>, queueKey: String) {
     runCatching {
+      File(context.filesDir, KEY_FILE).writeText(queueKey)
       val array = JSONArray()
       for (track in tracks) {
         array.put(
@@ -84,6 +94,14 @@ object QueueStore {
       Log.e(TAG, "キューの読み込みに失敗: $it")
       emptyList()
     }
+  }
+
+  /** 保存してあるキューの識別子。無ければ空文字。 */
+  fun loadKey(context: Context): String {
+    return runCatching {
+      val file = File(context.filesDir, KEY_FILE)
+      if (file.exists()) file.readText() else ""
+    }.getOrDefault("")
   }
 
   fun saveState(context: Context, index: Int, positionMs: Long, segment: Segment?) {

@@ -211,16 +211,31 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // 再生中の曲が区間の先頭へ戻ってしまう。
         const current = await waitForConnection();
         if (!cancelled && current && current.queueSize > 0) {
-          const restored = await loadShuffle(queueKeyRef.current);
-          if (restored) {
-            const adopted = { ...restored, cursor: Math.max(0, current.index) };
-            applyShuffle(adopted);
-            lastIndexRef.current = adopted.cursor;
+          // 何を鳴らしているかを知っているのはネイティブ側だけ。JS の保存を
+          // 当てにすると、別のキュー（例：全曲シャッフル）の順列に番号だけを
+          // 当てはめてしまい、画面と音が食い違う。キューはネイティブから貰う。
+          const saved = await RetracksPlayer.getSavedQueue();
+          const nativeQueue = saved.tracks as Track[];
 
-            const byId = new Map(result.tracks.map((t) => [t.id, t]));
-            applyQueue(
-              adopted.order.map((id) => byId.get(id)).filter((t): t is Track => t != null)
-            );
+          if (nativeQueue.length === current.queueSize) {
+            applyQueue(nativeQueue);
+            if (saved.key) queueKeyRef.current = saved.key;
+
+            // 1巡の進捗は、保存してある順列がいま鳴っているキューと
+            // 完全に同じ並びのときだけ引き継ぐ。長さだけを見ると、曲数が
+            // たまたま同じ別の順列を掴んでしまう。
+            // 識別子が無い場合（一覧からの再生、または識別子を保存する前の
+            // 古いデータ）は全曲の順列を当ててみて、一致すれば拾う。
+            const nativeIds = nativeQueue.map((t) => t.id);
+            const restored = await loadShuffle(saved.key || ALL_KEY);
+            const matches =
+              restored != null &&
+              restored.order.length === nativeIds.length &&
+              restored.order.every((id, i) => id === nativeIds[i]);
+
+            applyShuffle(matches ? { ...restored!, cursor: Math.max(0, current.index) } : null);
+            lastIndexRef.current = matches ? Math.max(0, current.index) : -1;
+            if (matches && !saved.key) queueKeyRef.current = ALL_KEY;
           }
           addLog(`再生中のセッションに接続（${current.index + 1}/${current.queueSize}）`);
         }
@@ -263,7 +278,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             .filter((t): t is Track => t != null);
           applyQueue(ordered);
 
-          await RetracksPlayer.setQueue(ordered, 0);
+          await RetracksPlayer.setQueue(ordered, 0, queueKeyRef.current);
           RetracksPlayer.play();
           addLog('1巡完了。順列を作り直して2巡目へ');
         })();
@@ -352,7 +367,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         .filter((t): t is Track => t != null);
       applyQueue(ordered);
 
-      await RetracksPlayer.setQueue(ordered, state.cursor);
+      await RetracksPlayer.setQueue(ordered, state.cursor, key);
       RetracksPlayer.setRepeatMode(RepeatMode.All);
 
       if (resumed) {
@@ -384,7 +399,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       lastIndexRef.current = -1;
       applyQueue(source);
 
-      await RetracksPlayer.setQueue(source, Math.max(0, index));
+      // 順列を持たないので識別子も空にする。これを残すと、次回の起動で
+      // 別のキューの順列を拾ってしまう。
+      queueKeyRef.current = buildQueueKey('all');
+      await RetracksPlayer.setQueue(source, Math.max(0, index), '');
       RetracksPlayer.setRepeatMode(RepeatMode.All);
       RetracksPlayer.play();
       addLog(`一覧から再生 ${index + 1}/${source.length}`);

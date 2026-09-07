@@ -243,7 +243,7 @@ class RetracksPlayerModule : Module() {
     }
 
     /** キューを差し替える。tracks は JS 側で並べ替え済み（シャッフル順列）であること。 */
-    AsyncFunction("setQueue") { list: List<TrackInput>, startIndex: Int, promise: Promise ->
+    AsyncFunction("setQueue") { list: List<TrackInput>, startIndex: Int, queueKey: String, promise: Promise ->
       onMain {
         val c = controller
         if (c == null) {
@@ -252,12 +252,43 @@ class RetracksPlayerModule : Module() {
         }
         tracks = list
         // ウィジェットから復元できるよう、ネイティブ側にも控えておく
-        appContext.reactContext?.let { QueueStore.saveTracks(it, list) }
+        appContext.reactContext?.let { QueueStore.saveTracks(it, list, queueKey) }
         val items = buildItems(list, currentSegment)
         c.setMediaItems(items, startIndex.coerceIn(0, maxOf(0, items.size - 1)), 0L)
         c.prepare()
         promise.resolve(items.size)
       }
+    }
+
+    /**
+     * ネイティブ側に控えてあるキュー。
+     *
+     * サービスだけが生きている状態から JS が起動したときに、いま鳴っている
+     * キューそのものを画面へ復元するために使う。曲の情報も一緒に返すので、
+     * ライブラリの走査結果と突き合わせなくても表示できる。
+     */
+    AsyncFunction("getSavedQueue") { promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.resolve(mapOf("key" to "", "tracks" to emptyList<Any>()))
+        return@AsyncFunction
+      }
+      promise.resolve(
+        mapOf(
+          "key" to QueueStore.loadKey(context),
+          "tracks" to QueueStore.loadTracks(context).map {
+            mapOf(
+              "id" to it.id,
+              "uri" to it.uri,
+              "title" to it.title,
+              "artist" to it.artist,
+              "album" to it.album,
+              "durationMs" to it.durationMs.toDouble(),
+              "artworkUri" to it.artworkUri
+            )
+          }
+        )
+      )
     }
 
     /** RUSH の区間設定。null を渡すと RUSH OFF（フル再生）。 */
