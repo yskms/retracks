@@ -4,6 +4,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, StyleSheet } from 'react-native';
 
+import '../src/i18n';
 import { PlaybackProvider } from '../src/playback';
 import { MiniPlayer } from '../src/components/MiniPlayer';
 import { colors } from '../src/theme';

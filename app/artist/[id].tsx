@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 import { usePlayback } from '../../src/playback';
 import { getArtistDetail, type Album, type Track } from '../../src/library';
@@ -32,6 +33,7 @@ import { useSelection } from '../../src/useSelection';
 type Kind = 'songs';
 
 export default function ArtistScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -109,16 +111,18 @@ export default function ArtistScreen() {
           <Pressable hitSlop={12} onPress={clear}>
             <Text style={styles.headerIcon}>✕</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>{selection?.ids.length ?? 0}曲選択</Text>
+          <Text style={styles.headerTitle}>
+            {t('artist.selectedCount', { count: selection?.ids.length ?? 0 })}
+          </Text>
           <View style={styles.actions}>
             <Pressable style={styles.action} onPress={() => void playSelection(false)}>
-              <Text style={styles.actionText}>▶ 順番に</Text>
+              <Text style={styles.actionText}>{`▶ ${t('common.playInOrder')}`}</Text>
             </Pressable>
             <Pressable
               style={[styles.action, styles.actionPrimary]}
               onPress={() => void playSelection(true)}
             >
-              <Text style={styles.actionPrimaryText}>⤮ シャッフル</Text>
+              <Text style={styles.actionPrimaryText}>{`⤮ ${t('common.shufflePlay')}`}</Text>
             </Pressable>
           </View>
         </View>
@@ -128,7 +132,7 @@ export default function ArtistScreen() {
             <Text style={styles.headerIcon}>←</Text>
           </Pressable>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {name ?? 'アーティスト'}
+            {name ?? t('artist.fallbackTitle')}
           </Text>
           <Pressable hitSlop={10} onPress={() => cycle('artistAlbums')}>
             <Text style={styles.headerIcon}>{LAYOUT_ICON[albumLayout]}</Text>
@@ -152,7 +156,8 @@ export default function ArtistScreen() {
             <View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summary}>
-                  {albums.length}アルバム · {tracks.length}曲
+                  {t('common.albumCount', { count: albums.length })} ·{' '}
+                  {t('common.songCount', { count: tracks.length })}
                 </Text>
                 {/* 選択中はヘッダー側に再生操作が出るので、こちらは隠す */}
                 {!inSelection && (
@@ -164,7 +169,7 @@ export default function ArtistScreen() {
                         router.push('/player');
                       }}
                     >
-                      <Text style={styles.actionText}>▶ 順番に</Text>
+                      <Text style={styles.actionText}>{`▶ ${t('common.playInOrder')}`}</Text>
                     </Pressable>
                     <Pressable
                       style={[styles.action, styles.actionPrimary]}
@@ -173,7 +178,7 @@ export default function ArtistScreen() {
                         router.push('/player');
                       }}
                     >
-                      <Text style={styles.actionPrimaryText}>⤮ シャッフル</Text>
+                      <Text style={styles.actionPrimaryText}>{`⤮ ${t('common.shufflePlay')}`}</Text>
                     </Pressable>
                   </View>
                 )}
@@ -181,12 +186,12 @@ export default function ArtistScreen() {
 
               {albums.length > 0 && (
                 <>
-                  <Text style={styles.sectionTitle}>アルバム</Text>
+                  <Text style={styles.sectionTitle}>{t('artist.albumsSectionTitle')}</Text>
                   <View style={albumLayout === 'list' ? undefined : styles.albumGrid}>
                     {albums.map((album) => {
                       const subtitle = album.year
                         ? `${album.year}`
-                        : `${album.trackCount}曲`;
+                        : t('common.songCount', { count: album.trackCount });
                       const open = () => {
                         // 選択中はアルバムの収録曲をまとめて選ぶ／外す
                         if (inSelection) {
@@ -232,7 +237,7 @@ export default function ArtistScreen() {
                 </>
               )}
 
-              <Text style={styles.sectionTitle}>楽曲</Text>
+              <Text style={styles.sectionTitle}>{t('artist.songsSectionTitle')}</Text>
             </View>
           }
           renderItem={({ item, index }) => (

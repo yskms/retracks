@@ -20,6 +20,8 @@ import {
 import PagerView from 'react-native-pager-view';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 
 import { usePlayback } from '../src/playback';
 import {
@@ -61,16 +63,19 @@ const GRID_GAP = 10;
  */
 const ROW_HEIGHT = 66;
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'songs', label: '楽曲' },
-  { id: 'artists', label: 'アーティスト' },
-  { id: 'albums', label: 'アルバム' },
-];
-
 export default function LibraryScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const tabs: { id: TabId; label: string }[] = useMemo(
+    () => [
+      { id: 'songs', label: t('library.tabSongs') },
+      { id: 'artists', label: t('library.tabArtists') },
+      { id: 'albums', label: t('library.tabAlbums') },
+    ],
+    [t]
+  );
   const { tracks, playFrom, playTracks, playAll, currentTrack, allProgress, rescan } =
     usePlayback();
   const { selection, active: inSelection, toggle, clear, isSelected } =
@@ -120,7 +125,7 @@ export default function LibraryScreen() {
   // position と offset をネイティブ駆動で受け取り、その和で位置を決める。
   const position = useRef(new Animated.Value(0)).current;
   const offset = useRef(new Animated.Value(0)).current;
-  const tabWidth = width / TABS.length;
+  const tabWidth = width / tabs.length;
 
   useEffect(() => {
     void (async () => {
@@ -168,16 +173,18 @@ export default function LibraryScreen() {
           <Pressable hitSlop={10} onPress={clear}>
             <Text style={styles.headerIcon}>✕</Text>
           </Pressable>
-          <Text style={styles.headerTitle}>{selection?.ids.length ?? 0}件選択</Text>
+          <Text style={styles.headerTitle}>
+            {t('library.selectedCount', { count: selection?.ids.length ?? 0 })}
+          </Text>
           <View style={styles.headerActions}>
             <Pressable style={styles.headerAction} onPress={() => void playSelection(false)}>
-              <Text style={styles.headerActionText}>▶ 順番に</Text>
+              <Text style={styles.headerActionText}>{`▶ ${t('common.playInOrder')}`}</Text>
             </Pressable>
             <Pressable
               style={[styles.headerAction, styles.headerActionPrimary]}
               onPress={() => void playSelection(true)}
             >
-              <Text style={styles.headerActionPrimaryText}>⤮ シャッフル</Text>
+              <Text style={styles.headerActionPrimaryText}>{`⤮ ${t('common.shufflePlay')}`}</Text>
             </Pressable>
           </View>
         </View>
@@ -201,7 +208,7 @@ export default function LibraryScreen() {
 
       <View>
         <View style={styles.tabBar}>
-          {TABS.map((tab, index) => (
+          {tabs.map((tab, index) => (
             <Pressable
               key={tab.id}
               style={styles.tab}
@@ -296,8 +303,11 @@ export default function LibraryScreen() {
               <Text style={styles.fabGlyph}>⤮</Text>
               <Text style={styles.fabLabel}>
                 {allProgress && allProgress.played > 1
-                  ? `続きから ${allProgress.played}/${allProgress.total}`
-                  : '全曲シャッフル'}
+                  ? t('library.continueFrom', {
+                      played: allProgress.played,
+                      total: allProgress.total,
+                    })
+                  : t('library.shuffleAll')}
               </Text>
             </Pressable>
           )}
@@ -325,7 +335,7 @@ export default function LibraryScreen() {
               layouts.artists !== 'list' ? (
                 <Tile
                   title={item.name}
-                  subtitle={subtitleForArtist(albumCounts.get(item.name), item.trackCount)}
+                  subtitle={subtitleForArtist(t, albumCounts.get(item.name), item.trackCount)}
                   artworkUri={artistArtwork.get(item.name) ?? null}
                   size={tileSizeFor(layouts.artists)}
                   selected={isSelected('artists', item.id)}
@@ -341,7 +351,7 @@ export default function LibraryScreen() {
               ) : (
                 <Row
                   title={item.name}
-                  subtitle={subtitleForArtist(albumCounts.get(item.name), item.trackCount)}
+                  subtitle={subtitleForArtist(t, albumCounts.get(item.name), item.trackCount)}
                   artworkUri={artistArtwork.get(item.name) ?? null}
                   chevron
                   selected={isSelected('artists', item.id)}
@@ -377,7 +387,7 @@ export default function LibraryScreen() {
             renderItem={({ item }) => {
               const subtitle = item.year
                 ? `${item.artist} · ${item.year}`
-                : `${item.artist} · ${item.trackCount}曲`;
+                : `${item.artist} · ${t('common.songCount', { count: item.trackCount })}`;
               const open = () => {
                 if (inSelection) return toggle('albums', item.id);
                 router.push({
@@ -415,17 +425,22 @@ export default function LibraryScreen() {
   );
 }
 
-/** 「3アルバム · 22曲」のように出す。アルバム数が数えられない場合は曲数だけ。 */
-function subtitleForArtist(albumCount: number | undefined, trackCount: number): string {
-  const songs = `${trackCount}曲`;
-  return albumCount ? `${albumCount}アルバム · ${songs}` : songs;
+/** 「アルバム数 · 曲数」のように出す。アルバム数が数えられない場合は曲数だけ。 */
+function subtitleForArtist(
+  t: TFunction,
+  albumCount: number | undefined,
+  trackCount: number
+): string {
+  const songs = t('common.songCount', { count: trackCount });
+  return albumCount ? `${t('common.albumCount', { count: albumCount })} · ${songs}` : songs;
 }
 
 function Loading() {
+  const { t } = useTranslation();
   return (
     <View style={styles.loading}>
       <ActivityIndicator color={colors.accent} />
-      <Text style={styles.loadingText}>ライブラリを読み込んでいます</Text>
+      <Text style={styles.loadingText}>{t('library.loading')}</Text>
     </View>
   );
 }

@@ -7,12 +7,16 @@ import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Localization from 'expo-localization';
+import i18next from 'i18next';
+import { useTranslation } from 'react-i18next';
 
 import { usePlayback } from '../src/playback';
 import { RetracksPlayer } from '../modules/retracks-player/src';
 import { colors } from '../src/theme';
 
 export default function DebugScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { tracks, queue, status, progress, log, rescan, clearStorage, playAll } =
@@ -35,49 +39,62 @@ export default function DebugScreen() {
         <Pressable hitSlop={12} onPress={() => router.back()}>
           <Text style={styles.headerIcon}>←</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>開発用</Text>
+        <Text style={styles.headerTitle}>{t('debug.title')}</Text>
         <View style={{ width: 20 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>状態</Text>
+          <Text style={styles.cardTitle}>i18n（一時デバッグ表示）</Text>
           <Text style={styles.mono}>
-            ライブラリ {tracks.length}曲 / キュー {queue.length}曲
+            i18next.language: {i18next.language}
             {'\n'}
-            {progress ? `1巡の進捗 ${progress.played} / ${progress.total}` : '1巡なし'}
-            {'\n'}
-            {status
-              ? `index ${status.index} / ${status.queueSize}　${
-                  status.isPlaying ? '再生中' : '停止中'
-                }`
-              : '未接続'}
+            getLocales(): {JSON.stringify(Localization.getLocales())}
           </Text>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>操作</Text>
+          <Text style={styles.cardTitle}>{t('debug.stateCardTitle')}</Text>
+          <Text style={styles.mono}>
+            {t('debug.libraryQueue', { tracks: tracks.length, queue: queue.length })}
+            {'\n'}
+            {progress
+              ? t('debug.roundProgress', { played: progress.played, total: progress.total })
+              : t('debug.noRound')}
+            {'\n'}
+            {status
+              ? t('debug.indexStatus', {
+                  index: status.index,
+                  queueSize: status.queueSize,
+                  state: status.isPlaying ? t('debug.playing') : t('debug.paused'),
+                })
+              : t('debug.notConnected')}
+          </Text>
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('debug.actionsCardTitle')}</Text>
           <View style={styles.row}>
             <Pressable style={styles.button} onPress={() => void playAll()}>
-              <Text style={styles.buttonText}>全曲を再生</Text>
+              <Text style={styles.buttonText}>{t('debug.playAll')}</Text>
             </Pressable>
             <Pressable style={styles.button} onPress={() => void rescan()}>
-              <Text style={styles.buttonText}>再走査</Text>
+              <Text style={styles.buttonText}>{t('debug.rescan')}</Text>
             </Pressable>
             <Pressable style={styles.button} onPress={() => void clearStorage()}>
-              <Text style={styles.buttonText}>保存を消去</Text>
+              <Text style={styles.buttonText}>{t('debug.clearStorage')}</Text>
             </Pressable>
           </View>
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>プロセスの終了履歴</Text>
+          <Text style={styles.cardTitle}>{t('debug.exitHistoryCardTitle')}</Text>
           {exits.length === 0 ? (
-            <Text style={styles.mono}>記録なし</Text>
+            <Text style={styles.mono}>{t('debug.noRecords')}</Text>
           ) : (
             exits.map((exit, index) => (
               <Text key={index} style={styles.logLine}>
-                {new Date(exit.timestamp).toLocaleString('ja-JP')}　{exit.reason}
+                {new Date(exit.timestamp).toLocaleString()}　{exit.reason}
                 {exit.description ? `　${exit.description}` : ''}
               </Text>
             ))
@@ -85,9 +102,9 @@ export default function DebugScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>ログ</Text>
+          <Text style={styles.cardTitle}>{t('debug.logCardTitle')}</Text>
           {log.length === 0 ? (
-            <Text style={styles.mono}>まだありません</Text>
+            <Text style={styles.mono}>{t('debug.noLogsYet')}</Text>
           ) : (
             log.map((line, index) => (
               <Text key={index} style={styles.logLine}>
