@@ -163,22 +163,37 @@ class RetracksPlayerModule : Module() {
     return tracks
   }
 
-  private fun applySegmentFromNextItem() {
+  /**
+   * 区間の設定をキュー全体へ反映する。いま鳴っている曲だけは触らない
+   * （組み直すと頭から鳴り直すため。要件どおり「次の曲から」）。
+   *
+   * 後ろ側を先に処理する。前側を先に消すと現在位置がずれて、後ろ側の添字が
+   * 合わなくなる。
+   *
+   * replaceMediaItems は使えない。曲が同じなら Media3 はメディアソースを
+   * 作り直さず MediaItem の参照だけ差し替える。区間なしのソースは差分判定で
+   * 区間設定を見ないため、区間を「付ける」変更が黙って捨てられる
+   * （docs/requirements.md 7.4.1）。入れ替えてソースごと作り直させる。
+   */
+  private fun applySegmentToQueue() {
     val c = controller ?: return
     val list = tracksForSegment()
     if (list.isEmpty()) return
 
     val count = minOf(list.size, c.mediaItemCount)
-    val from = c.currentMediaItemIndex + 1
-    if (from >= count) return
+    val current = c.currentMediaItemIndex
+    if (current < 0 || current >= count) return
 
-    // replaceMediaItems は使えない。曲が同じなら Media3 はメディアソースを
-    // 作り直さず MediaItem の参照だけ差し替える。区間なしのソースは差分判定で
-    // 区間設定を見ないため、区間を「付ける」変更が黙って捨てられる
-    // （外す方は効くので、RUSH の ON だけ効かないという形で出ていた）。
-    // 入れ替えてソースごと作り直させる。
-    c.removeMediaItems(from, count)
-    c.addMediaItems(from, buildItems(list.subList(from, count), currentSegment))
+    if (current + 1 < count) {
+      c.removeMediaItems(current + 1, count)
+      c.addMediaItems(current + 1, buildItems(list.subList(current + 1, count), currentSegment))
+    }
+    if (current > 0) {
+      c.removeMediaItems(0, current)
+      c.addMediaItems(0, buildItems(list.subList(0, current), currentSegment))
+    }
+
+    PlaybackService.instance?.dropFullPlaybackUnlessCurrent()
   }
 
   /** メインスレッドで実行する。既にメインスレッドならそのまま走らせる。 */
@@ -355,7 +370,7 @@ class RetracksPlayerModule : Module() {
         currentSegment = next
         // フェードの長さは今の曲にも即座に効かせてよい（区間の境界は変わらない）
         PlaybackService.instance?.segmentController?.segment = next
-        applySegmentFromNextItem()
+        applySegmentToQueue()
         PlaybackService.instance?.saveState()
         // 「この曲を最初から」の見た目が RUSH の入切で変わるため
         appContext.reactContext?.let { RetracksWidgetProvider.updateAll(it) }
