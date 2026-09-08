@@ -43,7 +43,9 @@ object QueueStore {
   data class StoredState(
     val index: Int,
     val positionMs: Long,
-    val segment: Segment?
+    val segment: Segment?,
+    /** Player.REPEAT_MODE_* と同じ値。既定は全曲リピート。 */
+    val repeatMode: Int
   )
 
   fun saveTracks(context: Context, tracks: List<TrackInput>, queueKey: String) {
@@ -104,11 +106,18 @@ object QueueStore {
     }.getOrDefault("")
   }
 
-  fun saveState(context: Context, index: Int, positionMs: Long, segment: Segment?) {
+  fun saveState(
+    context: Context,
+    index: Int,
+    positionMs: Long,
+    segment: Segment?,
+    repeatMode: Int
+  ) {
     runCatching {
       val json = JSONObject().apply {
         put("index", index)
         put("positionMs", positionMs)
+        put("repeatMode", repeatMode)
         if (segment != null) {
           put(
             "segment",
@@ -135,6 +144,7 @@ object QueueStore {
       StoredState(
         index = json.optInt("index", 0),
         positionMs = json.optLong("positionMs", 0L),
+        repeatMode = json.optInt("repeatMode", 2),
         segment = segmentJson?.let {
           Segment(
             startMs = it.optLong("startMs"),

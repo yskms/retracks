@@ -10,6 +10,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { usePlayback } from '../src/playback';
+import { RepeatMode } from '../modules/retracks-player/src';
 import type { Track } from '../src/library';
 import { resolveSegment, type SegmentSetting } from '../src/rush';
 import { colors, formatDuration } from '../src/theme';
@@ -31,6 +32,13 @@ const SEGMENT_ROWS: {
 /** キューの行の高さ。scrollToIndex を正確に効かせるため固定する。 */
 const QUEUE_ROW_HEIGHT = 54;
 
+/** 読み上げ用のリピートの状態名。 */
+const REPEAT_LABEL: Record<number, string> = {
+  [RepeatMode.Off]: 'オフ',
+  [RepeatMode.All]: '全曲',
+  [RepeatMode.One]: '1曲',
+};
+
 export default function PlayerScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -49,6 +57,8 @@ export default function PlayerScreen() {
     seekTo,
     skipTo,
     playCurrentFromStart,
+    repeatMode,
+    cycleRepeat,
   } = usePlayback();
 
   const listRef = useRef<FlatList<Track>>(null);
@@ -197,6 +207,23 @@ export default function PlayerScreen() {
             </View>
 
             <View style={styles.controls}>
+              <Pressable
+                style={styles.control}
+                onPress={cycleRepeat}
+                hitSlop={10}
+                accessibilityLabel={`リピート ${REPEAT_LABEL[repeatMode] ?? ''}`}
+              >
+                <Text
+                  style={[
+                    styles.controlGlyph,
+                    repeatMode === RepeatMode.Off
+                      ? styles.controlGlyphOff
+                      : styles.controlGlyphOn,
+                  ]}
+                >
+                  {repeatMode === RepeatMode.One ? '↻¹' : '↻'}
+                </Text>
+              </Pressable>
               <Pressable style={styles.control} onPress={previous} hitSlop={10}>
                 <Text style={styles.controlGlyph}>❙◀</Text>
               </Pressable>
@@ -447,10 +474,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 32,
+    gap: 20,
   },
   control: { padding: 12 },
   controlGlyph: { color: colors.text, fontSize: 22 },
+  controlGlyphOff: { color: colors.textDim, opacity: 0.5 },
+  controlGlyphOn: { color: colors.accent },
   controlMain: {
     width: 72,
     height: 72,
@@ -495,14 +524,14 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   queueHeaderTitle: { color: colors.accent, fontSize: 12, fontWeight: '700' },
-  queueHeaderActions: { flexDirection: 'row', gap: 6 },
+  queueHeaderActions: { flexDirection: 'row', gap: 10 },
   queueHeaderButton: {
     backgroundColor: colors.surfaceHigh,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 16,
   },
-  queueHeaderAction: { color: colors.text, fontSize: 11 },
+  queueHeaderAction: { color: colors.text, fontSize: 13, fontWeight: '600' },
   steppers: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   stepper: {
     width: 26,

@@ -69,6 +69,11 @@ class PlaybackService : MediaSessionService() {
       RetracksWidgetProvider.updateAll(this@PlaybackService)
       if (!isPlaying) saveState()
     }
+
+    override fun onRepeatModeChanged(repeatMode: Int) {
+      RetracksWidgetProvider.updateAll(this@PlaybackService)
+      saveState()
+    }
   }
 
   /**
@@ -118,7 +123,8 @@ class PlaybackService : MediaSessionService() {
       this,
       player.currentMediaItemIndex,
       player.currentPosition,
-      segmentController?.segment
+      segmentController?.segment,
+      player.repeatMode
     )
   }
 
@@ -167,7 +173,6 @@ class PlaybackService : MediaSessionService() {
 
     val index = (state?.index ?: 0).coerceIn(0, items.size - 1)
     player.setMediaItems(items, index, state?.positionMs ?: 0L)
-    player.repeatMode = Player.REPEAT_MODE_ALL
     player.prepare()
   }
 
@@ -255,6 +260,10 @@ class PlaybackService : MediaSessionService() {
 
     segmentController = SegmentController(player).apply { attach() }
     player.addListener(widgetListener)
+
+    // リピートは前回の設定を引き継ぐ。保存が無ければ全曲リピート。
+    // キューが復元できなくても効くよう、ここで先に決めておく。
+    player.repeatMode = QueueStore.loadState(this)?.repeatMode ?: Player.REPEAT_MODE_ALL
     player.addListener(skipUnplayableListener)
 
     // 通知やロック画面をタップしたときにアプリを開くための遷移先。

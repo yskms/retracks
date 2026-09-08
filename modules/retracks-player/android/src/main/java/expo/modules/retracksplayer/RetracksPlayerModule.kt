@@ -93,6 +93,7 @@ class RetracksPlayerModule : Module() {
     "positionMs" to 0.0,
     "durationMs" to 0.0,
     "queueSize" to 0,
+    "repeatMode" to 2,
     "fullPlayback" to false
   )
 
@@ -166,6 +167,7 @@ class RetracksPlayerModule : Module() {
           "positionMs" to c.currentPosition.toDouble(),
           "durationMs" to (c.duration.takeIf { it > 0 }?.toDouble() ?: 0.0),
           "queueSize" to c.mediaItemCount,
+          "repeatMode" to c.repeatMode,
           "fullPlayback" to (PlaybackService.instance?.isFullPlayback() ?: false)
         )
       }
@@ -320,7 +322,11 @@ class RetracksPlayerModule : Module() {
 
     /** リピート。0=OFF, 1=1曲, 2=全曲（Player.REPEAT_MODE_* と同じ） */
     Function("setRepeatMode") { mode: Int ->
-      onMain { controller?.repeatMode = mode.coerceIn(0, 2) }
+      onMain {
+        controller?.repeatMode = mode.coerceIn(0, 2)
+        // ウィジェットから起こしたときに同じ設定で始まるよう控える
+        PlaybackService.instance?.saveState()
+      }
     }
 
     /**

@@ -66,6 +66,11 @@ type PlaybackValue = {
    */
   playFrom: (source: Track[], index: number) => Promise<void>;
 
+  /** いまのリピート設定（RepeatMode）。ネイティブ側のプレイヤーが持つ値。 */
+  repeatMode: number;
+  /** リピートを OFF → 全曲 → 1曲 → OFF の順に切り替える。 */
+  cycleRepeat: () => void;
+
   play: () => void;
   pause: () => void;
   toggle: () => void;
@@ -368,7 +373,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       applyQueue(ordered);
 
       await RetracksPlayer.setQueue(ordered, state.cursor, key);
-      RetracksPlayer.setRepeatMode(RepeatMode.All);
 
       if (resumed) {
         const savedPosition = await readJson<number>(StorageKeys.playbackPosition(key));
@@ -403,12 +407,29 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       // 別のキューの順列を拾ってしまう。
       queueKeyRef.current = buildQueueKey('all');
       await RetracksPlayer.setQueue(source, Math.max(0, index), '');
-      RetracksPlayer.setRepeatMode(RepeatMode.All);
       RetracksPlayer.play();
       addLog(`一覧から再生 ${index + 1}/${source.length}`);
     },
     [ready, addLog, applyShuffle, applyQueue]
   );
+
+  /**
+   * リピートの切り替え。OFF → 全曲 → 1曲 → OFF の順に巡る。
+   *
+   * 設定そのものはネイティブ側のプレイヤーが持っていて、次回の起動でも
+   * 復元される。ここでは巡回の順番だけを決める。
+   */
+  const cycleRepeat = () => {
+    const current = RetracksPlayer.getStatus().repeatMode ?? RepeatMode.All;
+    const next =
+      current === RepeatMode.Off
+        ? RepeatMode.All
+        : current === RepeatMode.All
+          ? RepeatMode.One
+          : RepeatMode.Off;
+    RetracksPlayer.setRepeatMode(next);
+    setStatus(RetracksPlayer.getStatus());
+  };
 
   const rescan = useCallback(async () => {
     const result = await refreshLibrary(tracksRef.current);
@@ -460,6 +481,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     skipTo: (index: number) => RetracksPlayer.skipTo(index),
     seekTo: (positionMs: number) => void RetracksPlayer.seekTo(positionMs),
     playCurrentFromStart: () => RetracksPlayer.playCurrentFromStart(),
+    repeatMode: status?.repeatMode ?? RepeatMode.All,
+    cycleRepeat,
     rescan,
     clearStorage,
   };

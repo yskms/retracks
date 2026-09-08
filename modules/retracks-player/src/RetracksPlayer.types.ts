@@ -28,6 +28,8 @@ export type PlayerStatus = {
   positionMs: number;
   durationMs: number;
   queueSize: number;
+  /** Player.REPEAT_MODE_* と同じ値。RepeatMode を参照。 */
+  repeatMode: number;
   /** いまの曲が「通しで再生」に切り替わっているか。 */
   fullPlayback: boolean;
 };

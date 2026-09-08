@@ -14,6 +14,7 @@ import android.os.Build
 import android.util.SizeF
 import android.widget.RemoteViews
 import androidx.annotation.OptIn
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 
 /**
@@ -33,6 +34,7 @@ class RetracksWidgetProvider : AppWidgetProvider() {
     private const val ACTION_TOGGLE = "expo.modules.retracksplayer.WIDGET_TOGGLE"
     private const val ACTION_NEXT = "expo.modules.retracksplayer.WIDGET_NEXT"
     private const val ACTION_REPLAY = "expo.modules.retracksplayer.WIDGET_REPLAY"
+    private const val ACTION_REPEAT = "expo.modules.retracksplayer.WIDGET_REPEAT"
 
     /**
      * ウィジェットへ渡すジャケットの目標サイズ。
@@ -99,6 +101,20 @@ class RetracksWidgetProvider : AppWidgetProvider() {
     ): RemoteViews {
       val player = PlaybackService.instance?.currentPlayerSnapshot()
 
+      val repeatMode = PlaybackService.instance?.playerOrNull()?.repeatMode
+        ?: Player.REPEAT_MODE_ALL
+      views.setImageViewResource(
+        R.id.retracks_widget_repeat,
+        if (repeatMode == Player.REPEAT_MODE_ONE) R.drawable.retracks_ic_repeat_one
+        else R.drawable.retracks_ic_repeat
+      )
+      // リピートOFF は薄く出して、他の2状態と区別する
+      views.setInt(
+        R.id.retracks_widget_repeat,
+        "setImageAlpha",
+        if (repeatMode == Player.REPEAT_MODE_OFF) 70 else 255
+      )
+
       if (player == null) {
         views.setTextViewText(
           R.id.retracks_widget_title,
@@ -138,6 +154,10 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       views.setOnClickPendingIntent(
         R.id.retracks_widget_replay,
         command(context, ACTION_REPLAY)
+      )
+      views.setOnClickPendingIntent(
+        R.id.retracks_widget_repeat,
+        command(context, ACTION_REPEAT)
       )
 
       // ジャケットや曲名をタップしたらアプリを開く
@@ -201,6 +221,13 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       return square
     }
 
+    /** OFF → 全曲 → 1曲 → OFF の順に巡る（一般的なプレイヤーと同じ）。 */
+    private fun nextRepeatMode(current: Int): Int = when (current) {
+      Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
+      Player.REPEAT_MODE_ALL -> Player.REPEAT_MODE_ONE
+      else -> Player.REPEAT_MODE_OFF
+    }
+
     private fun command(context: Context, action: String): PendingIntent {
       val intent = Intent(context, RetracksWidgetProvider::class.java).setAction(action)
       return PendingIntent.getBroadcast(
@@ -255,6 +282,7 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       ACTION_TOGGLE -> if (player.isPlaying) player.pause() else player.play()
       ACTION_NEXT -> player.seekToNextMediaItem()
       ACTION_REPLAY -> PlaybackService.instance?.playCurrentFromStart()
+      ACTION_REPEAT -> player.repeatMode = nextRepeatMode(player.repeatMode)
       else -> return
     }
 
