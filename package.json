@@ -35,5 +35,9 @@
     "ios": "expo run:ios",
     "web": "expo start --web"
   },
-  "private": true
+  "private": true,
+  "overrides": {
+    "react-dom": "19.2.3",
+    "babel-plugin-syntax-hermes-parser": "0.36.0"
+  }
 }
