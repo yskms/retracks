@@ -11,7 +11,6 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.net.Uri
 import android.os.Build
-import android.util.Log
 import android.util.SizeF
 import android.widget.RemoteViews
 import androidx.annotation.OptIn
@@ -54,8 +53,7 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       )
       if (ids.isEmpty()) return
       for (id in ids) {
-        runCatching { manager.updateAppWidget(id, buildViews(context)) }
-          .onFailure { Log.e("RetracksWidget", "DIAG updateAppWidget 失敗: $it") }
+        manager.updateAppWidget(id, buildViews(context))
       }
     }
 
@@ -66,12 +64,10 @@ class RetracksWidgetProvider : AppWidgetProvider() {
     private fun buildViews(context: Context): RemoteViews {
       // ジャケットの読み込みは一度だけ。レイアウトごとに読み直すと
       // 同じ絵を二度デコードすることになり、転送量も無駄に増える。
-      val snap = PlaybackService.instance?.currentPlayerSnapshot()
-      Log.d(
-        "RetracksWidget",
-        "DIAG buildViews title=${snap?.title} artworkUri=${snap?.artworkUri}"
+      val artwork = loadArtwork(
+        context,
+        PlaybackService.instance?.currentPlayerSnapshot()?.artworkUri
       )
-      val artwork = loadArtwork(context, snap?.artworkUri)
 
       val compact = fill(
         context,
@@ -129,7 +125,6 @@ class RetracksWidgetProvider : AppWidgetProvider() {
         if (artwork != null) {
           views.setImageViewBitmap(R.id.retracks_widget_artwork, artwork)
         } else {
-          Log.e("RetracksWidget", "DIAG ジャケット無しでプレースホルダ表示 title=${player.title}")
           views.setImageViewResource(
             R.id.retracks_widget_artwork,
             R.drawable.retracks_artwork_placeholder
@@ -163,13 +158,9 @@ class RetracksWidgetProvider : AppWidgetProvider() {
         val uri = Uri.parse(uriString)
 
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        val boundsStream = context.contentResolver.openInputStream(uri)
-        if (boundsStream == null) {
-          Log.e("RetracksWidget", "DIAG 寸法の取得で openInputStream が null: $uriString")
-        } else {
-          boundsStream.use { BitmapFactory.decodeStream(it, null, bounds) }
+        context.contentResolver.openInputStream(uri)?.use {
+          BitmapFactory.decodeStream(it, null, bounds)
         }
-        Log.d("RetracksWidget", "DIAG bounds=${bounds.outWidth}x${bounds.outHeight} uri=$uriString")
 
         var sample = 1
         while (bounds.outWidth / sample > ARTWORK_TARGET_PX * 2) sample *= 2
@@ -179,26 +170,11 @@ class RetracksWidgetProvider : AppWidgetProvider() {
           // 透過は不要なので、容量が半分になる形式で読む
           inPreferredConfig = Bitmap.Config.RGB_565
         }
-        val stream = context.contentResolver.openInputStream(uri)
-        if (stream == null) {
-          Log.e("RetracksWidget", "DIAG 本体の取得で openInputStream が null")
-        }
-        val decoded = stream?.use {
+        val decoded = context.contentResolver.openInputStream(uri)?.use {
           BitmapFactory.decodeStream(it, null, options)
         }
-        if (decoded == null) {
-          Log.e("RetracksWidget", "DIAG decodeStream が null sample=$sample")
-        } else {
-          Log.d(
-            "RetracksWidget",
-            "DIAG decoded=${decoded.width}x${decoded.height} " +
-              "${decoded.byteCount / 1024}KB sample=$sample"
-          )
-        }
-        decoded?.let(::padToSquare)?.also {
-          Log.d("RetracksWidget", "DIAG final=${it.width}x${it.height} ${it.byteCount / 1024}KB")
-        }
-      }.onFailure { Log.e("RetracksWidget", "DIAG loadArtwork 例外: $it") }.getOrNull()
+        decoded?.let(::padToSquare)
+      }.getOrNull()
     }
 
     /**
