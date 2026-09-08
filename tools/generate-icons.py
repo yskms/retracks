@@ -69,16 +69,16 @@ def to_points(poly, r, steps=10):
     return pts
 
 
-def write_vector(path, shapes):
+def write_vector(path, shapes, tint="#FFFFFF"):
     body = "\n".join(
-        f'  <path android:fillColor="#FFFFFF"\n      android:pathData="{to_path(poly, r)}"/>'
+        f'  <path android:fillColor="{tint}"\n      android:pathData="{to_path(poly, r)}"/>'
         for poly, r in shapes
     )
     io.open(path, "w", encoding="utf-8").write(
         '<vector xmlns:android="http://schemas.android.com/apk/res/android"\n'
         '    android:width="24dp" android:height="24dp"\n'
         '    android:viewportWidth="24" android:viewportHeight="24"\n'
-        '    android:tint="#FFFFFF">\n' + body + "\n</vector>\n"
+        f'    android:tint="{tint}">\n' + body + "\n</vector>\n"
     )
     print(path)
 
@@ -108,6 +108,8 @@ RES = "modules/retracks-player/android/src/main/res/drawable/"
 write_vector(RES + "retracks_ic_repeat.xml", repeat)
 write_vector(RES + "retracks_ic_repeat_one.xml", repeat_one)
 write_vector(RES + "retracks_ic_replay.xml", span)
+# 通しで再生中であることを示す版。アプリの強調色に合わせる
+write_vector(RES + "retracks_ic_replay_on.xml", span, tint="#E8912A")
 
 write_png("assets/ic-repeat.png", repeat)
 write_png("assets/ic-repeat-one.png", repeat_one)

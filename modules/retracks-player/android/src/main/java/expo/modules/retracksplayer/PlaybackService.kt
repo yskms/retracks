@@ -213,6 +213,7 @@ class PlaybackService : MediaSessionService() {
     )
     player.seekTo(index, 0L)
     player.play()
+    RetracksWidgetProvider.updateAll(this)
   }
 
   /** 区間を外した曲から離れたら元に戻す。 */

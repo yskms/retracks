@@ -151,6 +151,15 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       views.setOnClickPendingIntent(R.id.retracks_widget_prev, command(context, ACTION_PREV))
       views.setOnClickPendingIntent(R.id.retracks_widget_toggle, command(context, ACTION_TOGGLE))
       views.setOnClickPendingIntent(R.id.retracks_widget_next, command(context, ACTION_NEXT))
+      // 「この曲を最初から」は押している間だけの操作ではなく、次の曲へ移るまで
+      // 続く状態を持つ。プレイヤー画面と同じように、効いている間は強調色にする。
+      val fullPlayback = PlaybackService.instance?.isFullPlayback() ?: false
+      views.setImageViewResource(
+        R.id.retracks_widget_replay,
+        if (fullPlayback) R.drawable.retracks_ic_replay_on else R.drawable.retracks_ic_replay
+      )
+      views.setInt(R.id.retracks_widget_replay, "setImageAlpha", if (fullPlayback) 255 else 110)
+
       views.setOnClickPendingIntent(
         R.id.retracks_widget_replay,
         command(context, ACTION_REPLAY)
