@@ -157,8 +157,13 @@ class RetracksPlayerModule : Module() {
   private val snapshotRunnable = object : Runnable {
     override fun run() {
       val c = controller
-      snapshot = if (c == null) {
-        emptySnapshot()
+      snapshot = if (c == null || !c.isConnected) {
+        // 接続が終わるまで controller は既定値を返す。リピートは OFF 扱いに
+        // なるため、そのまま出すと起動直後の数秒だけ設定が消えたように見える。
+        // 同じプロセスにいるサービスのプレイヤーから本当の値を読む。
+        emptySnapshot() + mapOf(
+          "repeatMode" to (PlaybackService.instance?.playerOrNull()?.repeatMode ?: 2)
+        )
       } else {
         mapOf(
           "connected" to true,
