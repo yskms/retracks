@@ -247,6 +247,8 @@ export default function PlayerScreen() {
               <Pressable style={styles.control} onPress={next} hitSlop={10}>
                 <Text style={styles.controlGlyph}>▶❙</Text>
               </Pressable>
+              {/* 左のリピートと釣り合わせ、再生ボタンを画面の中心に置く */}
+              <View style={styles.controlSpacer} />
             </View>
 
             <View style={styles.modeRow}>
@@ -489,6 +491,7 @@ const styles = StyleSheet.create({
     gap: 20,
   },
   control: { padding: 12 },
+  controlSpacer: { width: 48 },
   controlGlyph: { color: colors.text, fontSize: 22 },
   /**
    * リピートの記号。↻ は「やり直し」に読めて「この曲を最初から」と紛らわしいので、
