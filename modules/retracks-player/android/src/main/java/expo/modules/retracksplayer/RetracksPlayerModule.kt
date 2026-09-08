@@ -138,15 +138,41 @@ class RetracksPlayerModule : Module() {
    * 差し替えるとその曲が区間の先頭から鳴り直してしまう。設定を1つ変えるたびに
    * 曲が鳴り直すのは体験として悪いので、現在の曲は触らず以降だけ差し替える。
    */
+  /**
+   * 区間を組み直すための曲一覧。
+   *
+   * setQueue が呼ばれていなくても、サービスが控えからキューを復元していることが
+   * ある（ウィジェットから再生を始めた場合や、アプリだけ落ちて再生が続いた場合）。
+   * そのとき JS 側の一覧は空なので、控えから読み直す。これを怠ると、RUSH を
+   * 切っても MediaItem に焼き込まれた区間が残り、次の曲も短いまま鳴る。
+   */
+  private fun tracksForSegment(): List<TrackInput> {
+    if (tracks.isNotEmpty()) return tracks
+    val context = appContext.reactContext ?: return emptyList()
+    tracks = QueueStore.loadTracks(context).map { stored ->
+      TrackInput().apply {
+        id = stored.id
+        uri = stored.uri
+        title = stored.title
+        artist = stored.artist
+        album = stored.album
+        durationMs = stored.durationMs.toDouble()
+        artworkUri = stored.artworkUri
+      }
+    }
+    return tracks
+  }
+
   private fun applySegmentFromNextItem() {
     val c = controller ?: return
-    if (tracks.isEmpty()) return
+    val list = tracksForSegment()
+    if (list.isEmpty()) return
 
-    val count = minOf(tracks.size, c.mediaItemCount)
+    val count = minOf(list.size, c.mediaItemCount)
     val from = c.currentMediaItemIndex + 1
     if (from >= count) return
 
-    c.replaceMediaItems(from, count, buildItems(tracks.subList(from, count), currentSegment))
+    c.replaceMediaItems(from, count, buildItems(list.subList(from, count), currentSegment))
   }
 
   /** メインスレッドで実行する。既にメインスレッドならそのまま走らせる。 */
@@ -325,6 +351,8 @@ class RetracksPlayerModule : Module() {
         PlaybackService.instance?.segmentController?.segment = next
         applySegmentFromNextItem()
         PlaybackService.instance?.saveState()
+        // 「この曲を最初から」の見た目が RUSH の入切で変わるため
+        appContext.reactContext?.let { RetracksWidgetProvider.updateAll(it) }
       }
     }
 
