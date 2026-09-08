@@ -44,14 +44,17 @@ export default function DebugScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>i18n（一時デバッグ表示）</Text>
-          <Text style={styles.mono}>
-            i18next.language: {i18next.language}
-            {'\n'}
-            getLocales(): {JSON.stringify(Localization.getLocales())}
-          </Text>
-        </View>
+        {/* TODO: 多言語対応の確認が済んだら消す。__DEV__ でリリースビルドには出ない */}
+        {__DEV__ && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>i18n（一時デバッグ表示）</Text>
+            <Text style={styles.mono}>
+              i18next.language: {i18next.language}
+              {'\n'}
+              getLocales(): {JSON.stringify(Localization.getLocales())}
+            </Text>
+          </View>
+        )}
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t('debug.stateCardTitle')}</Text>
@@ -94,7 +97,7 @@ export default function DebugScreen() {
           ) : (
             exits.map((exit, index) => (
               <Text key={index} style={styles.logLine}>
-                {new Date(exit.timestamp).toLocaleString()}　{exit.reason}
+                {new Date(exit.timestamp).toLocaleString(i18next.language)}　{exit.reason}
                 {exit.description ? `　${exit.description}` : ''}
               </Text>
             ))

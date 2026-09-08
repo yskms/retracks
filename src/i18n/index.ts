@@ -1,10 +1,14 @@
 /**
  * 多言語化の初期化。
  *
- * 端末の言語が日本語ならそれを使い、それ以外はすべて英語にする
- * （国際的に無難なフォールバックとして英語を採用。日本語だけの特別扱い）。
- * リソースを直接渡しているため init は同期的に終わり、Suspense や
+ * 端末の言語が対応言語（SUPPORTED_LANGUAGES）に含まれていればそれを使い、
+ * 含まれていなければ英語にする（国際的に無難なフォールバックとして英語を
+ * 採用）。リソースを直接渡しているため init は同期的に終わり、Suspense や
  * ローディング状態は不要。
+ *
+ * fallbackLng は ['en', 'ja'] のチェーンにしてある。ja が全キーの
+ * 正本（i18next.d.ts の型はここから作る）なので、en 側にキーの抜けが
+ * あっても生キーがそのまま画面に出ることはなく、必ず ja に着地する。
  *
  * Fast Refresh でこのモジュールが再評価されても二重初期化しないよう
  * isInitialized を見る。
@@ -21,7 +25,9 @@ export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 
 function detectLanguage(): SupportedLanguage {
   const deviceLanguage = Localization.getLocales()[0]?.languageCode;
-  return deviceLanguage === 'ja' ? 'ja' : 'en';
+  return (SUPPORTED_LANGUAGES as readonly string[]).includes(deviceLanguage ?? '')
+    ? (deviceLanguage as SupportedLanguage)
+    : 'en';
 }
 
 if (!i18next.isInitialized) {
@@ -33,7 +39,7 @@ if (!i18next.isInitialized) {
         en: { translation: en },
       },
       lng: detectLanguage(),
-      fallbackLng: 'en',
+      fallbackLng: ['en', 'ja'],
       interpolation: { escapeValue: false },
     })
     .catch((error) => {

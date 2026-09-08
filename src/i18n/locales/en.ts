@@ -60,7 +60,7 @@ export default {
     libraryQueue: 'Library {{tracks}} songs / Queue {{queue}} songs',
     roundProgress: 'Pass progress {{played}} / {{total}}',
     noRound: 'No active pass',
-    indexStatus: 'index {{index}} / {{queueSize}}  {{state}}',
+    indexStatus: 'index {{index}} / {{queueSize}} {{state}}',
     playing: 'Playing',
     paused: 'Paused',
     notConnected: 'Not connected',
