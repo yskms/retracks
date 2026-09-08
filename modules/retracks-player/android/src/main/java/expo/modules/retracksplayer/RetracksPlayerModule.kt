@@ -172,7 +172,13 @@ class RetracksPlayerModule : Module() {
     val from = c.currentMediaItemIndex + 1
     if (from >= count) return
 
-    c.replaceMediaItems(from, count, buildItems(list.subList(from, count), currentSegment))
+    // replaceMediaItems は使えない。曲が同じなら Media3 はメディアソースを
+    // 作り直さず MediaItem の参照だけ差し替える。区間なしのソースは差分判定で
+    // 区間設定を見ないため、区間を「付ける」変更が黙って捨てられる
+    // （外す方は効くので、RUSH の ON だけ効かないという形で出ていた）。
+    // 入れ替えてソースごと作り直させる。
+    c.removeMediaItems(from, count)
+    c.addMediaItems(from, buildItems(list.subList(from, count), currentSegment))
   }
 
   /** メインスレッドで実行する。既にメインスレッドならそのまま走らせる。 */
