@@ -227,8 +227,25 @@ class PlaybackService : MediaSessionService() {
     clippedItemBeforeFullPlayback = null
 
     if (original != null && index < player.mediaItemCount) {
-      player.replaceMediaItem(index, original)
+      // replaceMediaItem では区間が戻らない。Media3 は曲が同じならメディアソースを
+      // 作り直さず、区間を付ける変更を捨てるため（docs/requirements.md 7.4.1）。
+      player.removeMediaItems(index, index + 1)
+      player.addMediaItems(index, listOf(original))
     }
+  }
+
+  /**
+   * 区間を組み直したあと、別の曲に残していた「通しで再生」の控えを捨てる。
+   *
+   * 組み直しでその曲は新しい設定の項目に置き換わっているので、古い控えを
+   * 書き戻すと設定と 食い違う。いま鳴っている曲は組み直さないので対象外。
+   */
+  fun dropFullPlaybackUnlessCurrent() {
+    val player = mediaSession?.player ?: return
+    val index = fullPlaybackIndex ?: return
+    if (index == player.currentMediaItemIndex) return
+    fullPlaybackIndex = null
+    clippedItemBeforeFullPlayback = null
   }
 
   fun currentPlayerSnapshot(): Snapshot? {
