@@ -4,7 +4,15 @@
  */
 
 import { useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  FlatList,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import Slider from '@react-native-community/slider';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -213,16 +221,20 @@ export default function PlayerScreen() {
                 hitSlop={10}
                 accessibilityLabel={`リピート ${REPEAT_LABEL[repeatMode] ?? ''}`}
               >
-                <Text
+                <Image
+                  source={
+                    repeatMode === RepeatMode.One
+                      ? require('../assets/ic-repeat-one.png')
+                      : require('../assets/ic-repeat.png')
+                  }
                   style={[
-                    styles.controlGlyph,
-                    repeatMode === RepeatMode.Off
-                      ? styles.controlGlyphOff
-                      : styles.controlGlyphOn,
+                    styles.repeatIcon,
+                    {
+                      tintColor:
+                        repeatMode === RepeatMode.Off ? colors.textDim : colors.accent,
+                    },
                   ]}
-                >
-                  {repeatMode === RepeatMode.One ? '↻¹' : '↻'}
-                </Text>
+                />
               </Pressable>
               <Pressable style={styles.control} onPress={previous} hitSlop={10}>
                 <Text style={styles.controlGlyph}>❙◀</Text>
@@ -478,8 +490,11 @@ const styles = StyleSheet.create({
   },
   control: { padding: 12 },
   controlGlyph: { color: colors.text, fontSize: 22 },
-  controlGlyphOff: { color: colors.textDim, opacity: 0.5 },
-  controlGlyphOn: { color: colors.accent },
+  /**
+   * リピートの記号。↻ は「やり直し」に読めて「この曲を最初から」と紛らわしいので、
+   * ウィジェットと同じ Material のループ記号を使う（assets/ic-repeat*.png）。
+   */
+  repeatIcon: { width: 24, height: 24, opacity: 0.9 },
   controlMain: {
     width: 72,
     height: 72,
