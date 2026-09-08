@@ -271,14 +271,26 @@ export default function PlayerScreen() {
                   onPress={playCurrentFromStart}
                   disabled={status?.fullPlayback}
                 >
-                  <Text
-                    style={[
-                      styles.oneShotLabel,
-                      status?.fullPlayback && styles.oneShotLabelOn,
-                    ]}
-                  >
-                    {status?.fullPlayback ? 'この曲は通しで再生中' : 'この曲を最初から'}
-                  </Text>
+                  <View style={styles.oneShotHead}>
+                    {/* ウィジェットの同じ操作と同じ絵にして、見て分かるようにする */}
+                    <Image
+                      source={require('../assets/ic-fulltrack.png')}
+                      style={[
+                        styles.oneShotIcon,
+                        {
+                          tintColor: status?.fullPlayback ? colors.text : colors.textDim,
+                        },
+                      ]}
+                    />
+                    <Text
+                      style={[
+                        styles.oneShotLabel,
+                        status?.fullPlayback && styles.oneShotLabelOn,
+                      ]}
+                    >
+                      {status?.fullPlayback ? 'この曲は通しで再生中' : 'この曲を最初から'}
+                    </Text>
+                  </View>
                   <Text style={styles.rushHint}>
                     {status?.fullPlayback
                       ? '次の曲から元に戻ります'
@@ -519,6 +531,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   oneShotOn: { borderColor: colors.accent, backgroundColor: colors.accentDim },
+  oneShotHead: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  oneShotIcon: { width: 15, height: 15 },
   oneShotLabel: { color: colors.textDim, fontSize: 13, fontWeight: '700' },
   oneShotLabelOn: { color: colors.text },
   rushOn: { backgroundColor: colors.accentDim, borderColor: colors.accent },
