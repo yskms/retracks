@@ -54,6 +54,26 @@ export default function PlayerScreen() {
   const listRef = useRef<FlatList<Track>>(null);
   const { width } = useWindowDimensions();
 
+  // scrollToIndex は getItemLayout の offset をそのまま使う。ヘッダー
+  // （プレイヤーUI）の高さを足しておかないと、まだ描画されていない行では
+  // ヘッダー分まるごと手前で止まる。実測して足す。
+  const [headerHeight, setHeaderHeight] = useState(0);
+
+  // キューのバーが画面上端を通り過ぎたら、貼り付けた同じバーに差し替える
+  const [barTop, setBarTop] = useState(0);
+  const [pinned, setPinned] = useState(false);
+  const pinnedRef = useRef(false);
+
+  const jumpToTop = () => listRef.current?.scrollToOffset({ offset: 0, animated: true });
+  const jumpToCurrent = () => {
+    if (!status || status.index < 0) return;
+    listRef.current?.scrollToIndex({
+      index: status.index,
+      viewPosition: 0.3,
+      animated: true,
+    });
+  };
+
   // シークバーをつまんでいる間は、再生位置の自動更新で戻らないようにする
   const [seeking, setSeeking] = useState<number | null>(null);
 
@@ -98,9 +118,18 @@ export default function PlayerScreen() {
         windowSize={11}
         getItemLayout={(_, index) => ({
           length: QUEUE_ROW_HEIGHT,
-          offset: QUEUE_ROW_HEIGHT * index,
+          offset: headerHeight + QUEUE_ROW_HEIGHT * index,
           index,
         })}
+        scrollEventThrottle={16}
+        onScroll={(e) => {
+          // バーの貼り付きが切り替わる瞬間だけ描画し直す
+          const shouldPin = e.nativeEvent.contentOffset.y >= barTop;
+          if (shouldPin !== pinnedRef.current) {
+            pinnedRef.current = shouldPin;
+            setPinned(shouldPin);
+          }
+        }}
         renderItem={({ item, index }) => (
           <QueueRow
             track={item}
@@ -110,7 +139,10 @@ export default function PlayerScreen() {
           />
         )}
         ListHeaderComponent={
-          <View style={styles.body}>
+          <View
+            style={styles.body}
+            onLayout={(e) => setHeaderHeight(e.nativeEvent.layout.height)}
+          >
             <Pressable
               disabled={!currentTrack?.album}
               onPress={() =>
@@ -280,39 +312,59 @@ export default function PlayerScreen() {
             )}
 
             {queue.length > 0 && (
-              <View style={styles.queueHeader}>
-                <Text style={styles.queueHeaderTitle}>再生キュー {queue.length}曲</Text>
-                <View style={styles.queueHeaderActions}>
-                  <Pressable
-                    style={styles.queueHeaderButton}
-                    hitSlop={6}
-                    onPress={() =>
-                      listRef.current?.scrollToOffset({ offset: 0, animated: true })
-                    }
-                  >
-                    <Text style={styles.queueHeaderAction}>先頭へ</Text>
-                  </Pressable>
-                  {status && status.index >= 0 && (
-                    <Pressable
-                      style={styles.queueHeaderButton}
-                      hitSlop={6}
-                      onPress={() =>
-                        listRef.current?.scrollToIndex({
-                          index: status.index,
-                          viewPosition: 0.3,
-                          animated: true,
-                        })
-                      }
-                    >
-                      <Text style={styles.queueHeaderAction}>再生中へ</Text>
-                    </Pressable>
-                  )}
-                </View>
+              <View onLayout={(e) => setBarTop(e.nativeEvent.layout.y)}>
+                <QueueBar
+                  count={queue.length}
+                  showCurrent={!!status && status.index >= 0}
+                  onTop={jumpToTop}
+                  onCurrent={jumpToCurrent}
+                />
               </View>
             )}
           </View>
         }
       />
+
+      {/* 上端に貼り付いたバー。中身は一覧の中のものと同じ */}
+      {pinned && queue.length > 0 && (
+        <View style={styles.queueBarPinned}>
+          <QueueBar
+            count={queue.length}
+            showCurrent={!!status && status.index >= 0}
+            onTop={jumpToTop}
+            onCurrent={jumpToCurrent}
+          />
+        </View>
+      )}
+    </View>
+  );
+}
+
+/** 再生キューの見出しと移動ボタン。一覧の中と、上端に貼り付いたときの両方で使う。 */
+function QueueBar({
+  count,
+  showCurrent,
+  onTop,
+  onCurrent,
+}: {
+  count: number;
+  showCurrent: boolean;
+  onTop: () => void;
+  onCurrent: () => void;
+}) {
+  return (
+    <View style={styles.queueHeader}>
+      <Text style={styles.queueHeaderTitle}>再生キュー {count}曲</Text>
+      <View style={styles.queueHeaderActions}>
+        <Pressable style={styles.queueHeaderButton} hitSlop={6} onPress={onTop}>
+          <Text style={styles.queueHeaderAction}>先頭へ</Text>
+        </Pressable>
+        {showCurrent && (
+          <Pressable style={styles.queueHeaderButton} hitSlop={6} onPress={onCurrent}>
+            <Text style={styles.queueHeaderAction}>再生中へ</Text>
+          </Pressable>
+        )}
+      </View>
     </View>
   );
 }
@@ -362,6 +414,18 @@ const styles = StyleSheet.create({
   headerIcon: { color: colors.text, fontSize: 20 },
   headerTitle: { color: colors.textDim, fontSize: 12 },
   listContent: { paddingBottom: 32 },
+  queueBarPinned: {
+    position: 'absolute',
+    top: 48,
+    left: 0,
+    right: 0,
+    backgroundColor: colors.background,
+    paddingHorizontal: 20,
+    paddingTop: 8,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
   body: { padding: 20, paddingBottom: 4, gap: 20 },
   artwork: {
     aspectRatio: 1,
