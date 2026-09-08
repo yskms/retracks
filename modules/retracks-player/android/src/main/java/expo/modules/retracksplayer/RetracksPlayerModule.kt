@@ -157,23 +157,26 @@ class RetracksPlayerModule : Module() {
   private val snapshotRunnable = object : Runnable {
     override fun run() {
       val c = controller
-      snapshot = if (c == null || !c.isConnected) {
-        // 接続が終わるまで controller は既定値を返す。リピートは OFF 扱いに
-        // なるため、そのまま出すと起動直後の数秒だけ設定が消えたように見える。
-        // 同じプロセスにいるサービスのプレイヤーから本当の値を読む。
-        emptySnapshot() + mapOf(
-          "repeatMode" to (PlaybackService.instance?.playerOrNull()?.repeatMode ?: 2)
-        )
+      val service = PlaybackService.instance
+
+      // 接続が終わるまで controller は既定値を返す（リピートは OFF 扱いになり、
+      // 起動直後の数秒だけ設定が消えたように見える）。サービスは同じプロセスに
+      // いるので、その間はプレイヤーを直接読む。どちらも Player なので扱いは同じ。
+      val p: Player? = if (c != null && c.isConnected) c else service?.playerOrNull()
+
+      snapshot = if (p == null) {
+        emptySnapshot()
       } else {
         mapOf(
           "connected" to true,
-          "isPlaying" to c.isPlaying,
-          "index" to c.currentMediaItemIndex,
-          "positionMs" to c.currentPosition.toDouble(),
-          "durationMs" to (c.duration.takeIf { it > 0 }?.toDouble() ?: 0.0),
-          "queueSize" to c.mediaItemCount,
-          "repeatMode" to c.repeatMode,
-          "fullPlayback" to (PlaybackService.instance?.isFullPlayback() ?: false)
+          "isPlaying" to p.isPlaying,
+          "index" to p.currentMediaItemIndex,
+          "positionMs" to p.currentPosition.toDouble(),
+          "durationMs" to (p.duration.takeIf { it > 0 }?.toDouble() ?: 0.0),
+          "queueSize" to p.mediaItemCount,
+          "repeatMode" to p.repeatMode,
+          // これはコントローラではなくサービスしか知らない
+          "fullPlayback" to (service?.isFullPlayback() ?: false)
         )
       }
       if (polling) mainHandler.postDelayed(this, SNAPSHOT_INTERVAL_MS)
