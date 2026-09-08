@@ -26,7 +26,7 @@ export type Track = {
 };
 
 export type LibrarySnapshot = {
-  version: 2;
+  version: 3;
   scannedAt: number;
   tracks: Track[];
 };
@@ -44,6 +44,30 @@ const MAX_PAGES = 50;
  */
 const ARTWORK_MODE = 'uri' as const;
 
+const ALBUM_ART_URI = 'content://media/external/audio/albumart';
+
+/**
+ * ジャケットの場所。アルバムIDから組み立てるだけで、存在の確認はしない。
+ *
+ * expo-music-library は openAssetFileDescriptor で開けるか確かめてから URI を
+ * 返す。そのため、端末に曲を入れた直後など MediaStore がまだジャケットを
+ * 用意していない時点で走査すると null になる。その null はキャッシュと
+ * 再生キューに焼き付き、後からジャケットが生成されても出てこなくなる
+ * （2026-09-08 に実際に発生。PC から曲を追加した直後にウィジェットのジャケットが
+ * 消え、同じアルバムのジャケットはその後 98KB で存在していた）。
+ *
+ * URI はアルバムIDだけで決まるので、読めるかどうかは表示するときに判断すれば
+ * よい。こうしておけば、あとからジャケットが用意された時点で自然に出る。
+ */
+function artworkUriOf(asset: {
+  albumId?: string | null;
+  artworkUri?: string | null;
+  artwork?: string | null;
+}): string | null {
+  if (asset.albumId) return `${ALBUM_ART_URI}/${asset.albumId}`;
+  return asset.artworkUri || asset.artwork || null;
+}
+
 function toTrack(asset: MusicLibrary.Asset): Track {
   return {
     id: asset.id,
@@ -53,7 +77,7 @@ function toTrack(asset: MusicLibrary.Asset): Track {
     album: asset.albumTitle ?? null,
     // expo-music-library の duration は秒
     durationMs: Math.round((asset.duration || 0) * 1000),
-    artworkUri: asset.artworkUri ?? null,
+    artworkUri: artworkUriOf(asset),
   };
 }
 
@@ -91,13 +115,13 @@ export async function scanLibrary(): Promise<Track[]> {
 export async function readCache(): Promise<LibrarySnapshot | null> {
   const cached = await readJson<LibrarySnapshot>(StorageKeys.library);
   // 版が上がったらキャッシュを捨てて走査し直す（アートワーク追加など）
-  if (!cached || cached.version !== 2 || !Array.isArray(cached.tracks)) return null;
+  if (!cached || cached.version !== 3 || !Array.isArray(cached.tracks)) return null;
   return cached;
 }
 
 export async function writeCache(tracks: Track[]): Promise<LibrarySnapshot> {
   const snapshot: LibrarySnapshot = {
-    version: 2,
+    version: 3,
     scannedAt: Date.now(),
     tracks,
   };
@@ -245,7 +269,7 @@ export async function getAlbums(): Promise<Album[]> {
     title: a.title || 'Unknown',
     artist: a.artist || 'Unknown',
     trackCount: a.assetCount ?? 0,
-    artworkUri: a.artworkUri ?? a.artwork ?? null,
+    artworkUri: artworkUriOf({ albumId: a.id, artworkUri: a.artworkUri, artwork: a.artwork }),
     year: years[a.id] ?? null,
   }));
 }
@@ -321,7 +345,7 @@ export async function getArtistDetail(artistId: string): Promise<ArtistDetail> {
       title: asset.albumTitle || 'Unknown',
       artist: asset.artist || 'Unknown',
       trackCount: 1,
-      artworkUri: asset.artworkUri ?? asset.artwork ?? null,
+      artworkUri: artworkUriOf(asset),
       year: null,
     });
   }

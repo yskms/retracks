@@ -110,6 +110,9 @@ class RetracksPlayerModule : Module() {
             .setTitle(t.title)
             .setArtist(t.artist)
             .setAlbumTitle(t.album)
+            // 通知・ロック画面・ウィジェットのジャケットはこれを見る。
+            // 入れ忘れると、JS がキューを積み直した時点で絵が消える
+            .apply { t.artworkUri?.let { setArtworkUri(Uri.parse(it)) } }
             .build()
         )
       val durationMs = t.durationMs.toLong()

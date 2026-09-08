@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { colors } from '../theme';
@@ -23,7 +24,13 @@ export function Artwork({
 }) {
   const box = { width: size, height: size, borderRadius: radius };
 
-  if (!uri) {
+  // ジャケットの URI はアルバムIDから組み立てているだけで、実体があるとは
+  // 限らない（src/library.ts の artworkUriOf）。読めなかったものは
+  // プレースホルダに戻す。URI が変われば作り直す。
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [uri]);
+
+  if (!uri || failed) {
     return (
       <View style={[styles.placeholder, box]}>
         <Text style={[styles.glyph, { fontSize: size * 0.42 }]}>♪</Text>
@@ -41,6 +48,7 @@ export function Artwork({
       // 前の絵が残らないようにする
       recyclingKey={uri}
       transition={0}
+      onError={() => setFailed(true)}
     />
   );
 }
