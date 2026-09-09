@@ -49,6 +49,13 @@ export default {
     albumsSectionTitle: 'アルバム',
     songsSectionTitle: '楽曲',
   },
+  search: {
+    placeholder: '検索',
+    noResults: '見つかりませんでした',
+    openA11y: '検索',
+    clearA11y: '検索語をクリア',
+    moreCount: '+{{n}}',
+  },
   debug: {
     title: '開発用',
     stateCardTitle: '状態',

@@ -24,7 +24,16 @@ import {
   type PlayerStatus,
 } from '../modules/retracks-player/src';
 import { DEFAULT_SEGMENT, type SegmentSetting } from './rush';
-import { loadLibrary, refreshLibrary, requestPermission, type Track } from './library';
+import {
+  getAlbums,
+  getArtists,
+  loadLibrary,
+  refreshLibrary,
+  requestPermission,
+  type Album,
+  type Artist,
+  type Track,
+} from './library';
 import {
   buildQueueKey,
   loadShuffle,
@@ -40,6 +49,13 @@ import { clearAll, readJson, StorageKeys, writeJson } from './storage';
 type PlaybackValue = {
   ready: boolean;
   tracks: Track[];
+  /**
+   * アーティスト/アルバム一覧。ライブラリ画面のタブと検索画面の両方から
+   * 同じ配列を参照する（要件 10.4）。別々に読み込むと、画面ごとに複製が
+   * 残ったり、再走査した内容が一方にしか反映されなかったりする。
+   */
+  artists: Artist[];
+  albums: Album[];
   queue: Track[];
   status: PlayerStatus | null;
   currentTrack: Track | null;
@@ -99,6 +115,23 @@ export function usePlayback(): PlaybackValue {
   return value;
 }
 
+/**
+ * アーティスト/アルバム一覧を取得する。MediaStore への問い合わせが一時的に
+ * 失敗することがあるため、1回だけ間を置いて再試行する。それでも失敗したら
+ * 呼び出し側で諦める（曲一覧の更新は巻き込まない）。
+ */
+async function fetchArtistsAlbums(): Promise<{ artists: Artist[]; albums: Album[] } | null> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const [artists, albums] = await Promise.all([getArtists(), getAlbums()]);
+      return { artists, albums };
+    } catch {
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1500));
+    }
+  }
+  return null;
+}
+
 async function waitForConnection(timeoutMs = 1500) {
   const started = Date.now();
   for (;;) {
@@ -112,6 +145,8 @@ async function waitForConnection(timeoutMs = 1500) {
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [tracks, setTracks] = useState<Track[]>([]);
+  const [artists, setArtists] = useState<Artist[]>([]);
+  const [albums, setAlbums] = useState<Album[]>([]);
   const [queue, setQueue] = useState<Track[]>([]);
   const [status, setStatus] = useState<PlayerStatus | null>(null);
   const [shuffle, setShuffle] = useState<ShuffleState | null>(null);
@@ -192,6 +227,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           return;
         }
 
+        // getArtistsAsync/getAlbumsAsync は曲一覧の走査結果を待つ必要が無いので、
+        // loadLibrary() と並行に投げる。曲一覧の後ろに置くと、キャッシュが無い
+        // 初回起動では走査の2〜4秒ぶんアーティスト/アルバムの表示が余計に遅れる。
+        void (async () => {
+          const fetched = await fetchArtistsAlbums();
+          if (!cancelled && fetched) {
+            setArtists(fetched.artists);
+            setAlbums(fetched.albums);
+          }
+        })();
+
         const result = await loadLibrary();
         if (cancelled) return;
         applyTracks(result.tracks);
@@ -212,6 +258,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               addLog(
                 `裏で再走査（追加${refreshed.added.length} 削除${refreshed.removed.length}）`
               );
+              // 曲の増減があったなら、アーティスト/アルバムのタブと検索結果も
+              // 同時に古くなる。ここで拾わないと、次にプル更新するまで
+              // 両方とも曲一覧だけとズレたままになる。
+              const fetched = await fetchArtistsAlbums();
+              if (!cancelled && fetched) {
+                setArtists(fetched.artists);
+                setAlbums(fetched.albums);
+              }
             } catch {
               // 走査に失敗してもキャッシュで動くので黙って諦める
             }
@@ -442,12 +496,28 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   };
 
   const rescan = useCallback(async () => {
-    const result = await refreshLibrary(tracksRef.current);
-    applyTracks(result.tracks);
-    addLog(
-      `再走査 ${result.tracks.length}曲 / ${result.elapsedMs}ms ` +
-        `(追加${result.added.length} 削除${result.removed.length})`
-    );
+    // 3本まとめて Promise.all にすると、アーティスト/アルバムの取得だけが
+    // 失敗したときに曲一覧の再走査結果まで丸ごと捨てられてしまう。
+    // allSettled にして、成功した分だけを反映する。
+    const [libraryResult, artistsResult, albumsResult] = await Promise.allSettled([
+      refreshLibrary(tracksRef.current),
+      getArtists(),
+      getAlbums(),
+    ]);
+
+    if (artistsResult.status === 'fulfilled') setArtists(artistsResult.value);
+    if (albumsResult.status === 'fulfilled') setAlbums(albumsResult.value);
+
+    if (libraryResult.status === 'fulfilled') {
+      const result = libraryResult.value;
+      applyTracks(result.tracks);
+      addLog(
+        `再走査 ${result.tracks.length}曲 / ${result.elapsedMs}ms ` +
+          `(追加${result.added.length} 削除${result.removed.length})`
+      );
+    } else {
+      addLog(`再走査 ERROR: ${String(libraryResult.reason)}`);
+    }
   }, [addLog, applyTracks]);
 
   const clearStorage = useCallback(async () => {
@@ -469,6 +539,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const value: PlaybackValue = {
     ready,
     tracks,
+    artists,
+    albums,
     queue,
     status,
     currentTrack,
