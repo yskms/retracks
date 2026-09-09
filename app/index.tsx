@@ -5,7 +5,7 @@
  * タブ構成ではなく、配列から組み立てるページャにしている。
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Animated,
@@ -27,12 +27,8 @@ import { usePlayback } from '../src/playback';
 import {
   artworkByArtist,
   countAlbumsByArtist,
-  getAlbums,
-  getArtists,
   getTracksForAlbums,
   getTracksForArtists,
-  type Album,
-  type Artist,
   type Track,
 } from '../src/library';
 import { colors, formatDuration } from '../src/theme';
@@ -76,15 +72,22 @@ export default function LibraryScreen() {
     ],
     [t]
   );
-  const { tracks, playFrom, playTracks, playAll, currentTrack, allProgress, rescan } =
-    usePlayback();
+  const {
+    tracks,
+    artists,
+    albums,
+    playFrom,
+    playTracks,
+    playAll,
+    currentTrack,
+    allProgress,
+    rescan,
+  } = usePlayback();
   const { selection, active: inSelection, toggle, clear, isSelected } =
     useSelection<TabId>();
 
   const pagerRef = useRef<PagerView>(null);
   const [page, setPage] = useState(0);
-  const [artists, setArtists] = useState<Artist[]>([]);
-  const [albums, setAlbums] = useState<Album[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
   /** 一覧の一番上から引っ張って更新。裏の自動走査とは別に、明示的に走らせる。 */
@@ -92,10 +95,6 @@ export default function LibraryScreen() {
     setRefreshing(true);
     try {
       await rescan();
-      setArtists(await getArtists());
-      setAlbums(await getAlbums());
-    } catch {
-      // 走査に失敗しても既存の一覧はそのまま使える
     } finally {
       setRefreshing(false);
     }
@@ -126,17 +125,6 @@ export default function LibraryScreen() {
   const position = useRef(new Animated.Value(0)).current;
   const offset = useRef(new Animated.Value(0)).current;
   const tabWidth = width / tabs.length;
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        setArtists(await getArtists());
-        setAlbums(await getAlbums());
-      } catch {
-        // 権限が無い場合など。曲一覧側で状態が分かるのでここでは黙る
-      }
-    })();
-  }, [tracks.length]);
 
   /** 選択したものからキューを作って再生する（要件 10.3）。 */
   const playSelection = useCallback(async (shuffled: boolean) => {
