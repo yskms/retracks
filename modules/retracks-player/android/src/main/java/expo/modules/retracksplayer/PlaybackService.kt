@@ -302,6 +302,20 @@ class PlaybackService : MediaSessionService() {
       .apply { sessionActivity?.let { setSessionActivity(it) } }
       .build()
 
+    // MediaSession.Builder.build() はセッションを作るだけで、サービスの通知管理には
+    // 一切登録しない（バイトコードで確認済み）。普段登録が効いているように見えるのは、
+    // JS 側の MediaController がつないだときに onGetSession 経由で暗黙に登録される
+    // ため。ウィジェットからの起こしがけはコントローラが一切つながらないので、
+    // 明示的に addSession しないと Media3 の通知管理が対象セッションを認識せず、
+    // 本物の通知を一生出さない（2026-09-09 に実機で発覚。仮の通知のまま固定され、
+    // 再生はできるのに通知にもロック画面にも何も出なかった）。
+    addSession(mediaSession!!)
+
+    // 既定は「曲が止まっている／未再生のときは通知を出さない」。
+    // ウィジェットからの起こしがけは仮の通知で前面に入った直後まさにその状態を
+    // 経由するため、既定のままだと Media3 が本物の通知をずっと出し渋る。
+    setShowNotificationForIdlePlayer(SHOW_NOTIFICATION_FOR_IDLE_PLAYER_ALWAYS)
+
     instance = this
     restoreSavedQueue(player)
     RetracksWidgetProvider.updateAll(this)
@@ -318,6 +332,9 @@ class PlaybackService : MediaSessionService() {
       val player = mediaSession?.player
       if (player != null && player.mediaItemCount > 0) {
         player.play()
+        // 仮の通知は Media3 が自発的に差し替えてくれるとは限らない
+        // （上記の理由と合わせて実機で確認）。明示的に本物の通知を要求する。
+        triggerNotificationUpdate()
       } else {
         // 復元できるものが無いので前面から降りて終わる
         stopSelf()

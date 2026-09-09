@@ -177,6 +177,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         setReady(true);
 
+        // 通知が無いと、ウィジェットから起こしたときに再生中でも通知にも
+        // ロック画面にも何も出ない（フォアグラウンドサービス自体は動く）。
+        // ライブラリ読み込みを止める理由ではないので、結果は問わず進める。
+        try {
+          const notif = await RetracksPlayer.requestNotificationPermissionAsync();
+          if (!notif.granted) addLog('通知の権限が許可されていません');
+        } catch {
+          // 権限まわりで失敗しても再生自体は続けられる
+        }
+
         if (!(await requestPermission())) {
           addLog('メディアの権限が許可されていません');
           return;

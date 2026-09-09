@@ -1,7 +1,7 @@
 # RE:TR4CKS 要件定義書（Android版）
 
-- バージョン: v1.3
-- 更新日: 2026-09-02
+- バージョン: v1.4
+- 更新日: 2026-09-09
 - ステータス: 技術構成の確定まで完了。MVP実装に着手可能
 
 > Remember. Replay. Rediscover. Revisit.
@@ -378,6 +378,58 @@ RE:TR4CKS 側は背景に回ってメモリの多くが退避された状態だ�
 方針に沿った挙動と考えられる。無理に押し通すとフォアグラウンドサービスの状態を
 崩し、バックグラウンド再生（本章の必須要件）を損なうリスクの方が大きいため、
 プラットフォームの挙動として受け入れる。
+
+### 既知の不具合：ウィジェットから起こしたときに通知が出ない（2026-09-09 実機で発覚・修正済み）
+
+**症状**：アプリを一度も開いていない状態でウィジェットから再生すると、再生自体は
+問題なく始まるが、通知にもロック画面にも何も出ない。ロック画面には（再生していない）
+Pulsar のメディアカードが代わりに表示される。アプリを一度開いてから再生すると
+正しく出る。
+
+**原因は2つ重なっていた。**
+
+1. **`POST_NOTIFICATIONS` 権限を一度もリクエストしていなかった**
+   Android 13（API 33）以降、この権限が無いと `NotificationManager` への投稿は
+   フォアグラウンドサービス用も含めてすべて黙って握りつぶされる（サービス自体は
+   問題なく前面で動き続けるため気づきにくい）。マニフェストにも無く、実行時
+   リクエストのコードもどこにも無かった。`dumpsys package` の runtime permissions
+   一覧に `POST_NOTIFICATIONS` 自体が存在しないことで発覚した。
+
+   対処：マニフェストに `<uses-permission>` を追加し、`RetracksPlayerModule` に
+   `requestNotificationPermissionAsync()` を生やして起動時にリクエストする
+   （`src/playback.tsx` の起動シーケンスに追加。結果は問わずライブラリ読み込みは
+   続行する）。
+
+2. **`MediaSession.Builder.build()` はセッションを Media3 の通知管理に登録しない**
+   権限を直しても直らなかった。`dumpsys notification` で実際に投稿されている
+   通知を調べると、`channel=retracks_playback`（自前の仮通知）のまま
+   `actions` も `category` も付かない状態で固定されており、Media3 本来の
+   通知（`channel=default_channel_id`, `category=transport`, `vis=PUBLIC`）に
+   一度も差し替わっていなかった。
+
+   `MediaSession$Builder.build()` を `javap -c` で逆アセンブルして確認したところ、
+   中身は `new MediaSession(...)` を返すだけで、サービス側の通知管理
+   （`MediaNotificationManager`）には一切触れていない。普段「勝手に登録される」
+   ように見えていたのは、JS 側の `MediaController.Builder(...).buildAsync()` が
+   接続する際に `onGetSession()` 経由で暗黙に登録されていたため。ウィジェットから
+   `startForegroundService` で起こした経路は、サービス内で `player.play()` を
+   直接呼ぶだけでコントローラが一切つながらないため、この暗黙の登録が起きない。
+   セッションは存在し `active=true` で `MediaButtonReceiver` にも正しく載るのに、
+   通知管理の対象としては認識されないという食い違いだった。
+
+   対処：`PlaybackService.onCreate()` でセッションを作った直後に
+   `addSession(mediaSession)` を明示的に呼ぶ。あわせて
+   `setShowNotificationForIdlePlayer(SHOW_NOTIFICATION_FOR_IDLE_PLAYER_ALWAYS)`
+   （既定だと曲が止まっている・未再生の間は通知を出し渋る）と、
+   `onStartCommand()` で `player.play()` の直後に `triggerNotificationUpdate()`
+   を呼び、仮通知から本物の通知への差し替えを明示的に急がせている。
+
+**調査の要点（再発時のために）**：`dumpsys media_session` でセッションが
+`active=true` で最上位にあることを確認しても、それは「セッションが存在し正しく
+機能している」ことの証明にしかならず、「通知がちゃんと出る」こととは別問題。
+実際に投稿されている通知の中身（`dumpsys notification` の `channel=` /
+`actions=` / `category=` / `vis=`）を、正常に動いている他アプリ（今回は Pulsar）
+と見比べて初めて「仮通知のまま固定されている」ことが分かった。
 
 ---
 
@@ -798,3 +850,4 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
 | v1.1 | 2026-09-03 | フェードインを追加、クロスフェードは対象外と決定。区間の切り出しを ClippingConfiguration へ変更 |
 | v1.2 | 2026-09-03 | フェードの不具合を解消（音量の適用先が再生位置より先行する問題）。技術検証6項目すべて合格 |
 | v1.3 | 2026-09-06 | 再生が突然止まる症状の調査結果を8章に記録。原因はウィジェットからサービスを起こす際のクラッシュ。メモリは同種アプリと同等と確認 |
+| v1.4 | 2026-09-09 | 多言語化（ja/en）の基盤を追加。ウィジェットから起こしたときに通知・ロック画面が出ない不具合を8章に記録（原因は POST_NOTIFICATIONS 未リクエストと MediaSession の addSession 未呼び出し、修正済み） |

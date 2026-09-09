@@ -8,6 +8,11 @@ import type {
 } from './RetracksPlayer.types';
 
 declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
+  /**
+   * 通知の権限をリクエストする（Android 13 未満では常に granted）。
+   * これが無いと再生中の通知もロック画面のメディア操作も出せない。
+   */
+  requestNotificationPermissionAsync(): Promise<{ status: string; granted: boolean }>;
   /** サービスに接続する。他の API を呼ぶ前に一度だけ実行する。 */
   prepareAsync(): Promise<boolean>;
   /** キューを差し替える。戻り値は積まれた曲数。 */

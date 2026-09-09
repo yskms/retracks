@@ -1,7 +1,9 @@
 package expo.modules.retracksplayer
 
+import android.Manifest
 import android.content.ComponentName
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.annotation.OptIn
@@ -12,6 +14,7 @@ import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import com.google.common.util.concurrent.MoreExecutors
+import expo.modules.interfaces.permissions.Permissions.askForPermissionsWithPermissionsManager
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -250,6 +253,26 @@ class RetracksPlayerModule : Module() {
     Name("RetracksPlayer")
 
     Events("onTrackChange", "onPlaybackStateChange", "onSegmentCut")
+
+    /**
+     * 通知の権限をリクエストする（Android 13 以降のみ実在する権限）。
+     *
+     * これが無いとフォアグラウンドサービス自体は動いても通知だけが黙って
+     * 握りつぶされ、再生中でも通知にもロック画面にも何も出ない
+     * （2026-09-09 に実機で発覚）。13 未満では権限自体が存在しないので
+     * 常に許可扱いにする。
+     */
+    AsyncFunction("requestNotificationPermissionAsync") { promise: Promise ->
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        promise.resolve(mapOf("status" to "granted", "granted" to true))
+        return@AsyncFunction
+      }
+      askForPermissionsWithPermissionsManager(
+        appContext.permissions,
+        promise,
+        Manifest.permission.POST_NOTIFICATIONS
+      )
+    }
 
     /** サービスに接続する。他の API を呼ぶ前に一度だけ実行すること。 */
     AsyncFunction("prepareAsync") { promise: Promise ->
