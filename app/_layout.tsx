@@ -25,6 +25,7 @@ export default function RootLayout() {
             >
               <Stack.Screen name="index" />
               <Stack.Screen name="player" options={{ animation: 'slide_from_bottom' }} />
+              <Stack.Screen name="search" />
               <Stack.Screen name="debug" />
               <Stack.Screen name="artist/[id]" />
               <Stack.Screen name="album/[id]" />

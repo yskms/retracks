@@ -54,6 +54,13 @@ export default {
     albumsSectionTitle: 'Albums',
     songsSectionTitle: 'Songs',
   },
+  search: {
+    placeholder: 'Search',
+    noResults: 'No results found',
+    openA11y: 'Search',
+    clearA11y: 'Clear search',
+    moreCount: '+{{n}}',
+  },
   debug: {
     title: 'Debug',
     stateCardTitle: 'State',
