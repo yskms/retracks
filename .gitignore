@@ -46,3 +46,6 @@ yarn-error.*
 
 # ローカルモジュールのビルド成果物
 modules/*/android/build/
+
+# Zenn等への投稿下書き。リポジトリでは公開しない私的メモ置き場
+docs/private/

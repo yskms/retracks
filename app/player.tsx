@@ -16,6 +16,7 @@ import {
 import Slider from '@react-native-community/slider';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 import { usePlayback } from '../src/playback';
 import { RepeatMode } from '../modules/retracks-player/src';
@@ -24,30 +25,39 @@ import { resolveSegment, type SegmentSetting } from '../src/rush';
 import { colors, formatDuration } from '../src/theme';
 import { Artwork } from '../src/components/Artwork';
 
+type SegmentLabelKey =
+  | 'player.segmentStart'
+  | 'player.segmentLength'
+  | 'player.segmentFadeIn'
+  | 'player.segmentFadeOut';
+
 const SEGMENT_ROWS: {
   key: keyof SegmentSetting;
-  label: string;
+  labelKey: SegmentLabelKey;
   min: number;
   max: number;
   step: number;
 }[] = [
-  { key: 'startSec', label: '開始位置', min: 0, max: 180, step: 1 },
-  { key: 'lengthSec', label: '再生時間', min: 5, max: 180, step: 1 },
-  { key: 'fadeInSec', label: 'フェードイン', min: 0, max: 10, step: 0.5 },
-  { key: 'fadeSec', label: 'フェードアウト', min: 0, max: 10, step: 0.5 },
+  { key: 'startSec', labelKey: 'player.segmentStart', min: 0, max: 180, step: 1 },
+  { key: 'lengthSec', labelKey: 'player.segmentLength', min: 5, max: 180, step: 1 },
+  { key: 'fadeInSec', labelKey: 'player.segmentFadeIn', min: 0, max: 10, step: 0.5 },
+  { key: 'fadeSec', labelKey: 'player.segmentFadeOut', min: 0, max: 10, step: 0.5 },
 ];
 
 /** キューの行の高さ。scrollToIndex を正確に効かせるため固定する。 */
 const QUEUE_ROW_HEIGHT = 54;
 
-/** 読み上げ用のリピートの状態名。 */
-const REPEAT_LABEL: Record<number, string> = {
-  [RepeatMode.Off]: 'オフ',
-  [RepeatMode.All]: '全曲',
-  [RepeatMode.One]: '1曲',
+type RepeatLabelKey = 'player.repeatOff' | 'player.repeatAll' | 'player.repeatOne';
+
+/** 読み上げ用のリピートの状態名（キー）。 */
+const REPEAT_LABEL_KEY: Record<number, RepeatLabelKey> = {
+  [RepeatMode.Off]: 'player.repeatOff',
+  [RepeatMode.All]: 'player.repeatAll',
+  [RepeatMode.One]: 'player.repeatOne',
 };
 
 export default function PlayerScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const {
@@ -122,7 +132,9 @@ export default function PlayerScreen() {
           <Text style={styles.headerIcon}>▾</Text>
         </Pressable>
         <Text style={styles.headerTitle}>
-          {progress ? `1巡 ${progress.played} / ${progress.total}` : '再生中'}
+          {progress
+            ? t('player.roundProgress', { played: progress.played, total: progress.total })
+            : t('player.nowPlayingHeader')}
         </Text>
         <View style={{ width: 20 }} />
       </View>
@@ -181,7 +193,7 @@ export default function PlayerScreen() {
 
             <View style={styles.meta}>
               <Text style={styles.title} numberOfLines={2}>
-                {currentTrack?.title ?? '再生していません'}
+                {currentTrack?.title ?? t('player.noTrack')}
               </Text>
               <Text style={styles.artist} numberOfLines={1}>
                 {currentTrack?.artist ?? ''}
@@ -219,7 +231,9 @@ export default function PlayerScreen() {
                 style={styles.control}
                 onPress={cycleRepeat}
                 hitSlop={10}
-                accessibilityLabel={`リピート ${REPEAT_LABEL[repeatMode] ?? ''}`}
+                accessibilityLabel={t('player.repeatA11y', {
+                  label: REPEAT_LABEL_KEY[repeatMode] ? t(REPEAT_LABEL_KEY[repeatMode]) : '',
+                })}
               >
                 <Image
                   source={
@@ -260,7 +274,7 @@ export default function PlayerScreen() {
                   RUSH {rushOn ? 'ON' : 'OFF'}
                 </Text>
                 <Text style={styles.rushHint}>
-                  {rushOn ? '区間だけ再生して次の曲へ' : '曲を最後まで再生'}
+                  {rushOn ? t('player.rushHintOn') : t('player.rushHintOff')}
                 </Text>
               </Pressable>
 
@@ -288,13 +302,15 @@ export default function PlayerScreen() {
                         status?.fullPlayback && styles.oneShotLabelOn,
                       ]}
                     >
-                      {status?.fullPlayback ? 'この曲は通しで再生中' : 'この曲を最初から'}
+                      {status?.fullPlayback
+                        ? t('player.oneShotActiveLabel')
+                        : t('player.oneShotLabel')}
                     </Text>
                   </View>
                   <Text style={styles.rushHint}>
                     {status?.fullPlayback
-                      ? '次の曲から元に戻ります'
-                      : '頭から最後まで。RUSH はそのまま'}
+                      ? t('player.oneShotHintActive')
+                      : t('player.oneShotHint')}
                   </Text>
                 </Pressable>
               )}
@@ -302,11 +318,11 @@ export default function PlayerScreen() {
 
             {rushOn && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>区間設定</Text>
+                <Text style={styles.cardTitle}>{t('player.segmentCardTitle')}</Text>
                 {SEGMENT_ROWS.map((row) => (
                   <View key={row.key} style={styles.segmentRow}>
                     <View style={styles.segmentHead}>
-                      <Text style={styles.segmentLabel}>{row.label}</Text>
+                      <Text style={styles.segmentLabel}>{t(row.labelKey)}</Text>
                       <View style={styles.steppers}>
                         <Pressable
                           style={styles.stepper}
@@ -352,15 +368,15 @@ export default function PlayerScreen() {
                 ))}
                 {preview && (
                   <Text style={styles.previewText}>
-                    この曲での実効区間 {preview.start.toFixed(1)}〜
-                    {preview.end.toFixed(1)}s{'\n'}
-                    fadeIn {preview.fadeIn.toFixed(1)}s / fadeOut{' '}
-                    {preview.fade.toFixed(1)}s
+                    {t('player.previewText', {
+                      start: preview.start.toFixed(1),
+                      end: preview.end.toFixed(1),
+                      fadeIn: preview.fadeIn.toFixed(1),
+                      fade: preview.fade.toFixed(1),
+                    })}
                   </Text>
                 )}
-                <Text style={styles.note}>
-                  開始位置と再生時間の変更は次の曲から反映されます
-                </Text>
+                <Text style={styles.note}>{t('player.segmentNote')}</Text>
               </View>
             )}
 
@@ -405,16 +421,17 @@ function QueueBar({
   onTop: () => void;
   onCurrent: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.queueHeader}>
-      <Text style={styles.queueHeaderTitle}>再生キュー {count}曲</Text>
+      <Text style={styles.queueHeaderTitle}>{t('player.queueTitle', { count })}</Text>
       <View style={styles.queueHeaderActions}>
         <Pressable style={styles.queueHeaderButton} hitSlop={6} onPress={onTop}>
-          <Text style={styles.queueHeaderAction}>先頭へ</Text>
+          <Text style={styles.queueHeaderAction}>{t('player.jumpToTop')}</Text>
         </Pressable>
         {showCurrent && (
           <Pressable style={styles.queueHeaderButton} hitSlop={6} onPress={onCurrent}>
-            <Text style={styles.queueHeaderAction}>再生中へ</Text>
+            <Text style={styles.queueHeaderAction}>{t('player.jumpToCurrent')}</Text>
           </Pressable>
         )}
       </View>

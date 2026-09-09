@@ -3,6 +3,12 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <!--
+    Android 13 (API 33) 以降はこれが無いと通知を一切出せない。フォアグラウンド
+    サービス自体は動くが、通知だけが黙って握りつぶされ、再生中でも通知やロック
+    画面に何も出ない（2026-09-09 に実機で発覚。詳細は docs/requirements.md）。
+  -->
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
   <application>
     <service

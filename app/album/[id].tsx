@@ -6,6 +6,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 
 import { usePlayback } from '../../src/playback';
 import { getAlbumTracks, getArtistDetail, type Track } from '../../src/library';
@@ -13,6 +14,7 @@ import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
 
 export default function AlbumScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { id, title, artist, artistId } = useLocalSearchParams<{
@@ -56,7 +58,7 @@ export default function AlbumScreen() {
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {title ?? 'アルバム'}
+            {title ?? t('album.fallbackTitle')}
           </Text>
           {artist ? (
             <Text style={styles.headerSub} numberOfLines={1}>
@@ -77,7 +79,7 @@ export default function AlbumScreen() {
           contentContainerStyle={styles.listContent}
           ListHeaderComponent={
             <View style={styles.summaryRow}>
-              <Text style={styles.summary}>{tracks.length}曲</Text>
+              <Text style={styles.summary}>{t('common.songCount', { count: tracks.length })}</Text>
               <View style={styles.actions}>
                 <Pressable
                   style={styles.action}
@@ -86,7 +88,7 @@ export default function AlbumScreen() {
                     router.push('/player');
                   }}
                 >
-                  <Text style={styles.actionText}>▶ 順番に</Text>
+                  <Text style={styles.actionText}>{`▶ ${t('common.playInOrder')}`}</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.action, styles.actionPrimary]}
@@ -95,7 +97,7 @@ export default function AlbumScreen() {
                     router.push('/player');
                   }}
                 >
-                  <Text style={styles.actionPrimaryText}>⤮ シャッフル</Text>
+                  <Text style={styles.actionPrimaryText}>{`⤮ ${t('common.shufflePlay')}`}</Text>
                 </Pressable>
               </View>
             </View>

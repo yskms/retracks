@@ -20,7 +20,8 @@
       "expo-music-library",
       "expo-splash-screen",
       "expo-router",
-      "expo-image"
+      "expo-image",
+      "expo-localization"
     ],
     "scheme": "retracks"
   }
