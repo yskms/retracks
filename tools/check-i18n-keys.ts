@@ -30,9 +30,11 @@ function placeholders(s: string): string[] {
 }
 
 /** en だけが持つキーは、i18next の複数形サフィックス（_one など）の
- * うち ja では単一の _other に畳まれているものだけを許す。 */
+ * うち ja では単一の _other に畳まれているものだけを許す。
+ * ja 側にその _other が実在するかを見る（en 自身を見ても en の内部整合性
+ * しか確認できず、ja が丸ごと欠けているケースを見逃す）。 */
 function isPluralOnlyKey(key: string): boolean {
-  return /_(zero|one|two|few|many)$/.test(key) && `${key.replace(/_(zero|one|two|few|many)$/, '_other')}` in enFlat;
+  return /_(zero|one|two|few|many)$/.test(key) && `${key.replace(/_(zero|one|two|few|many)$/, '_other')}` in jaFlat;
 }
 
 const jaFlat = flatten(ja);
