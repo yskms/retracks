@@ -18,7 +18,18 @@
     },
     "plugins": [
       "expo-music-library",
-      "expo-splash-screen",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 100,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF",
+          "dark": {
+            "backgroundColor": "#050505"
+          }
+        }
+      ],
       "expo-router",
       "expo-image",
       "expo-localization"

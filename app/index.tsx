@@ -194,8 +194,12 @@ export default function LibraryScreen() {
             >
               <Text style={styles.headerIcon}>⌕</Text>
             </Pressable>
-            <Pressable hitSlop={10} onPress={() => router.push('/debug')}>
-              <Text style={styles.headerIcon}>⋮</Text>
+            <Pressable
+              hitSlop={10}
+              onPress={() => router.push('/settings')}
+              accessibilityLabel={t('settings.openA11y')}
+            >
+              <Text style={styles.headerIcon}>⚙</Text>
             </Pressable>
           </View>
         </View>
