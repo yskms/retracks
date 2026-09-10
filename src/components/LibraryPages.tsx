@@ -10,7 +10,6 @@ import type { ReactElement } from 'react';
 import {
   ActivityIndicator,
   FlatList,
-  Pressable,
   type RefreshControlProps,
   StyleSheet,
   Text,
@@ -44,24 +43,17 @@ type SelectionHelpers<K extends string> = {
 export function SongsPage({
   tracks,
   currentTrack,
-  allProgress,
   inSelection,
   isSelected,
   toggle,
   playFrom,
-  playAll,
   refreshControl,
 }: SelectionHelpers<'songs'> & {
   tracks: Track[];
   currentTrack: { id: string } | null;
-  allProgress: { played: number; total: number } | null;
   playFrom: (tracks: Track[], index: number) => Promise<void>;
-  playAll: () => Promise<void>;
   refreshControl: ReactElement<RefreshControlProps>;
 }) {
-  const { t } = useTranslation();
-  const router = useRouter();
-
   return (
     <View style={styles.page}>
       {tracks.length === 0 ? (
@@ -100,25 +92,6 @@ export function SongsPage({
             />
           )}
         />
-      )}
-      {!inSelection && tracks.length > 0 && (
-        <Pressable
-          style={styles.fab}
-          onPress={async () => {
-            await playAll();
-            router.push('/player');
-          }}
-        >
-          <Text style={styles.fabGlyph}>⤮</Text>
-          <Text style={styles.fabLabel}>
-            {allProgress && allProgress.played > 1
-              ? t('library.continueFrom', {
-                  played: allProgress.played,
-                  total: allProgress.total,
-                })
-              : t('library.shuffleAll')}
-          </Text>
-        </Pressable>
       )}
     </View>
   );
@@ -292,20 +265,6 @@ const styles = StyleSheet.create({
   listContent: { paddingBottom: 24 },
   gridContent: { padding: GRID_PADDING, paddingBottom: 24 },
   gridRow: { gap: GRID_GAP },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 18,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.accent,
-  },
-  fabGlyph: { color: '#1a1206', fontSize: 18, fontWeight: '700' },
-  fabLabel: { color: '#1a1206', fontSize: 13, fontWeight: '700' },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: colors.textDim, fontSize: 13 },
 });

@@ -241,12 +241,10 @@ export default function LibraryScreen() {
           <SongsPage
             tracks={tracks}
             currentTrack={currentTrack}
-            allProgress={allProgress}
             inSelection={inSelection}
             isSelected={isSelected}
             toggle={toggle}
             playFrom={playFrom}
-            playAll={playAll}
             refreshControl={refreshControl}
           />
         </View>
@@ -277,6 +275,28 @@ export default function LibraryScreen() {
           />
         </View>
       </AnimatedPagerView>
+
+      {/* 全曲シャッフルの導線。曲一覧が空でも、選択中でもない限り、
+          どのタブを見ていても押せる（タブの表示/非表示の影響を受けない）。 */}
+      {!inSelection && tracks.length > 0 && (
+        <Pressable
+          style={styles.fab}
+          onPress={async () => {
+            await playAll();
+            router.push('/player');
+          }}
+        >
+          <Text style={styles.fabGlyph}>⤮</Text>
+          <Text style={styles.fabLabel}>
+            {allProgress && allProgress.played > 1
+              ? t('library.continueFrom', {
+                  played: allProgress.played,
+                  total: allProgress.total,
+                })
+              : t('library.shuffleAll')}
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -325,4 +345,18 @@ const styles = StyleSheet.create({
   rowTrailing: { color: colors.textDim, fontSize: 12 },
   chevron: { color: colors.textDim, fontSize: 20 },
   check: { color: colors.accent, fontSize: 16, fontWeight: '700' },
+  fab: {
+    position: 'absolute',
+    right: 16,
+    bottom: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 18,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.accent,
+  },
+  fabGlyph: { color: '#1a1206', fontSize: 18, fontWeight: '700' },
+  fabLabel: { color: '#1a1206', fontSize: 13, fontWeight: '700' },
 });
