@@ -5,11 +5,9 @@
  * タブ構成ではなく、配列から組み立てるページャにしている。
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
-  FlatList,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -21,7 +19,6 @@ import PagerView from 'react-native-pager-view';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
 
 import { usePlayback } from '../src/playback';
 import {
@@ -31,16 +28,18 @@ import {
   getTracksForArtists,
   type Track,
 } from '../src/library';
-import { colors, formatDuration } from '../src/theme';
-import { Row } from '../src/components/Row';
-import { Tile } from '../src/components/Tile';
-import { useSelection } from '../src/useSelection';
+import { colors } from '../src/theme';
 import {
-  columnsOf,
-  LAYOUT_ICON,
-  tileSizeOf,
-  useLayouts,
-} from '../src/layout';
+  AlbumsPage,
+  ArtistsPage,
+  FAB_BOTTOM_OFFSET,
+  FAB_HEIGHT,
+  SongsPage,
+} from '../src/components/LibraryPages';
+import { useSelection } from '../src/useSelection';
+import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
+import { TAB_LABEL_KEY, TAB_LAYOUT_KEY, type TabId } from '../src/tabs';
+import { useSettings } from '../src/settings';
 
 /**
  * 下線をネイティブ側で動かすためのラッパ。
@@ -48,29 +47,22 @@ import {
  */
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
 
-type TabId = 'songs' | 'artists' | 'albums';
-
 const GRID_PADDING = 12;
 const GRID_GAP = 10;
-
-/**
- * 一覧の行の高さ。getItemLayout を与えると、FlatList が各行を測らずに
- * 位置を決められるため、描画範囲の管理が正確になり保持する行数が減る。
- */
-const ROW_HEIGHT = 66;
 
 export default function LibraryScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const { tabs: tabSettings, ready: settingsReady } = useSettings();
+  // 非表示のタブはページャに載せない。順序はそのまま設定の並びを使う。
   const tabs: { id: TabId; label: string }[] = useMemo(
-    () => [
-      { id: 'songs', label: t('library.tabSongs') },
-      { id: 'artists', label: t('library.tabArtists') },
-      { id: 'albums', label: t('library.tabAlbums') },
-    ],
-    [t]
+    () =>
+      tabSettings
+        .filter((tab) => tab.visible)
+        .map((tab) => ({ id: tab.id, label: t(TAB_LABEL_KEY[tab.id]) })),
+    [tabSettings, t]
   );
   const {
     tracks,
@@ -87,7 +79,26 @@ export default function LibraryScreen() {
     useSelection<TabId>();
 
   const pagerRef = useRef<PagerView>(null);
-  const [page, setPage] = useState(0);
+  // page はここから導出する値であって、真実の情報源ではない。タブの並びや
+  // 表示が設定側で変わると同じインデックスが別のタブを指すことになるため、
+  // 「今どのタブを見ているか」は activeTabId（タブID）で持つ。
+  //
+  // 初期値を tabs[0] で決め打ちにできない。設定の読み込みは非同期なので、
+  // 最初のレンダー時点では tabSettings がまだ既定値（曲・アーティスト・
+  // アルバムの順）で、保存済みの並び順（例：アルバムが先頭）を確定前に
+  // 曲タブへ決め打ちしてしまう。読み込みが終わるまでは null のままにし、
+  // 下の resolvedActiveTabId で「まだ確定していない間だけ tabs[0] を見せる」
+  // 形にして、実際の状態確定は settingsReady を待つ（→下の useEffect）。
+  const [activeTabId, setActiveTabId] = useState<TabId | null>(null);
+  const resolvedActiveTabId =
+    activeTabId != null && tabs.some((tab) => tab.id === activeTabId)
+      ? activeTabId
+      : (tabs[0]?.id ?? 'songs');
+  const page = Math.max(0, tabs.findIndex((tab) => tab.id === resolvedActiveTabId));
+  // タブの構成（並び・表示）が変わるたびに変化する文字列。ページャの子の
+  // 増減・並べ替えは react-native-pager-view（Android は ViewPager2）側で
+  // ずれることがあるため、変わったら key を変えてページャごと作り直す。
+  const pagerKey = tabs.map((tab) => tab.id).join(',');
   const [refreshing, setRefreshing] = useState(false);
 
   /** 一覧の一番上から引っ張って更新。裏の自動走査とは別に、明示的に走らせる。 */
@@ -111,7 +122,17 @@ export default function LibraryScreen() {
   );
 
   const { layouts, cycle } = useLayouts();
-  const currentLayoutKey = page === 1 ? 'artists' : 'albums';
+  // レイアウト切替アイコンは「そのタブに表示形式があるか」で出す。
+  // 曲タブだから出さない、という決め打ちにしないので、タブが増えても
+  // TAB_LAYOUT_KEY に1件足すだけで済む。
+  //
+  // 参照元は tabs[page]（今まさに表示しているタブ）であって activeTabId
+  // ではない。構成が変わった直後の1レンダーだけ activeTabId が「もう
+  // 表示されていないタブ」を指すことがあり（後始末の useEffect が直すまでの
+  // 一瞬）、そこで直接 activeTabId を見るとその一瞬だけ違うタブのアイコンが
+  // 出てしまう。tabs[page] は page 自体が resolvedActiveTabId 経由で
+  // 常に存在するタブへフォールバックした値なので、この問題が起きない。
+  const layoutKeyForActiveTab = tabs[page] ? TAB_LAYOUT_KEY[tabs[page].id] : undefined;
   const tileSizeFor = (layout: (typeof layouts)['artists']) =>
     tileSizeOf(width, layout, GRID_PADDING, GRID_GAP);
 
@@ -125,6 +146,33 @@ export default function LibraryScreen() {
   const position = useRef(new Animated.Value(0)).current;
   const offset = useRef(new Animated.Value(0)).current;
   const tabWidth = width / tabs.length;
+
+  // タブの構成が変わってページャを作り直すときの後始末。
+  // - activeTabId がまだ未確定（起動直後、設定の読み込み待ち）なら、
+  //   読み込みが終わった時点で先頭のタブに確定させる
+  // - 今見ていたタブが消えていたら、先頭のタブへ切り替える
+  // - 下線（position/offset）は onPageScroll でしか動かないので、
+  //   スワイプせずに構成が変わると古い位置に取り残される。作り直した
+  //   ページャの今のページへ合わせておく
+  // - 隠したタブの選択が残ったまま選択ヘッダーだけ出る、という状態を避ける
+  useEffect(() => {
+    if (activeTabId == null) {
+      // 読み込み前に確定させると、保存済みの並び順の先頭が曲タブでなくても
+      // 常に曲タブへ着地してしまう。読み込みが終わるまでは何もしない
+      // （resolvedActiveTabId が見た目上は tabs[0] を出してくれている）。
+      if (settingsReady) setActiveTabId(tabs[0]?.id ?? 'songs');
+      return;
+    }
+    if (!tabs.some((tab) => tab.id === activeTabId)) {
+      setActiveTabId(tabs[0]?.id ?? 'songs');
+    }
+    position.setValue(page);
+    offset.setValue(0);
+    clear();
+    // pagerKey が変わったとき（＝ページャを作り直すとき）と、設定の読み込みが
+    // 終わったときだけ実行したい。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagerKey, settingsReady]);
 
   /** 選択したものからキューを作って再生する（要件 10.3）。 */
   const playSelection = useCallback(async (shuffled: boolean) => {
@@ -180,10 +228,10 @@ export default function LibraryScreen() {
         <View style={styles.header}>
           <Text style={styles.brand}>RE:TR4CKS</Text>
           <View style={styles.headerRight}>
-            {page > 0 && (
-              <Pressable hitSlop={10} onPress={() => cycle(currentLayoutKey)}>
+            {layoutKeyForActiveTab && (
+              <Pressable hitSlop={10} onPress={() => cycle(layoutKeyForActiveTab)}>
                 <Text style={styles.headerIcon}>
-                  {LAYOUT_ICON[layouts[currentLayoutKey]]}
+                  {LAYOUT_ICON[layouts[layoutKeyForActiveTab]]}
                 </Text>
               </Pressable>
             )}
@@ -239,207 +287,83 @@ export default function LibraryScreen() {
       </View>
 
       <AnimatedPagerView
+        key={pagerKey}
         ref={pagerRef}
         style={styles.pager}
-        initialPage={0}
+        initialPage={page}
         onPageScroll={Animated.event(
           [{ nativeEvent: { position, offset } }],
           { useNativeDriver: true }
         )}
         onPageSelected={(event) => {
-          setPage(event.nativeEvent.position);
+          const next = tabs[event.nativeEvent.position];
+          if (next) setActiveTabId(next.id);
           // タブを移ると選択対象の種類が変わってしまうので解除する
           clear();
         }}
       >
-        {/* 楽曲 */}
-        <View key="songs" style={styles.page}>
-          {tracks.length === 0 ? (
-            <Loading />
-          ) : (
-            <FlatList
-              data={tracks}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContent}
-              initialNumToRender={12}
-              windowSize={4}
-              maxToRenderPerBatch={8}
-              updateCellsBatchingPeriod={50}
-              removeClippedSubviews
-              getItemLayout={(_, index) => ({
-                length: ROW_HEIGHT,
-                offset: ROW_HEIGHT * index,
-                index,
-              })}
-              refreshControl={refreshControl}
-              renderItem={({ item, index }) => (
-                <Row
-                  title={item.title}
-                  subtitle={item.artist}
-                  trailing={formatDuration(item.durationMs)}
-                  artworkUri={item.artworkUri}
-                  selected={isSelected('songs', item.id)}
-                  playing={currentTrack?.id === item.id}
-                  onPress={async () => {
-                    if (inSelection) return toggle('songs', item.id);
-                    // 曲を直接タップしたときは画面を移さない。
-                    // 一覧を見ながら次々選べるようにするため。
-                    await playFrom(tracks, index);
-                  }}
-                  onLongPress={() => toggle('songs', item.id)}
-                />
-              )}
-            />
-          )}
-          {!inSelection && tracks.length > 0 && (
-            <Pressable
-              style={styles.fab}
-              onPress={async () => {
-                await playAll();
-                router.push('/player');
-              }}
-            >
-              <Text style={styles.fabGlyph}>⤮</Text>
-              <Text style={styles.fabLabel}>
-                {allProgress && allProgress.played > 1
-                  ? t('library.continueFrom', {
-                      played: allProgress.played,
-                      total: allProgress.total,
-                    })
-                  : t('library.shuffleAll')}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-
-        {/* アーティスト */}
-        <View key="artists" style={styles.page}>
-          <FlatList
-            // numColumns は途中で変えられないので、key を変えて作り直す
-            key={layouts.artists}
-            data={artists}
-            keyExtractor={(item) => item.id}
-            numColumns={columnsOf(layouts.artists)}
-            windowSize={4}
-            maxToRenderPerBatch={12}
-            removeClippedSubviews
-            columnWrapperStyle={
-              layouts.artists === 'list' ? undefined : styles.gridRow
-            }
-            contentContainerStyle={
-              layouts.artists === 'list' ? styles.listContent : styles.gridContent
-            }
-            refreshControl={refreshControl}
-            renderItem={({ item }) =>
-              layouts.artists !== 'list' ? (
-                <Tile
-                  title={item.name}
-                  subtitle={subtitleForArtist(t, albumCounts.get(item.name), item.trackCount)}
-                  artworkUri={artistArtwork.get(item.name) ?? null}
-                  size={tileSizeFor(layouts.artists)}
-                  selected={isSelected('artists', item.id)}
-                  onPress={() => {
-                    if (inSelection) return toggle('artists', item.id);
-                    router.push({
-                      pathname: '/artist/[id]',
-                      params: { id: item.id, name: item.name },
-                    });
-                  }}
-                  onLongPress={() => toggle('artists', item.id)}
-                />
-              ) : (
-                <Row
-                  title={item.name}
-                  subtitle={subtitleForArtist(t, albumCounts.get(item.name), item.trackCount)}
-                  artworkUri={artistArtwork.get(item.name) ?? null}
-                  chevron
-                  selected={isSelected('artists', item.id)}
-                  onPress={() => {
-                    if (inSelection) return toggle('artists', item.id);
-                    router.push({
-                      pathname: '/artist/[id]',
-                      params: { id: item.id, name: item.name },
-                    });
-                  }}
-                  onLongPress={() => toggle('artists', item.id)}
-                />
-              )
-            }
-          />
-        </View>
-
-        {/* アルバム */}
-        <View key="albums" style={styles.page}>
-          <FlatList
-            key={layouts.albums}
-            data={albums}
-            keyExtractor={(item) => item.id}
-            numColumns={columnsOf(layouts.albums)}
-            windowSize={4}
-            maxToRenderPerBatch={12}
-            removeClippedSubviews
-            columnWrapperStyle={layouts.albums === 'list' ? undefined : styles.gridRow}
-            contentContainerStyle={
-              layouts.albums === 'list' ? styles.listContent : styles.gridContent
-            }
-            refreshControl={refreshControl}
-            renderItem={({ item }) => {
-              const subtitle = item.year
-                ? `${item.artist} · ${item.year}`
-                : `${item.artist} · ${t('common.songCount', { count: item.trackCount })}`;
-              const open = () => {
-                if (inSelection) return toggle('albums', item.id);
-                router.push({
-                  pathname: '/album/[id]',
-                  params: { id: item.id, title: item.title, artist: item.artist },
-                });
-              };
-              return layouts.albums !== 'list' ? (
-                <Tile
-                  title={item.title}
-                  subtitle={subtitle}
-                  artworkUri={item.artworkUri}
-                  size={tileSizeFor(layouts.albums)}
-                  selected={isSelected('albums', item.id)}
-                  onPress={open}
-                  onLongPress={() => toggle('albums', item.id)}
-                />
-              ) : (
-                <Row
-                  title={item.title}
-                  subtitle={subtitle}
-                  artworkUri={item.artworkUri}
-                  chevron
-                  selected={isSelected('albums', item.id)}
-                  onPress={open}
-                  onLongPress={() => toggle('albums', item.id)}
-                />
-              );
-            }}
-          />
-        </View>
-
+        {tabs.map((tab) => (
+          <View key={tab.id}>
+            {tab.id === 'songs' && (
+              <SongsPage
+                tracks={tracks}
+                currentTrack={currentTrack}
+                inSelection={inSelection}
+                isSelected={isSelected}
+                toggle={toggle}
+                playFrom={playFrom}
+                refreshControl={refreshControl}
+              />
+            )}
+            {tab.id === 'artists' && (
+              <ArtistsPage
+                artists={artists}
+                layout={layouts.artists}
+                albumCounts={albumCounts}
+                artistArtwork={artistArtwork}
+                inSelection={inSelection}
+                isSelected={isSelected}
+                toggle={toggle}
+                tileSizeFor={tileSizeFor}
+                refreshControl={refreshControl}
+              />
+            )}
+            {tab.id === 'albums' && (
+              <AlbumsPage
+                albums={albums}
+                layout={layouts.albums}
+                inSelection={inSelection}
+                isSelected={isSelected}
+                toggle={toggle}
+                tileSizeFor={tileSizeFor}
+                refreshControl={refreshControl}
+              />
+            )}
+          </View>
+        ))}
       </AnimatedPagerView>
-    </View>
-  );
-}
 
-/** 「アルバム数 · 曲数」のように出す。アルバム数が数えられない場合は曲数だけ。 */
-function subtitleForArtist(
-  t: TFunction,
-  albumCount: number | undefined,
-  trackCount: number
-): string {
-  const songs = t('common.songCount', { count: trackCount });
-  return albumCount ? `${t('common.albumCount', { count: albumCount })} · ${songs}` : songs;
-}
-
-function Loading() {
-  const { t } = useTranslation();
-  return (
-    <View style={styles.loading}>
-      <ActivityIndicator color={colors.accent} />
-      <Text style={styles.loadingText}>{t('library.loading')}</Text>
+      {/* 全曲シャッフルの導線。曲一覧が空でも、選択中でもない限り、
+          どのタブを見ていても押せる（タブの表示/非表示の影響を受けない）。 */}
+      {!inSelection && tracks.length > 0 && (
+        <Pressable
+          style={styles.fab}
+          onPress={async () => {
+            await playAll();
+            router.push('/player');
+          }}
+        >
+          <Text style={styles.fabGlyph}>⤮</Text>
+          <Text style={styles.fabLabel}>
+            {allProgress && allProgress.played > 1
+              ? t('library.continueFrom', {
+                  played: allProgress.played,
+                  total: allProgress.total,
+                })
+              : t('library.shuffleAll')}
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -473,10 +397,6 @@ const styles = StyleSheet.create({
   tabLabelActive: { color: colors.text, fontWeight: '700' },
   indicator: { height: 2, backgroundColor: colors.accent },
   pager: { flex: 1 },
-  page: { flex: 1 },
-  listContent: { paddingBottom: 24 },
-  gridContent: { padding: GRID_PADDING, paddingBottom: 24 },
-  gridRow: { gap: GRID_GAP },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -495,17 +415,15 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 16,
-    bottom: 16,
+    bottom: FAB_BOTTOM_OFFSET,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 18,
-    height: 48,
-    borderRadius: 24,
+    height: FAB_HEIGHT,
+    borderRadius: FAB_HEIGHT / 2,
     backgroundColor: colors.accent,
   },
   fabGlyph: { color: '#1a1206', fontSize: 18, fontWeight: '700' },
   fabLabel: { color: '#1a1206', fontSize: 13, fontWeight: '700' },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  loadingText: { color: colors.textDim, fontSize: 13 },
 });

@@ -182,7 +182,7 @@ export default function SearchScreen() {
               {filteredArtists.length > 0 && (
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>{t('library.tabArtists')}</Text>
+                    <Text style={styles.sectionTitle}>{t('search.sectionArtists')}</Text>
                     {filteredArtists.length > SECTION_LIMIT && (
                       <Text style={styles.sectionCount}>
                         {t('search.moreCount', { n: filteredArtists.length - SECTION_LIMIT })}
@@ -215,7 +215,7 @@ export default function SearchScreen() {
               {filteredAlbums.length > 0 && (
                 <View style={styles.section}>
                   <View style={styles.sectionHeader}>
-                    <Text style={styles.sectionTitle}>{t('library.tabAlbums')}</Text>
+                    <Text style={styles.sectionTitle}>{t('search.sectionAlbums')}</Text>
                     {filteredAlbums.length > SECTION_LIMIT && (
                       <Text style={styles.sectionCount}>
                         {t('search.moreCount', { n: filteredAlbums.length - SECTION_LIMIT })}
@@ -248,7 +248,7 @@ export default function SearchScreen() {
 
               {filteredTracks.length > 0 && (
                 <Text style={[styles.sectionTitle, styles.sectionTitleStandalone]}>
-                  {t('library.tabSongs')}
+                  {t('search.sectionSongs')}
                 </Text>
               )}
 
