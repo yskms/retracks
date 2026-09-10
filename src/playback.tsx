@@ -614,8 +614,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       }
       byId.set(t.folderId, { id: t.folderId, name: t.folderName || t.folderId, trackCount: 1 });
     }
-    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
-  }, [rawTracks]);
+    // 他の一覧（tracks/artists/albums）と同じ並べ替え規則に揃える
+    // （Collatorを都度作らず使い回す。→ src/sorting.ts）。
+    return sortByField([...byId.values()], (f) => f.name, articleOptions);
+  }, [rawTracks, articleOptions]);
 
   const artists = useMemo(
     () => sortByField(rawArtists, (a) => a.name, articleOptions),
