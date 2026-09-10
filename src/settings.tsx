@@ -149,6 +149,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // 上書きしてしまう（実際の書き込み起点は設定画面のユーザー操作だけなので
   // 通常は起きないが、保険として弾く）。
   const readyRef = useRef(false);
+  // 読み込みが届いた最初のコミットだけ、保存 effect をスキップするための ref。
+  // → 下の保存 effect のコメント参照。
+  const hasHydratedRef = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,8 +177,22 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   // 実際にコミットされる保証のない呼ばれ方をする。ここに移すことで、
   // 「実際に画面に反映された設定だけが、コミットされた順に、1回ずつ」
   // 保存される。
+  //
+  // ただし、読み込みが届いた最初のコミットだけは書かない。readJson は
+  // 読み取り失敗と「保存されていない」を区別せず null を返す
+  // （→ src/storage.ts）ため、読み込みが失敗すると saved は
+  // normalize(null) で DEFAULT_SETTINGS になる。ここで無条件に書けば、
+  // 一時的な読み取り失敗が「保存済みの設定を既定値で上書きして消す」
+  // という恒久的な事故になってしまう。以前（書き込みがユーザー操作
+  // 起点だけだった頃）は読み取り失敗してもディスクは無傷で、次回起動で
+  // 復旧できていた。その性質を保つため、読み込み由来のコミットは
+  // スキップし、実際に patch() でユーザーが変更したときだけ書く。
   useEffect(() => {
     if (!ready) return;
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      return;
+    }
     writeJson(StorageKeys.appSettings, settings).catch((e) => {
       console.warn('Failed to persist settings', e);
     });
