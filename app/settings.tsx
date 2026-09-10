@@ -45,16 +45,25 @@ export default function SettingsScreen() {
 
   const visibleTabCount = tabs.filter((tab) => tab.visible).length;
 
-  const moveTab = (index: number, delta: number) => {
-    const target = index + delta;
-    if (target < 0 || target >= tabs.length) return;
-    const next: TabEntry[] = [...tabs];
-    [next[index], next[target]] = [next[target], next[index]];
-    setTabs(next);
+  // id をもとに更新関数で書き込む。▲▼は連打される種類のボタンなので、
+  // 素の配列を作ってから setTabs に渡すと、レンダーが追いつかない間の
+  // 2回目のタップが1回目の結果を知らずに上書きしてしまう（lost update）。
+  // 加えて、タップした時点の index をそのまま閉じ込めて使うと、1回目の
+  // 並べ替えで配列の並びが変わった後の2回目が、別のタブを動かしてしまう。
+  // id で毎回引き直すことで、どちらの問題も避けられる。
+  const moveTab = (id: TabEntry['id'], delta: number) => {
+    setTabs((prev) => {
+      const index = prev.findIndex((tab) => tab.id === id);
+      const target = index + delta;
+      if (index < 0 || target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   };
 
-  const toggleTabVisible = (index: number, visible: boolean) => {
-    setTabs(tabs.map((tab, i) => (i === index ? { ...tab, visible } : tab)));
+  const toggleTabVisible = (id: TabEntry['id'], visible: boolean) => {
+    setTabs((prev) => prev.map((tab) => (tab.id === id ? { ...tab, visible } : tab)));
   };
 
   // ＋／－の表示は毎タップ即座に動かし、実際の適用（曲一覧の絞り込み再計算・
@@ -222,7 +231,7 @@ export default function SettingsScreen() {
                   hitSlop={10}
                   disabled={index === 0}
                   accessibilityLabel={t('settings.tabMoveUpA11y')}
-                  onPress={() => moveTab(index, -1)}
+                  onPress={() => moveTab(tab.id, -1)}
                 >
                   <Text style={styles.stepperButtonText}>▲</Text>
                 </Pressable>
@@ -234,7 +243,7 @@ export default function SettingsScreen() {
                   hitSlop={10}
                   disabled={index === tabs.length - 1}
                   accessibilityLabel={t('settings.tabMoveDownA11y')}
-                  onPress={() => moveTab(index, 1)}
+                  onPress={() => moveTab(tab.id, 1)}
                 >
                   <Text style={styles.stepperButtonText}>▼</Text>
                 </Pressable>
@@ -244,7 +253,7 @@ export default function SettingsScreen() {
               </Text>
               <Switch
                 value={tab.visible}
-                onValueChange={(value) => toggleTabVisible(index, value)}
+                onValueChange={(value) => toggleTabVisible(tab.id, value)}
                 disabled={tab.visible && visibleTabCount <= 1}
                 trackColor={{ true: colors.accentDim, false: colors.surfaceHigh }}
                 thumbColor={tab.visible ? colors.accent : colors.textDim}

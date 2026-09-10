@@ -71,7 +71,7 @@ type SettingsValue = Settings & {
   setShortTrackThresholdSec: (value: number) => void;
   setIgnoreLeadingThe: (value: boolean) => void;
   setIgnoreLeadingAAn: (value: boolean) => void;
-  setTabs: (next: TabEntry[]) => void;
+  setTabs: (next: TabEntry[] | ((prev: TabEntry[]) => TabEntry[])) => void;
 };
 
 const SettingsContext = createContext<SettingsValue | null>(null);
@@ -167,21 +167,47 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // 保存は setState の更新関数の外、コミット後の副作用としてだけ行う。
+  // 以前は patch() の中の setSettings((prev) => { ...; writeJson(...); return next })
+  // という形で、更新関数の内側に書き込みを置いていた。だが更新関数は
+  // Reactが「純粋」を前提にしている関数で、Strict Mode の二重呼び出しなど、
+  // 実際にコミットされる保証のない呼ばれ方をする。ここに移すことで、
+  // 「実際に画面に反映された設定だけが、コミットされた順に、1回ずつ」
+  // 保存される。
+  useEffect(() => {
+    if (!ready) return;
+    writeJson(StorageKeys.appSettings, settings).catch((e) => {
+      console.warn('Failed to persist settings', e);
+    });
+  }, [settings, ready]);
+
   /**
-   * 1フィールドだけ更新して保存する。個別の setXxx はこれの薄いラッパ。
+   * 1フィールドだけ更新する。個別の setXxx はこれの薄いラッパ。
    * 読み込み前で弾いた場合は false を返す。呼び出し側が「保存はできなかったが
    * 見た目だけ変える」ような副作用（setLanguage の i18next.changeLanguage
    * など）を連動させないための戻り値。
+   *
+   * value は値そのものでも、(prev) => next という更新関数でもよい。配列など
+   * 「今の値をもとに次の値を作る」更新（タブの並べ替えなど）を素の値で
+   * 渡すと、連打でレンダーが追いつかない間に呼ばれた2回目が、1回目の
+   * 結果を知らないまま古い prev から next を作ってしまい、1回目の変更を
+   * 踏みつぶす（lost update）。更新関数として渡せば、Reactがキューに
+   * 積んだ順で確実に前の結果の上に適用してくれる。
    */
-  const patch = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]): boolean => {
-    if (!readyRef.current) return false;
-    setSettings((prev) => {
-      const next = { ...prev, [key]: value };
-      void writeJson(StorageKeys.appSettings, next);
-      return next;
-    });
-    return true;
-  }, []);
+  const patch = useCallback(
+    <K extends keyof Settings>(
+      key: K,
+      value: Settings[K] | ((prev: Settings[K]) => Settings[K])
+    ): boolean => {
+      if (!readyRef.current) return false;
+      setSettings((prev) => {
+        const resolved = typeof value === 'function' ? (value as (p: Settings[K]) => Settings[K])(prev[key]) : value;
+        return { ...prev, [key]: resolved };
+      });
+      return true;
+    },
+    []
+  );
 
   const setLanguage = useCallback(
     (language: LanguagePreference) => {
@@ -214,11 +240,13 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   );
 
   const setTabs = useCallback(
-    (next: TabEntry[]) => {
-      // 呼び出し側（設定画面）が「最後の1枚は隠せない」を守っている前提だが、
-      // 保存内容が壊れて0件になる事故だけは最後の砦として弾いておく。
-      if (!next.some((tab) => tab.visible)) return;
-      patch('tabs', next);
+    (update: TabEntry[] | ((prev: TabEntry[]) => TabEntry[])) => {
+      patch('tabs', (prev) => {
+        const next = typeof update === 'function' ? update(prev) : update;
+        // 呼び出し側（設定画面）が「最後の1枚は隠せない」を守っている前提だが、
+        // 保存内容が壊れて0件になる事故だけは最後の砦として弾いておく。
+        return next.some((tab) => tab.visible) ? next : prev;
+      });
     },
     [patch]
   );
