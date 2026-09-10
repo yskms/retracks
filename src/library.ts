@@ -7,7 +7,7 @@
 
 import * as MusicLibrary from 'expo-music-library';
 
-import { RetracksPlayer } from '../modules/retracks-player/src';
+import { RetracksPlayer, type TrackFolders } from '../modules/retracks-player/src';
 
 import { readJson, StorageKeys, writeJson } from './storage';
 
@@ -23,10 +23,22 @@ export type Track = {
    * ネットワークからの取得は一切しない。無ければ null。
    */
   artworkUri: string | null;
+  /**
+   * MediaStore の IS_MUSIC。false なら着信音・通知音・アラーム・
+   * オーディオブックなどの可能性が高い（expo-music-library はこの列を見ておらず、
+   * 素通しになっていた。→ RetracksPlayer.getTrackFolders()）。
+   * scanLibrary() 以外（アーティスト/アルバム詳細など）から作った Track は
+   * 判定していないため既定で true（除外しない側）。
+   */
+  isMusic: boolean;
+  /** 所属フォルダのID。scanLibrary() 以外から作った Track では null。 */
+  folderId: string | null;
+  /** 所属フォルダの表示名。folderId が null なら null。 */
+  folderName: string | null;
 };
 
 export type LibrarySnapshot = {
-  version: 3;
+  version: 4;
   scannedAt: number;
   tracks: Track[];
 };
@@ -68,7 +80,25 @@ function artworkUriOf(asset: {
   return asset.artworkUri || asset.artwork || null;
 }
 
-function toTrack(asset: MusicLibrary.Asset): Track {
+const EMPTY_FOLDERS: TrackFolders = {
+  nonMusicTrackIds: [],
+  folderIdByTrackId: {},
+  folderNames: {},
+};
+
+/**
+ * folders/nonMusicSet は scanLibrary() だけが渡す。アーティスト/アルバムの詳細
+ * など、そちらを経由しない Track は isMusic: true・folderId: null のまま
+ * （これらの設定はアプリ全体の絞り込み用で、その場面ではまだ対象外なため。
+ * → excludeShortTracks の既存の制約と同じ整理）。
+ */
+function toTrack(
+  asset: MusicLibrary.Asset,
+  folders: TrackFolders = EMPTY_FOLDERS,
+  nonMusicSet?: Set<string>
+): Track {
+  const isNonMusic = (nonMusicSet ?? new Set(folders.nonMusicTrackIds)).has(asset.id);
+  const folderId = folders.folderIdByTrackId[asset.id] ?? null;
   return {
     id: asset.id,
     uri: asset.uri,
@@ -78,6 +108,9 @@ function toTrack(asset: MusicLibrary.Asset): Track {
     // expo-music-library の duration は秒
     durationMs: Math.round((asset.duration || 0) * 1000),
     artworkUri: artworkUriOf(asset),
+    isMusic: !isNonMusic,
+    folderId,
+    folderName: folderId ? (folders.folderNames[folderId] ?? null) : null,
   };
 }
 
@@ -88,7 +121,12 @@ export async function requestPermission(): Promise<boolean> {
 
 /** 端末を実際に走査する。 */
 export async function scanLibrary(): Promise<Track[]> {
-  const tracks: Track[] = [];
+  // ページングと並行して投げる。曲の追加削除がその間に起きても、
+  // 対応表に無い曲は isMusic: true・folderId: null に倒れるだけで安全
+  // （→ RetracksPlayerModule.kt のコメント）。
+  const foldersPromise = RetracksPlayer.getTrackFolders().catch(() => EMPTY_FOLDERS);
+
+  const assets: MusicLibrary.Asset[] = [];
   let after: string | undefined;
   let pages = 0;
 
@@ -101,28 +139,28 @@ export async function scanLibrary(): Promise<Track[]> {
       artwork: ARTWORK_MODE,
     });
 
-    for (const asset of page.assets) {
-      tracks.push(toTrack(asset));
-    }
+    assets.push(...page.assets);
 
     pages += 1;
     if (!page.hasNextPage || pages >= MAX_PAGES) break;
     after = page.endCursor;
   }
 
-  return tracks;
+  const folders = await foldersPromise;
+  const nonMusicSet = new Set(folders.nonMusicTrackIds);
+  return assets.map((asset) => toTrack(asset, folders, nonMusicSet));
 }
 
 export async function readCache(): Promise<LibrarySnapshot | null> {
   const cached = await readJson<LibrarySnapshot>(StorageKeys.library);
   // 版が上がったらキャッシュを捨てて走査し直す（アートワーク追加など）
-  if (!cached || cached.version !== 3 || !Array.isArray(cached.tracks)) return null;
+  if (!cached || cached.version !== 4 || !Array.isArray(cached.tracks)) return null;
   return cached;
 }
 
 export async function writeCache(tracks: Track[]): Promise<LibrarySnapshot> {
   const snapshot: LibrarySnapshot = {
-    version: 3,
+    version: 4,
     scannedAt: Date.now(),
     tracks,
   };
@@ -370,5 +408,5 @@ export async function getAlbumTracks(albumId: string): Promise<Track[]> {
     first: PAGE_SIZE,
     artwork: ARTWORK_MODE,
   });
-  return page.assets.map(toTrack);
+  return page.assets.map((asset) => toTrack(asset));
 }

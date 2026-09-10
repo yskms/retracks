@@ -21,6 +21,19 @@ export type SegmentInput = {
   fadeInMs: number;
 };
 
+/**
+ * getTrackFolders() の戻り値。曲数ぶんではなく、非音楽の曲数・フォルダ数ぶんで
+ * 済む形にしてある（→ RetracksPlayerModule.kt のコメント）。
+ */
+export type TrackFolders = {
+  /** IS_MUSIC が明示的に0の曲ID。NULL（値が無い）は音楽として扱うため含まない。 */
+  nonMusicTrackIds: string[];
+  /** 曲ID→フォルダID。 */
+  folderIdByTrackId: Record<string, string>;
+  /** フォルダID→表示名。 */
+  folderNames: Record<string, string>;
+};
+
 export type PlayerStatus = {
   connected: boolean;
   isPlaying: boolean;

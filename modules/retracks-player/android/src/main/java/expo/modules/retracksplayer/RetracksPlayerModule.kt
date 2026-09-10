@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import java.io.File
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -485,6 +486,122 @@ class RetracksPlayerModule : Module() {
         promise.resolve(result)
       } catch (e: Exception) {
         promise.reject(CodedException("Failed to read album years", e))
+      }
+    }
+
+    /**
+     * 曲ごとの「音楽かどうか」とフォルダを、MediaStore への1回の問い合わせでまとめて返す。
+     *
+     * expo-music-library は IS_MUSIC を一切見ておらず（着信音・通知音・アラーム・
+     * オーディオブックなどが曲一覧に混ざる）、フォルダも曲1件ごとには公開していない。
+     * どちらも同じ MediaStore.Audio.Media を1行ずつなめれば取れる値なので、
+     * getAlbumYears() と同様に自前で問い合わせる。
+     *
+     * 返す形はどれも「小さい方から辿れる」形にしている（曲数ぶんではなく、非音楽の
+     * 曲数・フォルダ数ぶんで済む）：
+     * - nonMusicTrackIds: IS_MUSIC が明示的に 0 の曲IDだけの配列。NULL（値が無い）は
+     *   音楽として扱う＝ここに含めない。安全側に倒すため（除外リストに漏れなく
+     *   入れるより、除外し過ぎない方を優先）。
+     * - folderIdByTrackId: 曲ID→フォルダIDの対応表。
+     * - folderNames: フォルダID→表示名の対応表。
+     *
+     * フォルダIDは Android 10 (Q) 以降は BUCKET_ID、それより前は親ディレクトリの
+     * 絶対パスをそのまま使う。expo-music-library 自身は後者をハッシュ化しているが、
+     * ここで作るIDは完全にこのアプリの内部識別子（他所のIDと一致させる必要が無い）
+     * なので、ハッシュ化はせず素のパスを使う方が衝突の心配も無く単純。
+     */
+    AsyncFunction("getTrackFolders") { promise: Promise ->
+      val context = appContext.reactContext
+      if (context == null) {
+        promise.reject(CodedException("React context is not available"))
+        return@AsyncFunction
+      }
+      try {
+        val supportsBuckets = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        val projection = buildList {
+          add(android.provider.MediaStore.Audio.Media._ID)
+          add(android.provider.MediaStore.Audio.Media.IS_MUSIC)
+          if (supportsBuckets) {
+            add(android.provider.MediaStore.Audio.Media.BUCKET_ID)
+            add(android.provider.MediaStore.Audio.Media.BUCKET_DISPLAY_NAME)
+          } else {
+            add(android.provider.MediaStore.Audio.Media.DATA)
+          }
+        }.toTypedArray()
+
+        val nonMusicTrackIds = mutableListOf<String>()
+        val folderIdByTrackId = mutableMapOf<String, String>()
+        val folderNames = mutableMapOf<String, String>()
+
+        context.contentResolver.query(
+          android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+          projection,
+          null,
+          null,
+          null
+        )?.use { cursor ->
+          val idIndex = cursor.getColumnIndexOrThrow(android.provider.MediaStore.Audio.Media._ID)
+          val isMusicIndex = cursor.getColumnIndex(android.provider.MediaStore.Audio.Media.IS_MUSIC)
+          val bucketIdIndex = if (supportsBuckets) {
+            cursor.getColumnIndex(android.provider.MediaStore.Audio.Media.BUCKET_ID)
+          } else {
+            -1
+          }
+          val bucketNameIndex = if (supportsBuckets) {
+            cursor.getColumnIndex(android.provider.MediaStore.Audio.Media.BUCKET_DISPLAY_NAME)
+          } else {
+            -1
+          }
+          val dataIndex = if (!supportsBuckets) {
+            cursor.getColumnIndex(android.provider.MediaStore.Audio.Media.DATA)
+          } else {
+            -1
+          }
+
+          while (cursor.moveToNext()) {
+            val trackId = cursor.getLong(idIndex).toString()
+
+            // NULL は音楽として扱う（除外リストに入れない）。明示的に0の行だけ拾う。
+            if (isMusicIndex >= 0 && !cursor.isNull(isMusicIndex) && cursor.getInt(isMusicIndex) == 0) {
+              nonMusicTrackIds.add(trackId)
+            }
+
+            val folderId: String?
+            val folderName: String?
+            if (supportsBuckets) {
+              folderId = if (bucketIdIndex >= 0 && !cursor.isNull(bucketIdIndex)) {
+                cursor.getString(bucketIdIndex)
+              } else {
+                null
+              }
+              folderName = if (bucketNameIndex >= 0 && !cursor.isNull(bucketNameIndex)) {
+                cursor.getString(bucketNameIndex)
+              } else {
+                folderId
+              }
+            } else {
+              val data = if (dataIndex >= 0 && !cursor.isNull(dataIndex)) cursor.getString(dataIndex) else null
+              val parent = data?.let(::File)?.parentFile?.absolutePath
+              folderId = parent
+              folderName = parent?.let { File(it).name.takeIf(String::isNotBlank) ?: it }
+            }
+
+            if (folderId != null) {
+              folderIdByTrackId[trackId] = folderId
+              if (folderName != null) folderNames[folderId] = folderName
+            }
+          }
+        }
+
+        promise.resolve(
+          mapOf(
+            "nonMusicTrackIds" to nonMusicTrackIds,
+            "folderIdByTrackId" to folderIdByTrackId,
+            "folderNames" to folderNames
+          )
+        )
+      } catch (e: Exception) {
+        promise.reject(CodedException("Failed to read track folders", e))
       }
     }
 
