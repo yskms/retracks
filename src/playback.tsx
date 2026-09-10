@@ -58,6 +58,12 @@ type PlaybackValue = {
    */
   artists: Artist[];
   albums: Album[];
+  /**
+   * フォルダ除外設定画面向け。曲が属するフォルダの一覧（名前・曲数）。
+   * rawTracks から作るため、除外設定の影響を受けない（隠したフォルダも
+   * 一覧には出続ける。でないと一度隠すと元に戻せなくなる）。
+   */
+  folders: { id: string; name: string; trackCount: number }[];
   queue: Track[];
   status: PlayerStatus | null;
   currentTrack: Track | null;
@@ -149,6 +155,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     excludeShortTracks,
     shortTrackThresholdSec,
     excludeNonMusic,
+    excludedFolderIds,
     ignoreLeadingThe,
     ignoreLeadingAAn,
   } = useSettings();
@@ -568,17 +575,47 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const progress = useMemo(() => (shuffle ? progressOf(shuffle) : null), [shuffle]);
 
-  // 設定（音楽以外の除外・短い曲の除外・並べ替え）を適用した公開用の一覧。
-  // 走査結果そのものは rawTracks 側に残し、設定が変わってもネイティブへ
-  // 問い合わせ直さずに即座に反映できるようにする。
+  // 設定（音楽以外の除外・短い曲の除外・除外フォルダ・並べ替え）を適用した
+  // 公開用の一覧。走査結果そのものは rawTracks 側に残し、設定が変わっても
+  // ネイティブへ問い合わせ直さずに即座に反映できるようにする。
+  const excludedFolderSet = useMemo(() => new Set(excludedFolderIds), [excludedFolderIds]);
+
   const tracks = useMemo(() => {
     let filtered = rawTracks;
     if (excludeNonMusic) filtered = filtered.filter((t) => t.isMusic);
     if (excludeShortTracks) {
       filtered = filtered.filter((t) => t.durationMs >= shortTrackThresholdSec * 1000);
     }
+    if (excludedFolderSet.size > 0) {
+      // folderId が無い曲（scanLibrary() 以外の由来、または走査と
+      // getTrackFolders() の間に増えた曲）は除外しない側に倒す。
+      filtered = filtered.filter((t) => !t.folderId || !excludedFolderSet.has(t.folderId));
+    }
     return sortByField(filtered, (t) => t.title, articleOptions);
-  }, [rawTracks, excludeNonMusic, excludeShortTracks, shortTrackThresholdSec, articleOptions]);
+  }, [
+    rawTracks,
+    excludeNonMusic,
+    excludeShortTracks,
+    shortTrackThresholdSec,
+    excludedFolderSet,
+    articleOptions,
+  ]);
+
+  // 除外フォルダ設定画面向け。非表示のフォルダも含めて全件出す必要があるため
+  // rawTracks（設定適用前）から作る。folderId が無い曲は集計しない。
+  const folders = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string; trackCount: number }>();
+    for (const t of rawTracks) {
+      if (!t.folderId) continue;
+      const existing = byId.get(t.folderId);
+      if (existing) {
+        existing.trackCount += 1;
+        continue;
+      }
+      byId.set(t.folderId, { id: t.folderId, name: t.folderName || t.folderId, trackCount: 1 });
+    }
+    return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }, [rawTracks]);
 
   const artists = useMemo(
     () => sortByField(rawArtists, (a) => a.name, articleOptions),
@@ -609,6 +646,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     tracks,
     artists,
     albums,
+    folders,
     queue,
     status,
     currentTrack,

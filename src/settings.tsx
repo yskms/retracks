@@ -57,6 +57,12 @@ export type Settings = {
    * 最低1枚は visible: true が残る（0枚だと画面が組み立てられない）。
    */
   tabs: TabEntry[];
+  /**
+   * 除外するフォルダのID（→ src/library.ts の Track.folderId）。既定は空。
+   * タブの正本突き合わせ（normalizeTabs）とは逆に、未知のIDを捨てない
+   * （→ normalizeExcludedFolderIds のコメント）。
+   */
+  excludedFolderIds: string[];
 };
 
 const DEFAULT_TABS: TabEntry[] = TAB_IDS.map((id) => ({ id, visible: true }));
@@ -69,6 +75,7 @@ const DEFAULT_SETTINGS: Settings = {
   ignoreLeadingThe: true,
   ignoreLeadingAAn: false,
   tabs: DEFAULT_TABS,
+  excludedFolderIds: [],
 };
 
 const MIN_THRESHOLD_SEC = 5;
@@ -84,6 +91,7 @@ type SettingsValue = Settings & {
   setIgnoreLeadingThe: (value: boolean) => void;
   setIgnoreLeadingAAn: (value: boolean) => void;
   setTabs: (next: TabEntry[] | ((prev: TabEntry[]) => TabEntry[])) => void;
+  setExcludedFolderIds: (next: string[] | ((prev: string[]) => string[])) => void;
 };
 
 const SettingsContext = createContext<SettingsValue | null>(null);
@@ -126,6 +134,19 @@ function normalizeTabs(value: unknown): TabEntry[] {
   return result.some((tab) => tab.visible) ? result : DEFAULT_TABS;
 }
 
+/**
+ * 保存された除外フォルダIDを整える。normalizeTabs() とは方針が逆で、
+ * 正本（そのとき MediaStore にあるフォルダ）と突き合わせて未知のIDを
+ * 捨てる、ということをしない。SDカード未マウントや外部ストレージが
+ * まだ準備できていないタイミングでは、除外したはずのフォルダが一時的に
+ * 見えないだけのことがあり、そこで正本に無いからと捨てると、除外設定が
+ * 黙って消える。文字列の配列であることと重複が無いことだけ保証する。
+ */
+function normalizeExcludedFolderIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((id): id is string => typeof id === 'string'))];
+}
+
 function normalize(value: unknown): Settings {
   const saved = (value ?? {}) as Partial<Settings>;
   return {
@@ -154,6 +175,7 @@ function normalize(value: unknown): Settings {
         ? saved.ignoreLeadingAAn
         : DEFAULT_SETTINGS.ignoreLeadingAAn,
     tabs: normalizeTabs(saved.tabs),
+    excludedFolderIds: normalizeExcludedFolderIds(saved.excludedFolderIds),
   };
 }
 
@@ -289,6 +311,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [patch]
   );
 
+  const setExcludedFolderIds = useCallback(
+    (update: string[] | ((prev: string[]) => string[])) => {
+      patch('excludedFolderIds', (prev) => {
+        const next = typeof update === 'function' ? update(prev) : update;
+        return [...new Set(next)];
+      });
+    },
+    [patch]
+  );
+
   const value: SettingsValue = {
     ...settings,
     ready,
@@ -299,6 +331,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setIgnoreLeadingThe,
     setIgnoreLeadingAAn,
     setTabs,
+    setExcludedFolderIds,
   };
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
