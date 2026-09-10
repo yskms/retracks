@@ -87,6 +87,7 @@ export default {
     excludedFoldersAddA11y: 'Add a folder',
     excludedFoldersRemoveA11y: 'Remove from excluded folders',
     excludedFoldersPickerEmpty: 'No folders available',
+    excludedFoldersNotFound: "Not found (it may be temporarily unavailable)",
     thresholdLabel: 'Exclude tracks under {{sec}}s',
     thresholdDecreaseA11y: 'Decrease threshold',
     thresholdIncreaseA11y: 'Increase threshold',

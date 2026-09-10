@@ -95,6 +95,7 @@ export default {
     excludedFoldersAddA11y: 'フォルダを追加',
     excludedFoldersRemoveA11y: '除外を解除',
     excludedFoldersPickerEmpty: '対象のフォルダがありません',
+    excludedFoldersNotFound: '見つかりません（一時的に読み込めない可能性があります）',
     thresholdLabel: '{{sec}}秒未満を除外',
     thresholdDecreaseA11y: 'しきい値を下げる',
     thresholdIncreaseA11y: 'しきい値を上げる',

@@ -30,9 +30,22 @@ export default function ExcludedFoldersScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [draft, setDraft] = useState<Set<string>>(new Set());
 
+  const folderById = useMemo(() => new Map(folders.map((f) => [f.id, f])), [folders]);
+
+  // excludedFolderIds（保存側の正本）を基準に1行ずつ作る。folders から探して
+  // 無ければそのIDのまま「見つかりません」として出す。folders.filter(...) で
+  // 作ると、SDカード未マウント等で一時的に folders に出てこないフォルダの
+  // 行ごと消えてしまい、除外設定は保存されたまま（normalizeExcludedFolderIds
+  // は未知のIDを捨てない方針）なのに画面からは解除できなくなる。
   const excludedFolders = useMemo(
-    () => folders.filter((f) => excludedFolderIds.includes(f.id)),
-    [folders, excludedFolderIds]
+    () =>
+      excludedFolderIds.map((id) => {
+        const folder = folderById.get(id);
+        return folder
+          ? { id, name: folder.name, trackCount: folder.trackCount as number | null, found: true }
+          : { id, name: id, trackCount: null as number | null, found: false };
+      }),
+    [excludedFolderIds, folderById]
   );
 
   const openPicker = () => {
@@ -83,9 +96,16 @@ export default function ExcludedFoldersScreen() {
           {excludedFolders.map((folder) => (
             <View key={folder.id} style={styles.row}>
               <View style={styles.rowText}>
-                <Text style={styles.rowLabel}>{folder.name}</Text>
+                <Text
+                  style={[styles.rowLabel, !folder.found && styles.rowLabelDim]}
+                  numberOfLines={1}
+                >
+                  {folder.name}
+                </Text>
                 <Text style={styles.rowHint}>
-                  {t('common.songCount', { count: folder.trackCount })}
+                  {folder.found
+                    ? t('common.songCount', { count: folder.trackCount ?? 0 })
+                    : t('settings.excludedFoldersNotFound')}
                 </Text>
               </View>
               <Pressable
@@ -120,6 +140,9 @@ export default function ExcludedFoldersScreen() {
                       key={folder.id}
                       style={styles.pickerRow}
                       onPress={() => toggleDraft(folder.id)}
+                      accessibilityRole="checkbox"
+                      accessibilityState={{ checked }}
+                      accessibilityLabel={folder.name}
                     >
                       <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
                         {checked && <Text style={styles.checkboxMark}>✓</Text>}
@@ -177,6 +200,7 @@ const styles = StyleSheet.create({
   },
   rowText: { flex: 1, gap: 2 },
   rowLabel: { color: colors.text, fontSize: 14 },
+  rowLabelDim: { color: colors.textDim, fontFamily: 'monospace' },
   rowHint: { color: colors.textDim, fontSize: 12 },
   removeIcon: { color: colors.textDim, fontSize: 16, paddingHorizontal: 4 },
   modalBackdrop: {
