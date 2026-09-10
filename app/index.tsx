@@ -32,14 +32,13 @@ import { colors } from '../src/theme';
 import { AlbumsPage, ArtistsPage, SongsPage } from '../src/components/LibraryPages';
 import { useSelection } from '../src/useSelection';
 import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
+import { TAB_IDS, TAB_LABEL_KEY, type TabId } from '../src/tabs';
 
 /**
  * 下線をネイティブ側で動かすためのラッパ。
  * JS スレッドで値を更新すると、イベントのたびに段付きの動きになる。
  */
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
-
-type TabId = 'songs' | 'artists' | 'albums';
 
 const GRID_PADDING = 12;
 const GRID_GAP = 10;
@@ -50,11 +49,7 @@ export default function LibraryScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const tabs: { id: TabId; label: string }[] = useMemo(
-    () => [
-      { id: 'songs', label: t('library.tabSongs') },
-      { id: 'artists', label: t('library.tabArtists') },
-      { id: 'albums', label: t('library.tabAlbums') },
-    ],
+    () => TAB_IDS.map((id) => ({ id, label: t(TAB_LABEL_KEY[id]) })),
     [t]
   );
   const {
