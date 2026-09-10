@@ -25,8 +25,8 @@ import {
 } from '../modules/retracks-player/src';
 import { DEFAULT_SEGMENT, type SegmentSetting } from './rush';
 import {
-  getAlbums,
-  getArtists,
+  deriveAlbums,
+  deriveArtists,
   loadLibrary,
   refreshLibrary,
   requestPermission,
@@ -123,23 +123,6 @@ export function usePlayback(): PlaybackValue {
   return value;
 }
 
-/**
- * アーティスト/アルバム一覧を取得する。MediaStore への問い合わせが一時的に
- * 失敗することがあるため、1回だけ間を置いて再試行する。それでも失敗したら
- * 呼び出し側で諦める（曲一覧の更新は巻き込まない）。
- */
-async function fetchArtistsAlbums(): Promise<{ artists: Artist[]; albums: Album[] } | null> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    try {
-      const [artists, albums] = await Promise.all([getArtists(), getAlbums()]);
-      return { artists, albums };
-    } catch {
-      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-  }
-  return null;
-}
-
 async function waitForConnection(timeoutMs = 1500) {
   const started = Date.now();
   for (;;) {
@@ -165,11 +148,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   );
 
   const [ready, setReady] = useState(false);
-  // 走査そのままの生データ。公開する tracks/artists/albums は、この下で
-  // 設定（短い曲の除外・並べ替え）を適用した派生値にする。
+  // 走査そのままの生データ。公開する tracks は、この下で設定（音楽以外・
+  // 短い曲・フォルダの除外）を適用した派生値にする。artists/albums は
+  // さらにその tracks から導出する（MediaStore への別クエリを使わない。
+  // → deriveArtists()/deriveAlbums() のコメント）。
   const [rawTracks, setRawTracks] = useState<Track[]>([]);
-  const [rawArtists, setRawArtists] = useState<Artist[]>([]);
-  const [rawAlbums, setRawAlbums] = useState<Album[]>([]);
+  // アルバムのリリース年。expo-music-library が公開していないため
+  // 別途取得する（→ RetracksPlayer.getAlbumYears()）。albumId→year。
+  const [albumYears, setAlbumYears] = useState<Record<string, number>>({});
   const [queue, setQueue] = useState<Track[]>([]);
   const [status, setStatus] = useState<PlayerStatus | null>(null);
   const [shuffle, setShuffle] = useState<ShuffleState | null>(null);
@@ -253,16 +239,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        // getArtistsAsync/getAlbumsAsync は曲一覧の走査結果を待つ必要が無いので、
-        // loadLibrary() と並行に投げる。曲一覧の後ろに置くと、キャッシュが無い
-        // 初回起動では走査の2〜4秒ぶんアーティスト/アルバムの表示が余計に遅れる。
-        void (async () => {
-          const fetched = await fetchArtistsAlbums();
-          if (!cancelled && fetched) {
-            setRawArtists(fetched.artists);
-            setRawAlbums(fetched.albums);
-          }
-        })();
+        // アルバムの年は曲一覧の走査結果を待つ必要が無いので、loadLibrary() と
+        // 並行に投げる。artists/albums 自体は tracks から導出されるので
+        // 別途フェッチする必要がない（→ deriveArtists()/deriveAlbums()）。
+        void RetracksPlayer.getAlbumYears()
+          .then((years) => {
+            if (!cancelled) setAlbumYears(years);
+          })
+          .catch(() => {
+            // 年が引けなくてもアルバム一覧自体は組み立てられる（year: null に倒れる）
+          });
 
         const result = await loadLibrary();
         if (cancelled) return;
@@ -274,6 +260,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
         // 走査は待たせず裏で行い、差分があったときだけ静かに反映する。
         // 起動のたびに2〜4秒待たされるのを避けつつ、曲の増減には追従する。
+        // artists/albums は tracks から導出されるので、applyTracks() だけで
+        // 両方とも一緒に最新化される（曲一覧とズレる、という形のバグが
+        // 構造的に起きなくなった）。
         if (Date.now() - result.scannedAt > RESCAN_AFTER_MS) {
           void (async () => {
             try {
@@ -284,14 +273,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               addLog(
                 `裏で再走査（追加${refreshed.added.length} 削除${refreshed.removed.length}）`
               );
-              // 曲の増減があったなら、アーティスト/アルバムのタブと検索結果も
-              // 同時に古くなる。ここで拾わないと、次にプル更新するまで
-              // 両方とも曲一覧だけとズレたままになる。
-              const fetched = await fetchArtistsAlbums();
-              if (!cancelled && fetched) {
-                setRawArtists(fetched.artists);
-                setRawAlbums(fetched.albums);
-              }
             } catch {
               // 走査に失敗してもキャッシュで動くので黙って諦める
             }
@@ -535,17 +516,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   };
 
   const rescan = useCallback(async () => {
-    // 3本まとめて Promise.all にすると、アーティスト/アルバムの取得だけが
-    // 失敗したときに曲一覧の再走査結果まで丸ごと捨てられてしまう。
-    // allSettled にして、成功した分だけを反映する。
-    const [libraryResult, artistsResult, albumsResult] = await Promise.allSettled([
+    // 2本まとめて Promise.all にすると、アルバムの年の取得だけが失敗した
+    // ときに曲一覧の再走査結果まで丸ごと捨てられてしまう。allSettled に
+    // して、成功した分だけを反映する。artists/albums は tracks から
+    // 導出されるので、ここで別途取得する必要はない。
+    const [libraryResult, yearsResult] = await Promise.allSettled([
       refreshLibrary(rawTracksRef.current),
-      getArtists(),
-      getAlbums(),
+      RetracksPlayer.getAlbumYears(),
     ]);
 
-    if (artistsResult.status === 'fulfilled') setRawArtists(artistsResult.value);
-    if (albumsResult.status === 'fulfilled') setRawAlbums(albumsResult.value);
+    if (yearsResult.status === 'fulfilled') setAlbumYears(yearsResult.value);
 
     if (libraryResult.status === 'fulfilled') {
       const result = libraryResult.value;
@@ -619,14 +599,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     return sortByField([...byId.values()], (f) => f.name, articleOptions);
   }, [rawTracks, articleOptions]);
 
+  // tracks（設定適用後）から導出する。これにより「音楽以外を除外」等の
+  // 設定が、曲一覧だけでなくアーティスト/アルバムタブにも一様に効くように
+  // なった。以前は getArtists()/getAlbums() で MediaStore に別問い合わせを
+  // していたため、この2つのタブだけ設定が効かない、という但し書きが
+  // 複数の設定項目に重なっていた（→ docs/requirements.md 10.6）。
   const artists = useMemo(
-    () => sortByField(rawArtists, (a) => a.name, articleOptions),
-    [rawArtists, articleOptions]
+    () => sortByField(deriveArtists(tracks), (a) => a.name, articleOptions),
+    [tracks, articleOptions]
   );
 
   const albums = useMemo(
-    () => sortByField(rawAlbums, (a) => a.title, articleOptions),
-    [rawAlbums, articleOptions]
+    () => sortByField(deriveAlbums(tracks, albumYears), (a) => a.title, articleOptions),
+    [tracks, albumYears, articleOptions]
   );
 
   // playAll・シャッフルの2巡目再構成など、再生系の処理は tracksRef を直接読む。

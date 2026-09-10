@@ -266,6 +266,78 @@ export type Album = {
   year: number | null;
 };
 
+/**
+ * 曲一覧からアーティスト一覧を作る。MediaStore への別クエリ
+ * （旧 getArtists()）を使わない。グループ化キーは artistId、無ければ
+ * 名前（Asset.artistId は string | undefined）。これにより
+ * 「曲一覧では見えるのにアーティストタブには出てこない」の逆
+ * （タブには出るが曲一覧には出ない）が起きなくなる — 渡した tracks が
+ * そのまま情報源になるため。
+ */
+export function deriveArtists(tracks: Track[]): Artist[] {
+  const byId = new Map<string, Artist>();
+  for (const t of tracks) {
+    const id = t.artistId || t.artist;
+    const existing = byId.get(id);
+    if (existing) {
+      existing.trackCount += 1;
+      continue;
+    }
+    byId.set(id, { id, name: t.artist, trackCount: 1 });
+  }
+  return [...byId.values()];
+}
+
+/**
+ * 曲一覧からアルバム一覧を作る（旧 getAlbums() を使わない）。
+ * グループ化キーは albumId、無ければアルバム名。album が無い曲（アルバム
+ * 情報そのものが無い）はどちらのアルバムにも属せないため対象外にする
+ * （決定：2026-09-11。アルバム名でまとめる方針）。
+ *
+ * artworkUri は各曲の値をそのまま使う。albumId がある曲では
+ * `artworkUriOf()` がアルバムIDだけから組み立てた値になっているため、
+ * 実質アルバムのアートワークと同じもの。
+ *
+ * year は expo-music-library が公開していないため、別途
+ * RetracksPlayer.getAlbumYears() で取った albumId→year の対応表を渡す。
+ * albumId が無いアルバム（名前でまとめたもの）は year が引けないので null。
+ */
+export function deriveAlbums(tracks: Track[], years: Record<string, number> = {}): Album[] {
+  const byId = new Map<string, Album>();
+  for (const t of tracks) {
+    if (!t.album) continue;
+    const id = t.albumId || t.album;
+    const existing = byId.get(id);
+    if (existing) {
+      existing.trackCount += 1;
+      continue;
+    }
+    byId.set(id, {
+      id,
+      title: t.album,
+      artist: t.artist,
+      trackCount: 1,
+      artworkUri: t.artworkUri,
+      year: (t.albumId ? years[t.albumId] : undefined) ?? null,
+    });
+  }
+  return [...byId.values()];
+}
+
+/**
+ * アルバム内での並び順。ディスク→トラック番号→タイトルの順で比較する。
+ * どちらも無い曲はタイトル順の末尾側に寄る（Number.MAX_SAFE_INTEGER）。
+ */
+export function compareByTrackOrder(a: Track, b: Track): number {
+  const discA = a.discNumber ?? 1;
+  const discB = b.discNumber ?? 1;
+  if (discA !== discB) return discA - discB;
+  const trackA = a.trackNumber ?? Number.MAX_SAFE_INTEGER;
+  const trackB = b.trackNumber ?? Number.MAX_SAFE_INTEGER;
+  if (trackA !== trackB) return trackA - trackB;
+  return a.title.localeCompare(b.title);
+}
+
 export async function getArtists(): Promise<Artist[]> {
   const list = await MusicLibrary.getArtistsAsync();
   // 注意: Artist の albumSongs は MediaStore の NUMBER_OF_TRACKS（曲数）であって
