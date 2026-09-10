@@ -1,15 +1,26 @@
-/** 日本語文言。既定言語であり、翻訳の元にもなる。 */
+/**
+ * 日本語文言。既定言語であり、翻訳の元にもなる。
+ *
+ * 数え上げのキー（xxx_other）には、同じ文言の xxx_one も必ず添える。
+ * 日本語は単数/複数で言い方が変わらないので一見不要だが、無いと
+ * fallbackLng（['en', 'ja']）が count===1 のときだけ en 側の _one を
+ * 拾ってしまい、日本語画面の一部だけ英語（例："1 song"）が混ざる
+ * （2026-09-11 に除外フォルダ画面で発覚。ja に _other しか無いのが原因）。
+ */
 export default {
   common: {
     playInOrder: '順番に',
     shufflePlay: 'シャッフル',
+    songCount_one: '{{count}}曲',
     songCount_other: '{{count}}曲',
+    albumCount_one: '{{count}}アルバム',
     albumCount_other: '{{count}}アルバム',
   },
   library: {
     tabSongs: '楽曲',
     tabArtists: 'アーティスト',
     tabAlbums: 'アルバム',
+    selectedCount_one: '{{count}}件選択',
     selectedCount_other: '{{count}}件選択',
     continueFrom: '続きから {{played}}/{{total}}',
     shuffleAll: '全曲シャッフル',
@@ -36,6 +47,7 @@ export default {
     segmentCardTitle: '区間設定',
     previewText: 'この曲での実効区間 {{start}}〜{{end}}s\nfadeIn {{fadeIn}}s / fadeOut {{fade}}s',
     segmentNote: '開始位置と再生時間の変更は次の曲から反映されます',
+    queueTitle_one: '再生キュー {{count}}曲',
     queueTitle_other: '再生キュー {{count}}曲',
     jumpToTop: '先頭へ',
     jumpToCurrent: '再生中へ',
@@ -45,6 +57,7 @@ export default {
   },
   artist: {
     fallbackTitle: 'アーティスト',
+    selectedCount_one: '{{count}}曲選択',
     selectedCount_other: '{{count}}曲選択',
     albumsSectionTitle: 'アルバム',
     songsSectionTitle: '楽曲',
