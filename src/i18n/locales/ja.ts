@@ -68,6 +68,8 @@ export default {
     languageEn: 'English',
     languageWidgetHint: 'ウィジェットの表示は端末の言語設定のままです',
     filterSectionTitle: '曲の絞り込み',
+    excludeNonMusic: '音楽以外のファイルを除外',
+    excludeNonMusicHint: '着信音・通知音・アラーム・オーディオブックなどを一覧・再生の対象から外します',
     excludeShortTracks: '短い曲を除外',
     excludeShortTracksHint: 'しきい値未満の曲を一覧・再生の対象から外します',
     thresholdLabel: '{{sec}}秒未満を除外',

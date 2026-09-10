@@ -29,12 +29,22 @@ export type LanguagePreference = 'auto' | SupportedLanguage;
 export type Settings = {
   language: LanguagePreference;
   /**
-   * 短い曲を曲一覧・再生対象から除外するか。
-   * 要件 10.6 では既定OFF（決定：2026-09-03）としたが、2026-09-10 に既定ONへ変更。
+   * 短い曲を曲一覧・再生対象から除外するか。既定OFF。
+   * 2026-09-03に既定OFFとし、2026-09-10に一度既定ONへ変更したが、同日中に
+   * excludeNonMusic を追加したことで既定ONにしていた主因（通知音などの
+   * 混入。IS_MUSIC はどの端末でも Ringtones/Notifications/Alarms に0が立つ
+   * ため端末依存ではない）が解消されたため、既定OFFへ戻した（決定：2026-09-10）。
+   * 既定ONのまま残す副作用は一方向（5秒未満の実在する曲を黙って隠す）だった。
    */
   excludeShortTracks: boolean;
   /** この秒数未満の曲を「短い曲」とみなす。 */
   shortTrackThresholdSec: number;
+  /**
+   * MediaStore の IS_MUSIC が false の曲（着信音・通知音・アラーム・
+   * オーディオブックなど）を曲一覧・再生対象から除外するか。既定ON。
+   * → src/library.ts の Track.isMusic
+   */
+  excludeNonMusic: boolean;
   /**
    * 並べ替え時に先頭の "The " を無視するか。→ src/sorting.ts
    * "The" と "A"/"An" は流儀が割れているため独立したON/OFFにしている。
@@ -53,8 +63,9 @@ const DEFAULT_TABS: TabEntry[] = TAB_IDS.map((id) => ({ id, visible: true }));
 
 const DEFAULT_SETTINGS: Settings = {
   language: 'auto',
-  excludeShortTracks: true,
+  excludeShortTracks: false,
   shortTrackThresholdSec: 5,
+  excludeNonMusic: true,
   ignoreLeadingThe: true,
   ignoreLeadingAAn: false,
   tabs: DEFAULT_TABS,
@@ -69,6 +80,7 @@ type SettingsValue = Settings & {
   setLanguage: (language: LanguagePreference) => void;
   setExcludeShortTracks: (value: boolean) => void;
   setShortTrackThresholdSec: (value: number) => void;
+  setExcludeNonMusic: (value: boolean) => void;
   setIgnoreLeadingThe: (value: boolean) => void;
   setIgnoreLeadingAAn: (value: boolean) => void;
   setTabs: (next: TabEntry[] | ((prev: TabEntry[]) => TabEntry[])) => void;
@@ -129,6 +141,10 @@ function normalize(value: unknown): Settings {
       typeof saved.shortTrackThresholdSec === 'number' && saved.shortTrackThresholdSec > 0
         ? Math.min(MAX_THRESHOLD_SEC, Math.max(MIN_THRESHOLD_SEC, saved.shortTrackThresholdSec))
         : DEFAULT_SETTINGS.shortTrackThresholdSec,
+    excludeNonMusic:
+      typeof saved.excludeNonMusic === 'boolean'
+        ? saved.excludeNonMusic
+        : DEFAULT_SETTINGS.excludeNonMusic,
     ignoreLeadingThe:
       typeof saved.ignoreLeadingThe === 'boolean'
         ? saved.ignoreLeadingThe
@@ -246,6 +262,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [patch]
   );
 
+  const setExcludeNonMusic = useCallback(
+    (value: boolean) => patch('excludeNonMusic', value),
+    [patch]
+  );
+
   const setIgnoreLeadingThe = useCallback(
     (value: boolean) => patch('ignoreLeadingThe', value),
     [patch]
@@ -274,6 +295,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setLanguage,
     setExcludeShortTracks,
     setShortTrackThresholdSec,
+    setExcludeNonMusic,
     setIgnoreLeadingThe,
     setIgnoreLeadingAAn,
     setTabs,

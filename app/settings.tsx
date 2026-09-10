@@ -32,12 +32,14 @@ export default function SettingsScreen() {
     language,
     excludeShortTracks,
     shortTrackThresholdSec,
+    excludeNonMusic,
     ignoreLeadingThe,
     ignoreLeadingAAn,
     tabs,
     setLanguage,
     setExcludeShortTracks,
     setShortTrackThresholdSec,
+    setExcludeNonMusic,
     setIgnoreLeadingThe,
     setIgnoreLeadingAAn,
     setTabs,
@@ -144,6 +146,18 @@ export default function SettingsScreen() {
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t('settings.filterSectionTitle')}</Text>
+          <View style={styles.row}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>{t('settings.excludeNonMusic')}</Text>
+              <Text style={styles.rowHint}>{t('settings.excludeNonMusicHint')}</Text>
+            </View>
+            <Switch
+              value={excludeNonMusic}
+              onValueChange={setExcludeNonMusic}
+              trackColor={{ true: colors.accentDim, false: colors.surfaceHigh }}
+              thumbColor={excludeNonMusic ? colors.accent : colors.textDim}
+            />
+          </View>
           <View style={styles.row}>
             <View style={styles.rowText}>
               <Text style={styles.rowLabel}>{t('settings.excludeShortTracks')}</Text>

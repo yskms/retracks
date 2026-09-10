@@ -4,6 +4,7 @@ import type {
   PlayerStatus,
   RetracksPlayerEvents,
   SegmentInput,
+  TrackFolders,
   TrackInput,
 } from './RetracksPlayer.types';
 
@@ -30,6 +31,11 @@ declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
    * 公開していないため、こちらで直接読む。
    */
   getAlbumYears(): Promise<Record<string, number>>;
+  /**
+   * 曲ごとの「音楽かどうか」とフォルダ。expo-music-library がどちらも
+   * 公開していないため、こちらで直接読む（→ RetracksPlayerModule.kt）。
+   */
+  getTrackFolders(): Promise<TrackFolders>;
   /**
    * プロセスが前回どう終わったかの履歴。新しい順に最大10件。
    * 再生が勝手に止まる症状の原因調査に使う。

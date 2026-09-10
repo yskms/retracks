@@ -145,8 +145,13 @@ async function waitForConnection(timeoutMs = 1500) {
 }
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
-  const { excludeShortTracks, shortTrackThresholdSec, ignoreLeadingThe, ignoreLeadingAAn } =
-    useSettings();
+  const {
+    excludeShortTracks,
+    shortTrackThresholdSec,
+    excludeNonMusic,
+    ignoreLeadingThe,
+    ignoreLeadingAAn,
+  } = useSettings();
   const articleOptions = useMemo(
     () => ({ ignoreLeadingThe, ignoreLeadingAAn }),
     [ignoreLeadingThe, ignoreLeadingAAn]
@@ -298,7 +303,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           // 当てにすると、別のキュー（例：全曲シャッフル）の順列に番号だけを
           // 当てはめてしまい、画面と音が食い違う。キューはネイティブから貰う。
           const saved = await RetracksPlayer.getSavedQueue();
-          const nativeQueue = saved.tracks as Track[];
+          // QueueStore.kt が保存するのは id/uri/title/artist/album/durationMs/
+          // artworkUri の7つだけ（→ QueueStore.kt の saveTracks）。isMusic/
+          // folderId/folderName は持っていないので、ここで安全側の値を埋める。
+          // 埋めずに as Track[] するだけだと、型は boolean/string|null を
+          // 主張するのに実体は undefined のままになり、将来 isMusic で
+          // キューを絞る処理を足した瞬間、復元したキューの曲が軒並み
+          // 「非音楽」判定になって消える（起動直後の引き継ぎ時にしか
+          // 起きないため、原因にたどり着きにくい）。
+          const nativeQueue: Track[] = (saved.tracks as Track[]).map((t) => ({
+            ...t,
+            isMusic: t.isMusic ?? true,
+            folderId: t.folderId ?? null,
+            folderName: t.folderName ?? null,
+          }));
 
           if (nativeQueue.length === current.queueSize) {
             applyQueue(nativeQueue);
@@ -550,15 +568,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const progress = useMemo(() => (shuffle ? progressOf(shuffle) : null), [shuffle]);
 
-  // 設定（短い曲の除外・並べ替え）を適用した公開用の一覧。
+  // 設定（音楽以外の除外・短い曲の除外・並べ替え）を適用した公開用の一覧。
   // 走査結果そのものは rawTracks 側に残し、設定が変わってもネイティブへ
   // 問い合わせ直さずに即座に反映できるようにする。
   const tracks = useMemo(() => {
-    const filtered = excludeShortTracks
-      ? rawTracks.filter((t) => t.durationMs >= shortTrackThresholdSec * 1000)
-      : rawTracks;
+    let filtered = rawTracks;
+    if (excludeNonMusic) filtered = filtered.filter((t) => t.isMusic);
+    if (excludeShortTracks) {
+      filtered = filtered.filter((t) => t.durationMs >= shortTrackThresholdSec * 1000);
+    }
     return sortByField(filtered, (t) => t.title, articleOptions);
-  }, [rawTracks, excludeShortTracks, shortTrackThresholdSec, articleOptions]);
+  }, [rawTracks, excludeNonMusic, excludeShortTracks, shortTrackThresholdSec, articleOptions]);
 
   const artists = useMemo(
     () => sortByField(rawArtists, (a) => a.name, articleOptions),
