@@ -73,6 +73,8 @@ export default {
     languageEn: 'English',
     languageWidgetHint: 'The widget still follows the device language setting',
     filterSectionTitle: 'Track filtering',
+    excludeNonMusic: 'Exclude non-music files',
+    excludeNonMusicHint: 'Hides ringtones, notification sounds, alarms, audiobooks, and similar files from lists and playback',
     excludeShortTracks: 'Exclude short tracks',
     excludeShortTracksHint: 'Hide tracks shorter than the threshold from lists and playback',
     thresholdLabel: 'Exclude tracks under {{sec}}s',

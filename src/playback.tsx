@@ -145,8 +145,13 @@ async function waitForConnection(timeoutMs = 1500) {
 }
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
-  const { excludeShortTracks, shortTrackThresholdSec, ignoreLeadingThe, ignoreLeadingAAn } =
-    useSettings();
+  const {
+    excludeShortTracks,
+    shortTrackThresholdSec,
+    excludeNonMusic,
+    ignoreLeadingThe,
+    ignoreLeadingAAn,
+  } = useSettings();
   const articleOptions = useMemo(
     () => ({ ignoreLeadingThe, ignoreLeadingAAn }),
     [ignoreLeadingThe, ignoreLeadingAAn]
@@ -550,15 +555,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const progress = useMemo(() => (shuffle ? progressOf(shuffle) : null), [shuffle]);
 
-  // 設定（短い曲の除外・並べ替え）を適用した公開用の一覧。
+  // 設定（音楽以外の除外・短い曲の除外・並べ替え）を適用した公開用の一覧。
   // 走査結果そのものは rawTracks 側に残し、設定が変わってもネイティブへ
   // 問い合わせ直さずに即座に反映できるようにする。
   const tracks = useMemo(() => {
-    const filtered = excludeShortTracks
-      ? rawTracks.filter((t) => t.durationMs >= shortTrackThresholdSec * 1000)
-      : rawTracks;
+    let filtered = rawTracks;
+    if (excludeNonMusic) filtered = filtered.filter((t) => t.isMusic);
+    if (excludeShortTracks) {
+      filtered = filtered.filter((t) => t.durationMs >= shortTrackThresholdSec * 1000);
+    }
     return sortByField(filtered, (t) => t.title, articleOptions);
-  }, [rawTracks, excludeShortTracks, shortTrackThresholdSec, articleOptions]);
+  }, [rawTracks, excludeNonMusic, excludeShortTracks, shortTrackThresholdSec, articleOptions]);
 
   const artists = useMemo(
     () => sortByField(rawArtists, (a) => a.name, articleOptions),

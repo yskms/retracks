@@ -36,6 +36,12 @@ export type Settings = {
   /** この秒数未満の曲を「短い曲」とみなす。 */
   shortTrackThresholdSec: number;
   /**
+   * MediaStore の IS_MUSIC が false の曲（着信音・通知音・アラーム・
+   * オーディオブックなど）を曲一覧・再生対象から除外するか。既定ON。
+   * → src/library.ts の Track.isMusic
+   */
+  excludeNonMusic: boolean;
+  /**
    * 並べ替え時に先頭の "The " を無視するか。→ src/sorting.ts
    * "The" と "A"/"An" は流儀が割れているため独立したON/OFFにしている。
    */
@@ -55,6 +61,7 @@ const DEFAULT_SETTINGS: Settings = {
   language: 'auto',
   excludeShortTracks: true,
   shortTrackThresholdSec: 5,
+  excludeNonMusic: true,
   ignoreLeadingThe: true,
   ignoreLeadingAAn: false,
   tabs: DEFAULT_TABS,
@@ -69,6 +76,7 @@ type SettingsValue = Settings & {
   setLanguage: (language: LanguagePreference) => void;
   setExcludeShortTracks: (value: boolean) => void;
   setShortTrackThresholdSec: (value: number) => void;
+  setExcludeNonMusic: (value: boolean) => void;
   setIgnoreLeadingThe: (value: boolean) => void;
   setIgnoreLeadingAAn: (value: boolean) => void;
   setTabs: (next: TabEntry[] | ((prev: TabEntry[]) => TabEntry[])) => void;
@@ -129,6 +137,10 @@ function normalize(value: unknown): Settings {
       typeof saved.shortTrackThresholdSec === 'number' && saved.shortTrackThresholdSec > 0
         ? Math.min(MAX_THRESHOLD_SEC, Math.max(MIN_THRESHOLD_SEC, saved.shortTrackThresholdSec))
         : DEFAULT_SETTINGS.shortTrackThresholdSec,
+    excludeNonMusic:
+      typeof saved.excludeNonMusic === 'boolean'
+        ? saved.excludeNonMusic
+        : DEFAULT_SETTINGS.excludeNonMusic,
     ignoreLeadingThe:
       typeof saved.ignoreLeadingThe === 'boolean'
         ? saved.ignoreLeadingThe
@@ -246,6 +258,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [patch]
   );
 
+  const setExcludeNonMusic = useCallback(
+    (value: boolean) => patch('excludeNonMusic', value),
+    [patch]
+  );
+
   const setIgnoreLeadingThe = useCallback(
     (value: boolean) => patch('ignoreLeadingThe', value),
     [patch]
@@ -274,6 +291,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setLanguage,
     setExcludeShortTracks,
     setShortTrackThresholdSec,
+    setExcludeNonMusic,
     setIgnoreLeadingThe,
     setIgnoreLeadingAAn,
     setTabs,
