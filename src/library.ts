@@ -93,10 +93,11 @@ export async function scanLibrary(): Promise<Track[]> {
   let pages = 0;
 
   for (;;) {
+    // 並べ替えは playback.tsx が設定（冠詞無視など）を見て行うので、ここでは
+    // 順序を指定しない（ページングが安定していれば十分）。
     const page = await MusicLibrary.getAssetsAsync({
       first: PAGE_SIZE,
       after,
-      sortBy: 'title',
       artwork: ARTWORK_MODE,
     });
 

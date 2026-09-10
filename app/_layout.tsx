@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { View, StyleSheet } from 'react-native';
 
 import '../src/i18n';
+import { SettingsProvider } from '../src/settings';
 import { PlaybackProvider } from '../src/playback';
 import { MiniPlayer } from '../src/components/MiniPlayer';
 import { colors } from '../src/theme';
@@ -13,26 +14,29 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
-        <PlaybackProvider>
-          <StatusBar style="light" />
-          <View style={styles.root}>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: colors.background },
-                animation: 'slide_from_right',
-              }}
-            >
-              <Stack.Screen name="index" />
-              <Stack.Screen name="player" options={{ animation: 'slide_from_bottom' }} />
-              <Stack.Screen name="search" />
-              <Stack.Screen name="debug" />
-              <Stack.Screen name="artist/[id]" />
-              <Stack.Screen name="album/[id]" />
-            </Stack>
-            <MiniPlayerSlot />
-          </View>
-        </PlaybackProvider>
+        <SettingsProvider>
+          <PlaybackProvider>
+            <StatusBar style="light" />
+            <View style={styles.root}>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: colors.background },
+                  animation: 'slide_from_right',
+                }}
+              >
+                <Stack.Screen name="index" />
+                <Stack.Screen name="player" options={{ animation: 'slide_from_bottom' }} />
+                <Stack.Screen name="search" />
+                <Stack.Screen name="settings" />
+                <Stack.Screen name="debug" />
+                <Stack.Screen name="artist/[id]" />
+                <Stack.Screen name="album/[id]" />
+              </Stack>
+              <MiniPlayerSlot />
+            </View>
+          </PlaybackProvider>
+        </SettingsProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

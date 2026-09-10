@@ -34,6 +34,8 @@ import {
   type Artist,
   type Track,
 } from './library';
+import { useSettings } from './settings';
+import { sortByField } from './sorting';
 import {
   buildQueueKey,
   loadShuffle,
@@ -143,10 +145,19 @@ async function waitForConnection(timeoutMs = 1500) {
 }
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
+  const { excludeShortTracks, shortTrackThresholdSec, ignoreLeadingThe, ignoreLeadingAAn } =
+    useSettings();
+  const articleOptions = useMemo(
+    () => ({ ignoreLeadingThe, ignoreLeadingAAn }),
+    [ignoreLeadingThe, ignoreLeadingAAn]
+  );
+
   const [ready, setReady] = useState(false);
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [artists, setArtists] = useState<Artist[]>([]);
-  const [albums, setAlbums] = useState<Album[]>([]);
+  // 走査そのままの生データ。公開する tracks/artists/albums は、この下で
+  // 設定（短い曲の除外・並べ替え）を適用した派生値にする。
+  const [rawTracks, setRawTracks] = useState<Track[]>([]);
+  const [rawArtists, setRawArtists] = useState<Artist[]>([]);
+  const [rawAlbums, setRawAlbums] = useState<Album[]>([]);
   const [queue, setQueue] = useState<Track[]>([]);
   const [status, setStatus] = useState<PlayerStatus | null>(null);
   const [shuffle, setShuffle] = useState<ShuffleState | null>(null);
@@ -163,6 +174,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const queueKeyRef = useRef<string>(buildQueueKey('all'));
   const queueRef = useRef<Track[]>([]);
+  /** 走査そのままの生データ。再走査時の追加/削除の差分計算に使う。 */
+  const rawTracksRef = useRef<Track[]>([]);
+  /** 設定適用後（短い曲の除外・並べ替え）。再生系の処理はこちらを見る。 */
   const tracksRef = useRef<Track[]>([]);
   const shuffleRef = useRef<ShuffleState | null>(null);
   const lastIndexRef = useRef(-1);
@@ -185,8 +199,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const applyTracks = useCallback((next: Track[]) => {
-    tracksRef.current = next;
-    setTracks(next);
+    rawTracksRef.current = next;
+    setRawTracks(next);
   }, []);
 
   const addLog = useCallback((line: string) => {
@@ -233,8 +247,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         void (async () => {
           const fetched = await fetchArtistsAlbums();
           if (!cancelled && fetched) {
-            setArtists(fetched.artists);
-            setAlbums(fetched.albums);
+            setRawArtists(fetched.artists);
+            setRawAlbums(fetched.albums);
           }
         })();
 
@@ -263,8 +277,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
               // 両方とも曲一覧だけとズレたままになる。
               const fetched = await fetchArtistsAlbums();
               if (!cancelled && fetched) {
-                setArtists(fetched.artists);
-                setAlbums(fetched.albums);
+                setRawArtists(fetched.artists);
+                setRawAlbums(fetched.albums);
               }
             } catch {
               // 走査に失敗してもキャッシュで動くので黙って諦める
@@ -500,13 +514,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     // 失敗したときに曲一覧の再走査結果まで丸ごと捨てられてしまう。
     // allSettled にして、成功した分だけを反映する。
     const [libraryResult, artistsResult, albumsResult] = await Promise.allSettled([
-      refreshLibrary(tracksRef.current),
+      refreshLibrary(rawTracksRef.current),
       getArtists(),
       getAlbums(),
     ]);
 
-    if (artistsResult.status === 'fulfilled') setArtists(artistsResult.value);
-    if (albumsResult.status === 'fulfilled') setAlbums(albumsResult.value);
+    if (artistsResult.status === 'fulfilled') setRawArtists(artistsResult.value);
+    if (albumsResult.status === 'fulfilled') setRawAlbums(albumsResult.value);
 
     if (libraryResult.status === 'fulfilled') {
       const result = libraryResult.value;
@@ -535,6 +549,40 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [queue, status]);
 
   const progress = useMemo(() => (shuffle ? progressOf(shuffle) : null), [shuffle]);
+
+  // 設定（短い曲の除外・並べ替え）を適用した公開用の一覧。
+  // 走査結果そのものは rawTracks 側に残し、設定が変わってもネイティブへ
+  // 問い合わせ直さずに即座に反映できるようにする。
+  const tracks = useMemo(() => {
+    const filtered = excludeShortTracks
+      ? rawTracks.filter((t) => t.durationMs >= shortTrackThresholdSec * 1000)
+      : rawTracks;
+    return sortByField(filtered, (t) => t.title, articleOptions);
+  }, [rawTracks, excludeShortTracks, shortTrackThresholdSec, articleOptions]);
+
+  const artists = useMemo(
+    () => sortByField(rawArtists, (a) => a.name, articleOptions),
+    [rawArtists, articleOptions]
+  );
+
+  const albums = useMemo(
+    () => sortByField(rawAlbums, (a) => a.title, articleOptions),
+    [rawAlbums, articleOptions]
+  );
+
+  // playAll・シャッフルの2巡目再構成など、再生系の処理は tracksRef を直接読む。
+  // 除外された短い曲が紛れ込まないよう、公開用（設定適用後）の一覧と同期させる。
+  //
+  // 注意: この同期はコミット後の effect で行われるため、applyTracks() を
+  // 呼んだ直後の“同じ関数の中で”tracksRef.current を読んでも、まだ古い値の
+  // ままになる。現状それをやっている箇所は無い（playAll と1巡完了時の
+  // 再構成は、どちらもユーザー操作／ネイティブの再生イベントが起点で、
+  // 必ずこの effect が一度走った後に実行される）。新しく
+  // 「applyTracks() の直後に tracksRef を読む」コードを足すときは、
+  // この非同期性を踏まえること。
+  useEffect(() => {
+    tracksRef.current = tracks;
+  }, [tracks]);
 
   const value: PlaybackValue = {
     ready,
