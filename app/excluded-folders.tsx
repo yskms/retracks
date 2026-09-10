@@ -30,23 +30,23 @@ export default function ExcludedFoldersScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [draft, setDraft] = useState<Set<string>>(new Set());
 
-  const folderById = useMemo(() => new Map(folders.map((f) => [f.id, f])), [folders]);
-
-  // excludedFolderIds（保存側の正本）を基準に1行ずつ作る。folders から探して
-  // 無ければそのIDのまま「見つかりません」として出す。folders.filter(...) で
-  // 作ると、SDカード未マウント等で一時的に folders に出てこないフォルダの
-  // 行ごと消えてしまい、除外設定は保存されたまま（normalizeExcludedFolderIds
-  // は未知のIDを捨てない方針）なのに画面からは解除できなくなる。
-  const excludedFolders = useMemo(
-    () =>
-      excludedFolderIds.map((id) => {
-        const folder = folderById.get(id);
-        return folder
-          ? { id, name: folder.name, trackCount: folder.trackCount as number | null, found: true }
-          : { id, name: id, trackCount: null as number | null, found: false };
-      }),
-    [excludedFolderIds, folderById]
-  );
+  // excludedFolderIds（保存側の正本）に無いフォルダを行として出さない、
+  // という事故は避けたいが、並び順は excludedFolderIds（追加した順）ではなく
+  // 名前順にしたい。folders は既に sortByField 済みなので、見つかった行は
+  // その順序をそのまま使い、見つからない行（SDカード未マウント等で一時的に
+  // folders に出てこないもの。normalizeExcludedFolderIds は未知のIDを
+  // 捨てない方針なので、保存自体は残っている）だけ末尾に付け足す。
+  const excludedFolders = useMemo(() => {
+    const excludedIdSet = new Set(excludedFolderIds);
+    const found = folders
+      .filter((f) => excludedIdSet.has(f.id))
+      .map((f) => ({ id: f.id, name: f.name, trackCount: f.trackCount as number | null, found: true }));
+    const foundIdSet = new Set(found.map((f) => f.id));
+    const notFound = excludedFolderIds
+      .filter((id) => !foundIdSet.has(id))
+      .map((id) => ({ id, name: id, trackCount: null as number | null, found: false }));
+    return [...found, ...notFound];
+  }, [folders, excludedFolderIds]);
 
   const openPicker = () => {
     setDraft(new Set(excludedFolderIds));
