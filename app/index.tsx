@@ -49,7 +49,7 @@ export default function LibraryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { tabs: tabSettings } = useSettings();
+  const { tabs: tabSettings, ready: settingsReady } = useSettings();
   // 非表示のタブはページャに載せない。順序はそのまま設定の並びを使う。
   const tabs: { id: TabId; label: string }[] = useMemo(
     () =>
@@ -76,8 +76,19 @@ export default function LibraryScreen() {
   // page はここから導出する値であって、真実の情報源ではない。タブの並びや
   // 表示が設定側で変わると同じインデックスが別のタブを指すことになるため、
   // 「今どのタブを見ているか」は activeTabId（タブID）で持つ。
-  const [activeTabId, setActiveTabId] = useState<TabId>(tabs[0]?.id ?? 'songs');
-  const page = Math.max(0, tabs.findIndex((tab) => tab.id === activeTabId));
+  //
+  // 初期値を tabs[0] で決め打ちにできない。設定の読み込みは非同期なので、
+  // 最初のレンダー時点では tabSettings がまだ既定値（曲・アーティスト・
+  // アルバムの順）で、保存済みの並び順（例：アルバムが先頭）を確定前に
+  // 曲タブへ決め打ちしてしまう。読み込みが終わるまでは null のままにし、
+  // 下の resolvedActiveTabId で「まだ確定していない間だけ tabs[0] を見せる」
+  // 形にして、実際の状態確定は settingsReady を待つ（→下の useEffect）。
+  const [activeTabId, setActiveTabId] = useState<TabId | null>(null);
+  const resolvedActiveTabId =
+    activeTabId != null && tabs.some((tab) => tab.id === activeTabId)
+      ? activeTabId
+      : (tabs[0]?.id ?? 'songs');
+  const page = Math.max(0, tabs.findIndex((tab) => tab.id === resolvedActiveTabId));
   // タブの構成（並び・表示）が変わるたびに変化する文字列。ページャの子の
   // 増減・並べ替えは react-native-pager-view（Android は ViewPager2）側で
   // ずれることがあるため、変わったら key を変えてページャごと作り直す。
@@ -108,7 +119,14 @@ export default function LibraryScreen() {
   // レイアウト切替アイコンは「そのタブに表示形式があるか」で出す。
   // 曲タブだから出さない、という決め打ちにしないので、タブが増えても
   // TAB_LAYOUT_KEY に1件足すだけで済む。
-  const layoutKeyForActiveTab = TAB_LAYOUT_KEY[activeTabId];
+  //
+  // 参照元は tabs[page]（今まさに表示しているタブ）であって activeTabId
+  // ではない。構成が変わった直後の1レンダーだけ activeTabId が「もう
+  // 表示されていないタブ」を指すことがあり（後始末の useEffect が直すまでの
+  // 一瞬）、そこで直接 activeTabId を見るとその一瞬だけ違うタブのアイコンが
+  // 出てしまう。tabs[page] は page 自体が resolvedActiveTabId 経由で
+  // 常に存在するタブへフォールバックした値なので、この問題が起きない。
+  const layoutKeyForActiveTab = tabs[page] ? TAB_LAYOUT_KEY[tabs[page].id] : undefined;
   const tileSizeFor = (layout: (typeof layouts)['artists']) =>
     tileSizeOf(width, layout, GRID_PADDING, GRID_GAP);
 
@@ -124,21 +142,31 @@ export default function LibraryScreen() {
   const tabWidth = width / tabs.length;
 
   // タブの構成が変わってページャを作り直すときの後始末。
+  // - activeTabId がまだ未確定（起動直後、設定の読み込み待ち）なら、
+  //   読み込みが終わった時点で先頭のタブに確定させる
   // - 今見ていたタブが消えていたら、先頭のタブへ切り替える
   // - 下線（position/offset）は onPageScroll でしか動かないので、
   //   スワイプせずに構成が変わると古い位置に取り残される。作り直した
   //   ページャの今のページへ合わせておく
   // - 隠したタブの選択が残ったまま選択ヘッダーだけ出る、という状態を避ける
   useEffect(() => {
+    if (activeTabId == null) {
+      // 読み込み前に確定させると、保存済みの並び順の先頭が曲タブでなくても
+      // 常に曲タブへ着地してしまう。読み込みが終わるまでは何もしない
+      // （resolvedActiveTabId が見た目上は tabs[0] を出してくれている）。
+      if (settingsReady) setActiveTabId(tabs[0]?.id ?? 'songs');
+      return;
+    }
     if (!tabs.some((tab) => tab.id === activeTabId)) {
       setActiveTabId(tabs[0]?.id ?? 'songs');
     }
     position.setValue(page);
     offset.setValue(0);
     clear();
-    // pagerKey が変わったとき（＝ページャを作り直すとき）だけ実行したい。
+    // pagerKey が変わったとき（＝ページャを作り直すとき）と、設定の読み込みが
+    // 終わったときだけ実行したい。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pagerKey]);
+  }, [pagerKey, settingsReady]);
 
   /** 選択したものからキューを作って再生する（要件 10.3）。 */
   const playSelection = useCallback(async (shuffled: boolean) => {

@@ -10,7 +10,7 @@ import type { LayoutKey } from './layout';
 
 export type TabId = 'songs' | 'artists' | 'albums';
 
-export const TAB_IDS: TabId[] = ['songs', 'artists', 'albums'];
+export const TAB_IDS: readonly TabId[] = ['songs', 'artists', 'albums'] as const;
 
 export const TAB_LABEL_KEY = {
   songs: 'library.tabSongs',
