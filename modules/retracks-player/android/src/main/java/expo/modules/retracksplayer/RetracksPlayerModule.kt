@@ -497,13 +497,15 @@ class RetracksPlayerModule : Module() {
      * どちらも同じ MediaStore.Audio.Media を1行ずつなめれば取れる値なので、
      * getAlbumYears() と同様に自前で問い合わせる。
      *
-     * 返す形はどれも「小さい方から辿れる」形にしている（曲数ぶんではなく、非音楽の
-     * 曲数・フォルダ数ぶんで済む）：
+     * 3つのうち nonMusicTrackIds と folderNames は「小さい方から辿れる」形にして
+     * いる（曲数ぶんではなく、非音楽の曲数・フォルダ数ぶんで済む）。
+     * folderIdByTrackId だけは曲1件ごとに直接引く必要がある（JS 側の toTrack()
+     * で曲ごとにフォルダを当てはめるため）ので曲数ぶんのサイズになる。
      * - nonMusicTrackIds: IS_MUSIC が明示的に 0 の曲IDだけの配列。NULL（値が無い）は
      *   音楽として扱う＝ここに含めない。安全側に倒すため（除外リストに漏れなく
      *   入れるより、除外し過ぎない方を優先）。
-     * - folderIdByTrackId: 曲ID→フォルダIDの対応表。
-     * - folderNames: フォルダID→表示名の対応表。
+     * - folderIdByTrackId: 曲ID→フォルダIDの対応表（曲数ぶん）。
+     * - folderNames: フォルダID→表示名の対応表（フォルダ数ぶん）。
      *
      * フォルダIDは Android 10 (Q) 以降は BUCKET_ID、それより前は親ディレクトリの
      * 絶対パスをそのまま使う。expo-music-library 自身は後者をハッシュ化しているが、

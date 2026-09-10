@@ -303,7 +303,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           // 当てにすると、別のキュー（例：全曲シャッフル）の順列に番号だけを
           // 当てはめてしまい、画面と音が食い違う。キューはネイティブから貰う。
           const saved = await RetracksPlayer.getSavedQueue();
-          const nativeQueue = saved.tracks as Track[];
+          // QueueStore.kt が保存するのは id/uri/title/artist/album/durationMs/
+          // artworkUri の7つだけ（→ QueueStore.kt の saveTracks）。isMusic/
+          // folderId/folderName は持っていないので、ここで安全側の値を埋める。
+          // 埋めずに as Track[] するだけだと、型は boolean/string|null を
+          // 主張するのに実体は undefined のままになり、将来 isMusic で
+          // キューを絞る処理を足した瞬間、復元したキューの曲が軒並み
+          // 「非音楽」判定になって消える（起動直後の引き継ぎ時にしか
+          // 起きないため、原因にたどり着きにくい）。
+          const nativeQueue: Track[] = (saved.tracks as Track[]).map((t) => ({
+            ...t,
+            isMusic: t.isMusic ?? true,
+            folderId: t.folderId ?? null,
+            folderName: t.folderName ?? null,
+          }));
 
           if (nativeQueue.length === current.queueSize) {
             applyQueue(nativeQueue);

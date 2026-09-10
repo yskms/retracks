@@ -22,13 +22,18 @@ export type SegmentInput = {
 };
 
 /**
- * getTrackFolders() の戻り値。曲数ぶんではなく、非音楽の曲数・フォルダ数ぶんで
- * 済む形にしてある（→ RetracksPlayerModule.kt のコメント）。
+ * getTrackFolders() の戻り値。3つのうち2つ（nonMusicTrackIds・folderNames）は
+ * 曲数ぶんではなく、非音楽の曲数・フォルダ数ぶんで済む形にしてある
+ * （→ RetracksPlayerModule.kt のコメント）。folderIdByTrackId だけは曲数ぶんの
+ * サイズになる。toTrack() で曲1件ごとに直接引く必要があり（→ src/library.ts）、
+ * 逆向き（フォルダ→曲ID一覧）が要る場面（設定画面のフォルダ一覧など）は
+ * scanLibrary() 後の Track.folderId で rawTracks 側を groupBy すればよく、
+ * ここでも圧縮した形を持つ必要は無いと判断した。
  */
 export type TrackFolders = {
   /** IS_MUSIC が明示的に0の曲ID。NULL（値が無い）は音楽として扱うため含まない。 */
   nonMusicTrackIds: string[];
-  /** 曲ID→フォルダID。 */
+  /** 曲ID→フォルダID。曲数ぶんのサイズになる（上のコメント参照）。 */
   folderIdByTrackId: Record<string, string>;
   /** フォルダID→表示名。 */
   folderNames: Record<string, string>;
