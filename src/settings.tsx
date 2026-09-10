@@ -29,8 +29,12 @@ export type LanguagePreference = 'auto' | SupportedLanguage;
 export type Settings = {
   language: LanguagePreference;
   /**
-   * 短い曲を曲一覧・再生対象から除外するか。
-   * 要件 10.6 では既定OFF（決定：2026-09-03）としたが、2026-09-10 に既定ONへ変更。
+   * 短い曲を曲一覧・再生対象から除外するか。既定OFF。
+   * 2026-09-03に既定OFFとし、2026-09-10に一度既定ONへ変更したが、同日中に
+   * excludeNonMusic を追加したことで既定ONにしていた主因（通知音などの
+   * 混入。IS_MUSIC はどの端末でも Ringtones/Notifications/Alarms に0が立つ
+   * ため端末依存ではない）が解消されたため、既定OFFへ戻した（決定：2026-09-10）。
+   * 既定ONのまま残す副作用は一方向（5秒未満の実在する曲を黙って隠す）だった。
    */
   excludeShortTracks: boolean;
   /** この秒数未満の曲を「短い曲」とみなす。 */
@@ -59,7 +63,7 @@ const DEFAULT_TABS: TabEntry[] = TAB_IDS.map((id) => ({ id, visible: true }));
 
 const DEFAULT_SETTINGS: Settings = {
   language: 'auto',
-  excludeShortTracks: true,
+  excludeShortTracks: false,
   shortTrackThresholdSec: 5,
   excludeNonMusic: true,
   ignoreLeadingThe: true,
