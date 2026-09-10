@@ -7,9 +7,7 @@
 
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
-  FlatList,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -21,7 +19,6 @@ import PagerView from 'react-native-pager-view';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
-import type { TFunction } from 'i18next';
 
 import { usePlayback } from '../src/playback';
 import {
@@ -31,16 +28,10 @@ import {
   getTracksForArtists,
   type Track,
 } from '../src/library';
-import { colors, formatDuration } from '../src/theme';
-import { Row } from '../src/components/Row';
-import { Tile } from '../src/components/Tile';
+import { colors } from '../src/theme';
+import { AlbumsPage, ArtistsPage, SongsPage } from '../src/components/LibraryPages';
 import { useSelection } from '../src/useSelection';
-import {
-  columnsOf,
-  LAYOUT_ICON,
-  tileSizeOf,
-  useLayouts,
-} from '../src/layout';
+import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
 
 /**
  * 下線をネイティブ側で動かすためのラッパ。
@@ -52,12 +43,6 @@ type TabId = 'songs' | 'artists' | 'albums';
 
 const GRID_PADDING = 12;
 const GRID_GAP = 10;
-
-/**
- * 一覧の行の高さ。getItemLayout を与えると、FlatList が各行を測らずに
- * 位置を決められるため、描画範囲の管理が正確になり保持する行数が減る。
- */
-const ROW_HEIGHT = 66;
 
 export default function LibraryScreen() {
   const { t } = useTranslation();
@@ -252,194 +237,46 @@ export default function LibraryScreen() {
           clear();
         }}
       >
-        {/* 楽曲 */}
-        <View key="songs" style={styles.page}>
-          {tracks.length === 0 ? (
-            <Loading />
-          ) : (
-            <FlatList
-              data={tracks}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContent}
-              initialNumToRender={12}
-              windowSize={4}
-              maxToRenderPerBatch={8}
-              updateCellsBatchingPeriod={50}
-              removeClippedSubviews
-              getItemLayout={(_, index) => ({
-                length: ROW_HEIGHT,
-                offset: ROW_HEIGHT * index,
-                index,
-              })}
-              refreshControl={refreshControl}
-              renderItem={({ item, index }) => (
-                <Row
-                  title={item.title}
-                  subtitle={item.artist}
-                  trailing={formatDuration(item.durationMs)}
-                  artworkUri={item.artworkUri}
-                  selected={isSelected('songs', item.id)}
-                  playing={currentTrack?.id === item.id}
-                  onPress={async () => {
-                    if (inSelection) return toggle('songs', item.id);
-                    // 曲を直接タップしたときは画面を移さない。
-                    // 一覧を見ながら次々選べるようにするため。
-                    await playFrom(tracks, index);
-                  }}
-                  onLongPress={() => toggle('songs', item.id)}
-                />
-              )}
-            />
-          )}
-          {!inSelection && tracks.length > 0 && (
-            <Pressable
-              style={styles.fab}
-              onPress={async () => {
-                await playAll();
-                router.push('/player');
-              }}
-            >
-              <Text style={styles.fabGlyph}>⤮</Text>
-              <Text style={styles.fabLabel}>
-                {allProgress && allProgress.played > 1
-                  ? t('library.continueFrom', {
-                      played: allProgress.played,
-                      total: allProgress.total,
-                    })
-                  : t('library.shuffleAll')}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-
-        {/* アーティスト */}
-        <View key="artists" style={styles.page}>
-          <FlatList
-            // numColumns は途中で変えられないので、key を変えて作り直す
-            key={layouts.artists}
-            data={artists}
-            keyExtractor={(item) => item.id}
-            numColumns={columnsOf(layouts.artists)}
-            windowSize={4}
-            maxToRenderPerBatch={12}
-            removeClippedSubviews
-            columnWrapperStyle={
-              layouts.artists === 'list' ? undefined : styles.gridRow
-            }
-            contentContainerStyle={
-              layouts.artists === 'list' ? styles.listContent : styles.gridContent
-            }
+        <View key="songs">
+          <SongsPage
+            tracks={tracks}
+            currentTrack={currentTrack}
+            allProgress={allProgress}
+            inSelection={inSelection}
+            isSelected={isSelected}
+            toggle={toggle}
+            playFrom={playFrom}
+            playAll={playAll}
             refreshControl={refreshControl}
-            renderItem={({ item }) =>
-              layouts.artists !== 'list' ? (
-                <Tile
-                  title={item.name}
-                  subtitle={subtitleForArtist(t, albumCounts.get(item.name), item.trackCount)}
-                  artworkUri={artistArtwork.get(item.name) ?? null}
-                  size={tileSizeFor(layouts.artists)}
-                  selected={isSelected('artists', item.id)}
-                  onPress={() => {
-                    if (inSelection) return toggle('artists', item.id);
-                    router.push({
-                      pathname: '/artist/[id]',
-                      params: { id: item.id, name: item.name },
-                    });
-                  }}
-                  onLongPress={() => toggle('artists', item.id)}
-                />
-              ) : (
-                <Row
-                  title={item.name}
-                  subtitle={subtitleForArtist(t, albumCounts.get(item.name), item.trackCount)}
-                  artworkUri={artistArtwork.get(item.name) ?? null}
-                  chevron
-                  selected={isSelected('artists', item.id)}
-                  onPress={() => {
-                    if (inSelection) return toggle('artists', item.id);
-                    router.push({
-                      pathname: '/artist/[id]',
-                      params: { id: item.id, name: item.name },
-                    });
-                  }}
-                  onLongPress={() => toggle('artists', item.id)}
-                />
-              )
-            }
           />
         </View>
 
-        {/* アルバム */}
-        <View key="albums" style={styles.page}>
-          <FlatList
-            key={layouts.albums}
-            data={albums}
-            keyExtractor={(item) => item.id}
-            numColumns={columnsOf(layouts.albums)}
-            windowSize={4}
-            maxToRenderPerBatch={12}
-            removeClippedSubviews
-            columnWrapperStyle={layouts.albums === 'list' ? undefined : styles.gridRow}
-            contentContainerStyle={
-              layouts.albums === 'list' ? styles.listContent : styles.gridContent
-            }
+        <View key="artists">
+          <ArtistsPage
+            artists={artists}
+            layout={layouts.artists}
+            albumCounts={albumCounts}
+            artistArtwork={artistArtwork}
+            inSelection={inSelection}
+            isSelected={isSelected}
+            toggle={toggle}
+            tileSizeFor={tileSizeFor}
             refreshControl={refreshControl}
-            renderItem={({ item }) => {
-              const subtitle = item.year
-                ? `${item.artist} · ${item.year}`
-                : `${item.artist} · ${t('common.songCount', { count: item.trackCount })}`;
-              const open = () => {
-                if (inSelection) return toggle('albums', item.id);
-                router.push({
-                  pathname: '/album/[id]',
-                  params: { id: item.id, title: item.title, artist: item.artist },
-                });
-              };
-              return layouts.albums !== 'list' ? (
-                <Tile
-                  title={item.title}
-                  subtitle={subtitle}
-                  artworkUri={item.artworkUri}
-                  size={tileSizeFor(layouts.albums)}
-                  selected={isSelected('albums', item.id)}
-                  onPress={open}
-                  onLongPress={() => toggle('albums', item.id)}
-                />
-              ) : (
-                <Row
-                  title={item.title}
-                  subtitle={subtitle}
-                  artworkUri={item.artworkUri}
-                  chevron
-                  selected={isSelected('albums', item.id)}
-                  onPress={open}
-                  onLongPress={() => toggle('albums', item.id)}
-                />
-              );
-            }}
           />
         </View>
 
+        <View key="albums">
+          <AlbumsPage
+            albums={albums}
+            layout={layouts.albums}
+            inSelection={inSelection}
+            isSelected={isSelected}
+            toggle={toggle}
+            tileSizeFor={tileSizeFor}
+            refreshControl={refreshControl}
+          />
+        </View>
       </AnimatedPagerView>
-    </View>
-  );
-}
-
-/** 「アルバム数 · 曲数」のように出す。アルバム数が数えられない場合は曲数だけ。 */
-function subtitleForArtist(
-  t: TFunction,
-  albumCount: number | undefined,
-  trackCount: number
-): string {
-  const songs = t('common.songCount', { count: trackCount });
-  return albumCount ? `${t('common.albumCount', { count: albumCount })} · ${songs}` : songs;
-}
-
-function Loading() {
-  const { t } = useTranslation();
-  return (
-    <View style={styles.loading}>
-      <ActivityIndicator color={colors.accent} />
-      <Text style={styles.loadingText}>{t('library.loading')}</Text>
     </View>
   );
 }
@@ -473,10 +310,6 @@ const styles = StyleSheet.create({
   tabLabelActive: { color: colors.text, fontWeight: '700' },
   indicator: { height: 2, backgroundColor: colors.accent },
   pager: { flex: 1 },
-  page: { flex: 1 },
-  listContent: { paddingBottom: 24 },
-  gridContent: { padding: GRID_PADDING, paddingBottom: 24 },
-  gridRow: { gap: GRID_GAP },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -492,20 +325,4 @@ const styles = StyleSheet.create({
   rowTrailing: { color: colors.textDim, fontSize: 12 },
   chevron: { color: colors.textDim, fontSize: 20 },
   check: { color: colors.accent, fontSize: 16, fontWeight: '700' },
-  fab: {
-    position: 'absolute',
-    right: 16,
-    bottom: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 18,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.accent,
-  },
-  fabGlyph: { color: '#1a1206', fontSize: 18, fontWeight: '700' },
-  fabLabel: { color: '#1a1206', fontSize: 13, fontWeight: '700' },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-  loadingText: { color: colors.textDim, fontSize: 13 },
 });
