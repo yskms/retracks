@@ -4,26 +4,18 @@
  * 長押しで複数選択に入り、まとめて再生できる。
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  useWindowDimensions,
-  View,
-} from 'react-native';
+import { useCallback, useMemo } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { usePlayback } from '../../src/playback';
-import { getArtistDetail, type Album, type Track } from '../../src/library';
+import { deriveAlbums, type Album, type Track } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
 import { Tile } from '../../src/components/Tile';
-import { columnsOf, LAYOUT_ICON, tileSizeOf, useLayouts } from '../../src/layout';
+import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../../src/layout';
 import { useSelection } from '../../src/useSelection';
 
 /**
@@ -32,13 +24,27 @@ import { useSelection } from '../../src/useSelection';
  */
 type Kind = 'songs';
 
+/** アルバムの並び順。年が新しい方を先に、無ければタイトル順で後ろへ。 */
+function compareAlbumByYear(a: Album, b: Album): number {
+  if (a.year && b.year && a.year !== b.year) return b.year - a.year;
+  if (a.year && !b.year) return -1;
+  if (!a.year && b.year) return 1;
+  return a.title.localeCompare(b.title);
+}
+
 export default function ArtistScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
-  const { playFrom, playTracks, currentTrack } = usePlayback();
+  const {
+    tracks: allTracks,
+    albums: allAlbums,
+    playFrom,
+    playTracks,
+    currentTrack,
+  } = usePlayback();
   const {
     selection,
     active: inSelection,
@@ -49,19 +55,38 @@ export default function ArtistScreen() {
     areAllSelected,
   } = useSelection<Kind>();
 
-  const [albums, setAlbums] = useState<Album[]>([]);
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [loading, setLoading] = useState(true);
-
   const { layouts, cycle } = useLayouts();
   const albumLayout = layouts.artistAlbums;
   const tileSize = tileSizeOf(width, albumLayout, 16, 10);
 
-  /** アルバム名 → 収録曲。アルバム行の選択に使う。 */
+  // このアーティストの曲だけを曲一覧から抜き出す（deriveArtists() と同じ
+  // グループ化キー）。曲一覧のフィルタ・並び順をそのまま引き継ぐので、
+  // 除外設定がここにも一様に効く。
+  const tracks = useMemo(
+    () => allTracks.filter((t) => (t.artistId || t.artist) === id),
+    [allTracks, id]
+  );
+
+  // アルバムの年は曲単位では持っていないため、全体のアルバム一覧
+  // （年計算済み）から albumId ごとに引く。
+  const albumYears = useMemo(() => {
+    const years: Record<string, number> = {};
+    for (const a of allAlbums) {
+      if (a.year != null) years[a.id] = a.year;
+    }
+    return years;
+  }, [allAlbums]);
+
+  const albums = useMemo(
+    () => deriveAlbums(tracks, albumYears).sort(compareAlbumByYear),
+    [tracks, albumYears]
+  );
+
+  /** アルバムID（無ければ名前）→ 収録曲。アルバム行の選択に使う。 */
   const tracksByAlbum = useMemo(() => {
     const map = new Map<string, Track[]>();
     for (const track of tracks) {
-      const key = track.album ?? '';
+      const key = track.albumId || track.album;
       if (!key) continue;
       const list = map.get(key);
       if (list) list.push(track);
@@ -71,21 +96,9 @@ export default function ArtistScreen() {
   }, [tracks]);
 
   const albumTrackIds = useCallback(
-    (album: Album) => (tracksByAlbum.get(album.title) ?? []).map((t) => t.id),
+    (album: Album) => (tracksByAlbum.get(album.id) ?? []).map((t) => t.id),
     [tracksByAlbum]
   );
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const detail = await getArtistDetail(id);
-        setAlbums(detail.albums);
-        setTracks(detail.tracks);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [id]);
 
   /** 選択した曲をまとめて再生する。 */
   const playSelection = useCallback(
@@ -140,123 +153,112 @@ export default function ArtistScreen() {
         </View>
       )}
 
-      {loading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={colors.accent} />
-        </View>
-      ) : (
-        <FlatList
-          data={tracks}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          initialNumToRender={14}
-          windowSize={7}
-          removeClippedSubviews
-          ListHeaderComponent={
-            <View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summary}>
-                  {t('common.albumCount', { count: albums.length })} ·{' '}
-                  {t('common.songCount', { count: tracks.length })}
-                </Text>
-                {/* 選択中はヘッダー側に再生操作が出るので、こちらは隠す */}
-                {!inSelection && (
-                  <View style={styles.actions}>
-                    <Pressable
-                      style={styles.action}
-                      onPress={async () => {
-                        await playFrom(tracks, 0);
-                        router.push('/player');
-                      }}
-                    >
-                      <Text style={styles.actionText}>{`▶ ${t('common.playInOrder')}`}</Text>
-                    </Pressable>
-                    <Pressable
-                      style={[styles.action, styles.actionPrimary]}
-                      onPress={async () => {
-                        await playTracks('artist', [id], tracks);
-                        router.push('/player');
-                      }}
-                    >
-                      <Text style={styles.actionPrimaryText}>{`⤮ ${t('common.shufflePlay')}`}</Text>
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-
-              {albums.length > 0 && (
-                <>
-                  <Text style={styles.sectionTitle}>{t('artist.albumsSectionTitle')}</Text>
-                  <View style={albumLayout === 'list' ? undefined : styles.albumGrid}>
-                    {albums.map((album) => {
-                      const subtitle = album.year
-                        ? `${album.year}`
-                        : t('common.songCount', { count: album.trackCount });
-                      const open = () => {
-                        // 選択中はアルバムの収録曲をまとめて選ぶ／外す
-                        if (inSelection) {
-                          return toggleMany('songs', albumTrackIds(album));
-                        }
-                        router.push({
-                          pathname: '/album/[id]',
-                          params: {
-                            id: album.id,
-                            title: album.title,
-                            artist: album.artist,
-                            // アルバムIDが取れない曲もあるため、辿り直せるよう
-                            // アーティストIDも渡しておく
-                            artistId: id,
-                          },
-                        });
-                      };
-                      return albumLayout === 'list' ? (
-                        <Row
-                          key={album.id}
-                          title={album.title}
-                          subtitle={subtitle}
-                          artworkUri={album.artworkUri}
-                          selected={areAllSelected('songs', albumTrackIds(album))}
-                          chevron
-                          onPress={open}
-                          onLongPress={() => toggleMany('songs', albumTrackIds(album))}
-                        />
-                      ) : (
-                        <Tile
-                          key={album.id}
-                          title={album.title}
-                          subtitle={subtitle}
-                          artworkUri={album.artworkUri}
-                          size={tileSize}
-                          selected={areAllSelected('songs', albumTrackIds(album))}
-                          onPress={open}
-                          onLongPress={() => toggleMany('songs', albumTrackIds(album))}
-                        />
-                      );
-                    })}
-                  </View>
-                </>
+      <FlatList
+        data={tracks}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        initialNumToRender={14}
+        windowSize={7}
+        removeClippedSubviews
+        ListHeaderComponent={
+          <View>
+            <View style={styles.summaryRow}>
+              <Text style={styles.summary}>
+                {t('common.albumCount', { count: albums.length })} ·{' '}
+                {t('common.songCount', { count: tracks.length })}
+              </Text>
+              {/* 選択中はヘッダー側に再生操作が出るので、こちらは隠す */}
+              {!inSelection && (
+                <View style={styles.actions}>
+                  <Pressable
+                    style={styles.action}
+                    onPress={async () => {
+                      await playFrom(tracks, 0);
+                      router.push('/player');
+                    }}
+                  >
+                    <Text style={styles.actionText}>{`▶ ${t('common.playInOrder')}`}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={[styles.action, styles.actionPrimary]}
+                    onPress={async () => {
+                      await playTracks('artist', [id], tracks);
+                      router.push('/player');
+                    }}
+                  >
+                    <Text style={styles.actionPrimaryText}>{`⤮ ${t('common.shufflePlay')}`}</Text>
+                  </Pressable>
+                </View>
               )}
-
-              <Text style={styles.sectionTitle}>{t('artist.songsSectionTitle')}</Text>
             </View>
-          }
-          renderItem={({ item, index }) => (
-            <Row
-              title={item.title}
-              subtitle={item.album ?? undefined}
-              trailing={formatDuration(item.durationMs)}
-              artworkUri={item.artworkUri}
-              selected={isSelected('songs', item.id)}
-              playing={currentTrack?.id === item.id}
-              // 曲を直接タップしたときは画面を移さない
-              onPress={() =>
-                inSelection ? toggle('songs', item.id) : void playFrom(tracks, index)
-              }
-              onLongPress={() => toggle('songs', item.id)}
-            />
-          )}
-        />
-      )}
+
+            {albums.length > 0 && (
+              <>
+                <Text style={styles.sectionTitle}>{t('artist.albumsSectionTitle')}</Text>
+                <View style={albumLayout === 'list' ? undefined : styles.albumGrid}>
+                  {albums.map((album) => {
+                    const subtitle = album.year
+                      ? `${album.year}`
+                      : t('common.songCount', { count: album.trackCount });
+                    const open = () => {
+                      // 選択中はアルバムの収録曲をまとめて選ぶ／外す
+                      if (inSelection) {
+                        return toggleMany('songs', albumTrackIds(album));
+                      }
+                      router.push({
+                        pathname: '/album/[id]',
+                        params: {
+                          id: album.id,
+                          title: album.title,
+                          artist: album.artist,
+                        },
+                      });
+                    };
+                    return albumLayout === 'list' ? (
+                      <Row
+                        key={album.id}
+                        title={album.title}
+                        subtitle={subtitle}
+                        artworkUri={album.artworkUri}
+                        selected={areAllSelected('songs', albumTrackIds(album))}
+                        chevron
+                        onPress={open}
+                        onLongPress={() => toggleMany('songs', albumTrackIds(album))}
+                      />
+                    ) : (
+                      <Tile
+                        key={album.id}
+                        title={album.title}
+                        subtitle={subtitle}
+                        artworkUri={album.artworkUri}
+                        size={tileSize}
+                        selected={areAllSelected('songs', albumTrackIds(album))}
+                        onPress={open}
+                        onLongPress={() => toggleMany('songs', albumTrackIds(album))}
+                      />
+                    );
+                  })}
+                </View>
+              </>
+            )}
+
+            <Text style={styles.sectionTitle}>{t('artist.songsSectionTitle')}</Text>
+          </View>
+        }
+        renderItem={({ item, index }) => (
+          <Row
+            title={item.title}
+            subtitle={item.album ?? undefined}
+            trailing={formatDuration(item.durationMs)}
+            artworkUri={item.artworkUri}
+            selected={isSelected('songs', item.id)}
+            playing={currentTrack?.id === item.id}
+            // 曲を直接タップしたときは画面を移さない
+            onPress={() => (inSelection ? toggle('songs', item.id) : void playFrom(tracks, index))}
+            onLongPress={() => toggle('songs', item.id)}
+          />
+        )}
+      />
     </View>
   );
 }
@@ -273,7 +275,6 @@ const styles = StyleSheet.create({
   },
   headerIcon: { color: colors.text, fontSize: 18 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '700', flex: 1 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listContent: { paddingBottom: 24 },
   summaryRow: {
     flexDirection: 'row',

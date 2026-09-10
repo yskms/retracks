@@ -2,14 +2,14 @@
  * アルバム詳細。収録曲を並べ、タップで再生する。
  */
 
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { usePlayback } from '../../src/playback';
-import { getAlbumTracks, getArtistDetail, type Track } from '../../src/library';
+import { compareByTrackOrder } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
 
@@ -17,38 +17,20 @@ export default function AlbumScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { id, title, artist, artistId } = useLocalSearchParams<{
+  const { id, title, artist } = useLocalSearchParams<{
     id: string;
     title?: string;
     artist?: string;
-    artistId?: string;
   }>();
-  const { playFrom, playTracks, currentTrack } = usePlayback();
+  const { tracks: allTracks, playFrom, playTracks, currentTrack } = usePlayback();
 
-  const [tracks, setTracks] = useState<Track[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const direct = await getAlbumTracks(id);
-        if (direct.length > 0) {
-          setTracks(direct);
-          return;
-        }
-        // アルバムIDを持たない曲はアルバム名で束ねているため、
-        // ID による取得が空になることがある。アーティスト経由で拾い直す。
-        if (artistId && title) {
-          const detail = await getArtistDetail(artistId);
-          setTracks(detail.tracks.filter((t) => t.album === title));
-          return;
-        }
-        setTracks(direct);
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, [id, artistId, title]);
+  // id はアルバムの実ID、またはそれを持たない曲向けのアルバム名のどちらか
+  // （→ deriveAlbums()）。プレイヤー画面からはアルバムIDを持たず名前だけで
+  // 遷移してくることもあるため、名前一致もあわせて見る。
+  const tracks = useMemo(
+    () => allTracks.filter((t) => t.albumId === id || t.album === id).sort(compareByTrackOrder),
+    [allTracks, id]
+  );
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -68,53 +50,47 @@ export default function AlbumScreen() {
         </View>
       </View>
 
-      {loading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={colors.accent} />
-        </View>
-      ) : (
-        <FlatList
-          data={tracks}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-          ListHeaderComponent={
-            <View style={styles.summaryRow}>
-              <Text style={styles.summary}>{t('common.songCount', { count: tracks.length })}</Text>
-              <View style={styles.actions}>
-                <Pressable
-                  style={styles.action}
-                  onPress={async () => {
-                    await playFrom(tracks, 0);
-                    router.push('/player');
-                  }}
-                >
-                  <Text style={styles.actionText}>{`▶ ${t('common.playInOrder')}`}</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.action, styles.actionPrimary]}
-                  onPress={async () => {
-                    await playTracks('album', [id], tracks);
-                    router.push('/player');
-                  }}
-                >
-                  <Text style={styles.actionPrimaryText}>{`⤮ ${t('common.shufflePlay')}`}</Text>
-                </Pressable>
-              </View>
+      <FlatList
+        data={tracks}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.listContent}
+        ListHeaderComponent={
+          <View style={styles.summaryRow}>
+            <Text style={styles.summary}>{t('common.songCount', { count: tracks.length })}</Text>
+            <View style={styles.actions}>
+              <Pressable
+                style={styles.action}
+                onPress={async () => {
+                  await playFrom(tracks, 0);
+                  router.push('/player');
+                }}
+              >
+                <Text style={styles.actionText}>{`▶ ${t('common.playInOrder')}`}</Text>
+              </Pressable>
+              <Pressable
+                style={[styles.action, styles.actionPrimary]}
+                onPress={async () => {
+                  await playTracks('album', [id], tracks);
+                  router.push('/player');
+                }}
+              >
+                <Text style={styles.actionPrimaryText}>{`⤮ ${t('common.shufflePlay')}`}</Text>
+              </Pressable>
             </View>
-          }
-          renderItem={({ item, index }) => (
-            <Row
-              title={item.title}
-              subtitle={item.artist}
-              trailing={formatDuration(item.durationMs)}
-              artworkUri={item.artworkUri}
-              playing={currentTrack?.id === item.id}
-              // 曲を直接タップしたときは画面を移さない
-              onPress={() => void playFrom(tracks, index)}
-            />
-          )}
-        />
-      )}
+          </View>
+        }
+        renderItem={({ item, index }) => (
+          <Row
+            title={item.title}
+            subtitle={item.artist}
+            trailing={formatDuration(item.durationMs)}
+            artworkUri={item.artworkUri}
+            playing={currentTrack?.id === item.id}
+            // 曲を直接タップしたときは画面を移さない
+            onPress={() => void playFrom(tracks, index)}
+          />
+        )}
+      />
     </View>
   );
 }
@@ -132,7 +108,6 @@ const styles = StyleSheet.create({
   headerText: { flex: 1 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
   headerSub: { color: colors.textDim, fontSize: 12, marginTop: 1 },
-  loading: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   listContent: { paddingBottom: 24 },
   summaryRow: {
     flexDirection: 'row',
