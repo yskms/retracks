@@ -18,6 +18,10 @@ import {
 
 import i18next, { detectLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from './i18n';
 import { readJson, StorageKeys, writeJson } from './storage';
+import { TAB_IDS, type TabId } from './tabs';
+
+/** タブ1枚ぶんの並び順・表示状態。配列の順序がそのまま表示順になる。 */
+export type TabEntry = { id: TabId; visible: boolean };
 
 /** 'auto' は端末の言語（対応外なら英語）に従う。→ src/i18n/index.ts の detectLanguage */
 export type LanguagePreference = 'auto' | SupportedLanguage;
@@ -38,7 +42,14 @@ export type Settings = {
   ignoreLeadingThe: boolean;
   /** 並べ替え時に先頭の "A "/"An " を無視するか。既定はOFF（自分好みに寄せた既定値）。 */
   ignoreLeadingAAn: boolean;
+  /**
+   * ライブラリ画面のタブの並び順・表示状態。配列の順序がそのまま表示順。
+   * 最低1枚は visible: true が残る（0枚だと画面が組み立てられない）。
+   */
+  tabs: TabEntry[];
 };
+
+const DEFAULT_TABS: TabEntry[] = TAB_IDS.map((id) => ({ id, visible: true }));
 
 const DEFAULT_SETTINGS: Settings = {
   language: 'auto',
@@ -46,6 +57,7 @@ const DEFAULT_SETTINGS: Settings = {
   shortTrackThresholdSec: 5,
   ignoreLeadingThe: true,
   ignoreLeadingAAn: false,
+  tabs: DEFAULT_TABS,
 };
 
 const MIN_THRESHOLD_SEC = 5;
@@ -59,6 +71,7 @@ type SettingsValue = Settings & {
   setShortTrackThresholdSec: (value: number) => void;
   setIgnoreLeadingThe: (value: boolean) => void;
   setIgnoreLeadingAAn: (value: boolean) => void;
+  setTabs: (next: TabEntry[]) => void;
 };
 
 const SettingsContext = createContext<SettingsValue | null>(null);
@@ -71,6 +84,34 @@ export function useSettings(): SettingsValue {
 
 function isSupportedLanguage(value: unknown): value is SupportedLanguage {
   return (SUPPORTED_LANGUAGES as readonly string[]).includes(value as string);
+}
+
+function isTabId(value: unknown): value is TabId {
+  return (TAB_IDS as readonly string[]).includes(value as string);
+}
+
+/**
+ * 保存されたタブ設定を正本（TAB_IDS）と突き合わせる。
+ * - 正本に無いid（将来タブを廃止したとき）は捨てる
+ * - 重複は落とす（最初に出てきたものを採用）
+ * - 正本にあって保存値に無いid（将来タブを増やしたとき）は末尾に足す
+ * - 表示が0件になるなら既定値に戻す（画面が組み立てられなくなるため）
+ */
+function normalizeTabs(value: unknown): TabEntry[] {
+  const saved = Array.isArray(value) ? value : [];
+  const seen = new Set<TabId>();
+  const result: TabEntry[] = [];
+
+  for (const entry of saved as Partial<TabEntry>[]) {
+    if (!isTabId(entry?.id) || seen.has(entry.id)) continue;
+    seen.add(entry.id);
+    result.push({ id: entry.id, visible: typeof entry.visible === 'boolean' ? entry.visible : true });
+  }
+  for (const id of TAB_IDS) {
+    if (!seen.has(id)) result.push({ id, visible: true });
+  }
+
+  return result.some((tab) => tab.visible) ? result : DEFAULT_TABS;
 }
 
 function normalize(value: unknown): Settings {
@@ -96,6 +137,7 @@ function normalize(value: unknown): Settings {
       typeof saved.ignoreLeadingAAn === 'boolean'
         ? saved.ignoreLeadingAAn
         : DEFAULT_SETTINGS.ignoreLeadingAAn,
+    tabs: normalizeTabs(saved.tabs),
   };
 }
 
@@ -171,6 +213,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [patch]
   );
 
+  const setTabs = useCallback(
+    (next: TabEntry[]) => {
+      // 呼び出し側（設定画面）が「最後の1枚は隠せない」を守っている前提だが、
+      // 保存内容が壊れて0件になる事故だけは最後の砦として弾いておく。
+      if (!next.some((tab) => tab.visible)) return;
+      patch('tabs', next);
+    },
+    [patch]
+  );
+
   const value: SettingsValue = {
     ...settings,
     ready,
@@ -179,6 +231,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setShortTrackThresholdSec,
     setIgnoreLeadingThe,
     setIgnoreLeadingAAn,
+    setTabs,
   };
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

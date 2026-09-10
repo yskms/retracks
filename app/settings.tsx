@@ -2,9 +2,7 @@
  * 設定画面（要件 10.6）。
  *
  * デバッグ画面と違い、こちらは製品として公開する画面。
- * 今回実装するのは優先度の低いコストで作れる3点だけ：
- * 短い曲の除外、並べ替え時の冠詞無視、言語の手動切り替え。
- * タブのオンオフ・並べ替えや除外フォルダは次のフェーズで追加する。
+ * 除外フォルダはまだ未実装（次のフェーズで追加する）。
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -14,7 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { SUPPORTED_LANGUAGES } from '../src/i18n';
-import { THRESHOLD_BOUNDS, useSettings, type LanguagePreference } from '../src/settings';
+import { THRESHOLD_BOUNDS, useSettings, type LanguagePreference, type TabEntry } from '../src/settings';
+import { TAB_LABEL_KEY } from '../src/tabs';
 import { colors } from '../src/theme';
 
 const LANGUAGE_LABEL_KEY = {
@@ -35,12 +34,28 @@ export default function SettingsScreen() {
     shortTrackThresholdSec,
     ignoreLeadingThe,
     ignoreLeadingAAn,
+    tabs,
     setLanguage,
     setExcludeShortTracks,
     setShortTrackThresholdSec,
     setIgnoreLeadingThe,
     setIgnoreLeadingAAn,
+    setTabs,
   } = useSettings();
+
+  const visibleTabCount = tabs.filter((tab) => tab.visible).length;
+
+  const moveTab = (index: number, delta: number) => {
+    const target = index + delta;
+    if (target < 0 || target >= tabs.length) return;
+    const next: TabEntry[] = [...tabs];
+    [next[index], next[target]] = [next[target], next[index]];
+    setTabs(next);
+  };
+
+  const toggleTabVisible = (index: number, visible: boolean) => {
+    setTabs(tabs.map((tab, i) => (i === index ? { ...tab, visible } : tab)));
+  };
 
   // ＋／－の表示は毎タップ即座に動かし、実際の適用（曲一覧の絞り込み再計算・
   // 保存）は操作が落ち着いてからにする。連打のたびに1000曲超の一覧を
@@ -194,6 +209,48 @@ export default function SettingsScreen() {
         </View>
 
         <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('settings.tabsSectionTitle')}</Text>
+          <Text style={styles.rowHint}>{t('settings.tabsHint')}</Text>
+          {tabs.map((tab, index) => (
+            <View key={tab.id} style={styles.tabRow}>
+              <View style={styles.tabReorder}>
+                <Pressable
+                  style={[styles.stepperButton, index === 0 && styles.stepperButtonDisabled]}
+                  hitSlop={10}
+                  disabled={index === 0}
+                  accessibilityLabel={t('settings.tabMoveUpA11y')}
+                  onPress={() => moveTab(index, -1)}
+                >
+                  <Text style={styles.stepperButtonText}>▲</Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.stepperButton,
+                    index === tabs.length - 1 && styles.stepperButtonDisabled,
+                  ]}
+                  hitSlop={10}
+                  disabled={index === tabs.length - 1}
+                  accessibilityLabel={t('settings.tabMoveDownA11y')}
+                  onPress={() => moveTab(index, 1)}
+                >
+                  <Text style={styles.stepperButtonText}>▼</Text>
+                </Pressable>
+              </View>
+              <Text style={[styles.rowLabel, styles.tabLabel, !tab.visible && styles.tabLabelHidden]}>
+                {t(TAB_LABEL_KEY[tab.id])}
+              </Text>
+              <Switch
+                value={tab.visible}
+                onValueChange={(value) => toggleTabVisible(index, value)}
+                disabled={tab.visible && visibleTabCount <= 1}
+                trackColor={{ true: colors.accentDim, false: colors.surfaceHigh }}
+                thumbColor={tab.visible ? colors.accent : colors.textDim}
+              />
+            </View>
+          ))}
+        </View>
+
+        <View style={styles.card}>
           <Text style={styles.cardTitle}>{t('settings.developerSectionTitle')}</Text>
           <Pressable style={styles.button} onPress={() => router.push('/debug')}>
             <Text style={styles.buttonText}>{t('settings.openDebug')}</Text>
@@ -251,6 +308,10 @@ const styles = StyleSheet.create({
   stepperButtonDisabled: { opacity: 0.35 },
   stepperButtonText: { color: colors.text, fontSize: 18, fontWeight: '700' },
   stepperValue: { color: colors.text, fontSize: 13, fontWeight: '600', minWidth: 120, textAlign: 'center' },
+  tabRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  tabReorder: { flexDirection: 'row', gap: 6 },
+  tabLabel: { flex: 1 },
+  tabLabelHidden: { color: colors.textDim },
   button: {
     backgroundColor: colors.surfaceHigh,
     paddingHorizontal: 14,
