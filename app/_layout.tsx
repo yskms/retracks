@@ -1,3 +1,4 @@
+import { useCallback, useState } from 'react';
 import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -8,9 +9,17 @@ import '../src/i18n';
 import { SettingsProvider } from '../src/settings';
 import { PlaybackProvider } from '../src/playback';
 import { MiniPlayer } from '../src/components/MiniPlayer';
+import { SplashFade } from '../src/components/SplashFade';
 import { colors } from '../src/theme';
 
 export default function RootLayout() {
+  const [showSplash, setShowSplash] = useState(true);
+  // インラインの () => setShowSplash(false) だと毎レンダーで新しい関数になり、
+  // SplashFade 側の effect（フェード開始）が依存に持っている。RootLayout が
+  // 再レンダーされないうちは実害が無いが、将来ここに state が増えたときに
+  // フェード中の再実行でアニメーションが中断されないよう固定しておく。
+  const hideSplash = useCallback(() => setShowSplash(false), []);
+
   return (
     <GestureHandlerRootView style={styles.root}>
       <SafeAreaProvider>
@@ -35,6 +44,7 @@ export default function RootLayout() {
               </Stack>
               <MiniPlayerSlot />
             </View>
+            {showSplash && <SplashFade onDone={hideSplash} />}
           </PlaybackProvider>
         </SettingsProvider>
       </SafeAreaProvider>
