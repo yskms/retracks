@@ -35,10 +35,22 @@ export type Track = {
   folderId: string | null;
   /** 所属フォルダの表示名。folderId が null なら null。 */
   folderName: string | null;
+  /**
+   * アルバムID。無い曲もある（asset.albumId は string | undefined）ため、
+   * アーティスト/アルバム一覧はこれが無ければ album（名前）でまとめる。
+   * → deriveAlbums()
+   */
+  albumId: string | null;
+  /** アーティストID。albumId と同じ理由で無い曲があり得る。→ deriveArtists() */
+  artistId: string | null;
+  /** アルバム内のトラック番号。無いこともある。アルバム詳細の並べ替えに使う。 */
+  trackNumber: number | null;
+  /** ディスク番号。無ければ1枚組として扱う。→ compareByTrackOrder() */
+  discNumber: number | null;
 };
 
 export type LibrarySnapshot = {
-  version: 4;
+  version: 5;
   scannedAt: number;
   tracks: Track[];
 };
@@ -111,6 +123,10 @@ function toTrack(
     isMusic: !isNonMusic,
     folderId,
     folderName: folderId ? (folders.folderNames[folderId] ?? null) : null,
+    albumId: asset.albumId ?? null,
+    artistId: asset.artistId ?? null,
+    trackNumber: asset.trackNumber ?? null,
+    discNumber: asset.discNumber ?? null,
   };
 }
 
@@ -154,13 +170,13 @@ export async function scanLibrary(): Promise<Track[]> {
 export async function readCache(): Promise<LibrarySnapshot | null> {
   const cached = await readJson<LibrarySnapshot>(StorageKeys.library);
   // 版が上がったらキャッシュを捨てて走査し直す（アートワーク追加など）
-  if (!cached || cached.version !== 4 || !Array.isArray(cached.tracks)) return null;
+  if (!cached || cached.version !== 5 || !Array.isArray(cached.tracks)) return null;
   return cached;
 }
 
 export async function writeCache(tracks: Track[]): Promise<LibrarySnapshot> {
   const snapshot: LibrarySnapshot = {
-    version: 4,
+    version: 5,
     scannedAt: Date.now(),
     tracks,
   };
