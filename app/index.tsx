@@ -29,7 +29,13 @@ import {
   type Track,
 } from '../src/library';
 import { colors } from '../src/theme';
-import { AlbumsPage, ArtistsPage, SongsPage } from '../src/components/LibraryPages';
+import {
+  AlbumsPage,
+  ArtistsPage,
+  FAB_BOTTOM_OFFSET,
+  FAB_HEIGHT,
+  SongsPage,
+} from '../src/components/LibraryPages';
 import { useSelection } from '../src/useSelection';
 import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
 import { TAB_LABEL_KEY, TAB_LAYOUT_KEY, type TabId } from '../src/tabs';
@@ -409,13 +415,13 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 16,
-    bottom: 16,
+    bottom: FAB_BOTTOM_OFFSET,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 18,
-    height: 48,
-    borderRadius: 24,
+    height: FAB_HEIGHT,
+    borderRadius: FAB_HEIGHT / 2,
     backgroundColor: colors.accent,
   },
   fabGlyph: { color: '#1a1206', fontSize: 18, fontWeight: '700' },

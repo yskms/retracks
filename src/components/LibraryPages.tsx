@@ -34,6 +34,16 @@ const GRID_GAP = 10;
  */
 const ROW_HEIGHT = 66;
 
+/**
+ * 全曲シャッフルのFAB（app/index.tsx）のサイズ。FABはページャの外、
+ * 画面レベルに浮いているため、一覧側はこの値をもとに下端の余白を確保する
+ * （でないとグリッドの最終行がFABの下に隠れる）。app/index.tsx の fab
+ * スタイルもこの値を使うので、サイズを変えるならここだけ直せばよい。
+ */
+export const FAB_HEIGHT = 48;
+export const FAB_BOTTOM_OFFSET = 16;
+const FAB_CLEARANCE = FAB_BOTTOM_OFFSET + FAB_HEIGHT + 24;
+
 type SelectionHelpers<K extends string> = {
   inSelection: boolean;
   isSelected: (kind: K, id: string) => boolean;
@@ -262,8 +272,8 @@ function Loading() {
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
-  listContent: { paddingBottom: 24 },
-  gridContent: { padding: GRID_PADDING, paddingBottom: 24 },
+  listContent: { paddingBottom: FAB_CLEARANCE },
+  gridContent: { padding: GRID_PADDING, paddingBottom: FAB_CLEARANCE },
   gridRow: { gap: GRID_GAP },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: colors.textDim, fontSize: 13 },
