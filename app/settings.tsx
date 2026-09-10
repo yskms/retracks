@@ -211,6 +211,9 @@ export default function SettingsScreen() {
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t('settings.tabsSectionTitle')}</Text>
           <Text style={styles.rowHint}>{t('settings.tabsHint')}</Text>
+          {visibleTabCount <= 1 && (
+            <Text style={styles.rowHint}>{t('settings.tabsMinVisibleHint')}</Text>
+          )}
           {tabs.map((tab, index) => (
             <View key={tab.id} style={styles.tabRow}>
               <View style={styles.tabReorder}>

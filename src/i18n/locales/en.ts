@@ -85,6 +85,7 @@ export default {
     ignoreLeadingAAnHint: 'e.g. files "A Perfect Circle" under P',
     tabsSectionTitle: 'Tabs',
     tabsHint: 'Reorder with the arrows, show or hide with the switch',
+    tabsMinVisibleHint: "The last visible tab can't be hidden",
     tabMoveUpA11y: 'Move up',
     tabMoveDownA11y: 'Move down',
     developerSectionTitle: 'Developer',

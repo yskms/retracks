@@ -80,6 +80,7 @@ export default {
     ignoreLeadingAAnHint: '例：「A Perfect Circle」を P として並べます',
     tabsSectionTitle: 'タブの表示・並び順',
     tabsHint: '矢印で並び替え、スイッチで表示・非表示を切り替えます',
+    tabsMinVisibleHint: '最後の1つは非表示にできません',
     tabMoveUpA11y: '上へ移動',
     tabMoveDownA11y: '下へ移動',
     developerSectionTitle: '開発者向け',
