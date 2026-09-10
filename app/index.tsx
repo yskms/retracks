@@ -5,7 +5,7 @@
  * タブ構成ではなく、配列から組み立てるページャにしている。
  */
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Pressable,
@@ -32,7 +32,8 @@ import { colors } from '../src/theme';
 import { AlbumsPage, ArtistsPage, SongsPage } from '../src/components/LibraryPages';
 import { useSelection } from '../src/useSelection';
 import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
-import { TAB_IDS, TAB_LABEL_KEY, type TabId } from '../src/tabs';
+import { TAB_LABEL_KEY, TAB_LAYOUT_KEY, type TabId } from '../src/tabs';
+import { useSettings } from '../src/settings';
 
 /**
  * 下線をネイティブ側で動かすためのラッパ。
@@ -48,9 +49,14 @@ export default function LibraryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const { tabs: tabSettings } = useSettings();
+  // 非表示のタブはページャに載せない。順序はそのまま設定の並びを使う。
   const tabs: { id: TabId; label: string }[] = useMemo(
-    () => TAB_IDS.map((id) => ({ id, label: t(TAB_LABEL_KEY[id]) })),
-    [t]
+    () =>
+      tabSettings
+        .filter((tab) => tab.visible)
+        .map((tab) => ({ id: tab.id, label: t(TAB_LABEL_KEY[tab.id]) })),
+    [tabSettings, t]
   );
   const {
     tracks,
@@ -67,7 +73,15 @@ export default function LibraryScreen() {
     useSelection<TabId>();
 
   const pagerRef = useRef<PagerView>(null);
-  const [page, setPage] = useState(0);
+  // page はここから導出する値であって、真実の情報源ではない。タブの並びや
+  // 表示が設定側で変わると同じインデックスが別のタブを指すことになるため、
+  // 「今どのタブを見ているか」は activeTabId（タブID）で持つ。
+  const [activeTabId, setActiveTabId] = useState<TabId>(tabs[0]?.id ?? 'songs');
+  const page = Math.max(0, tabs.findIndex((tab) => tab.id === activeTabId));
+  // タブの構成（並び・表示）が変わるたびに変化する文字列。ページャの子の
+  // 増減・並べ替えは react-native-pager-view（Android は ViewPager2）側で
+  // ずれることがあるため、変わったら key を変えてページャごと作り直す。
+  const pagerKey = tabs.map((tab) => tab.id).join(',');
   const [refreshing, setRefreshing] = useState(false);
 
   /** 一覧の一番上から引っ張って更新。裏の自動走査とは別に、明示的に走らせる。 */
@@ -91,7 +105,10 @@ export default function LibraryScreen() {
   );
 
   const { layouts, cycle } = useLayouts();
-  const currentLayoutKey = page === 1 ? 'artists' : 'albums';
+  // レイアウト切替アイコンは「そのタブに表示形式があるか」で出す。
+  // 曲タブだから出さない、という決め打ちにしないので、タブが増えても
+  // TAB_LAYOUT_KEY に1件足すだけで済む。
+  const layoutKeyForActiveTab = TAB_LAYOUT_KEY[activeTabId];
   const tileSizeFor = (layout: (typeof layouts)['artists']) =>
     tileSizeOf(width, layout, GRID_PADDING, GRID_GAP);
 
@@ -105,6 +122,23 @@ export default function LibraryScreen() {
   const position = useRef(new Animated.Value(0)).current;
   const offset = useRef(new Animated.Value(0)).current;
   const tabWidth = width / tabs.length;
+
+  // タブの構成が変わってページャを作り直すときの後始末。
+  // - 今見ていたタブが消えていたら、先頭のタブへ切り替える
+  // - 下線（position/offset）は onPageScroll でしか動かないので、
+  //   スワイプせずに構成が変わると古い位置に取り残される。作り直した
+  //   ページャの今のページへ合わせておく
+  // - 隠したタブの選択が残ったまま選択ヘッダーだけ出る、という状態を避ける
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.id === activeTabId)) {
+      setActiveTabId(tabs[0]?.id ?? 'songs');
+    }
+    position.setValue(page);
+    offset.setValue(0);
+    clear();
+    // pagerKey が変わったとき（＝ページャを作り直すとき）だけ実行したい。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagerKey]);
 
   /** 選択したものからキューを作って再生する（要件 10.3）。 */
   const playSelection = useCallback(async (shuffled: boolean) => {
@@ -160,10 +194,10 @@ export default function LibraryScreen() {
         <View style={styles.header}>
           <Text style={styles.brand}>RE:TR4CKS</Text>
           <View style={styles.headerRight}>
-            {page > 0 && (
-              <Pressable hitSlop={10} onPress={() => cycle(currentLayoutKey)}>
+            {layoutKeyForActiveTab && (
+              <Pressable hitSlop={10} onPress={() => cycle(layoutKeyForActiveTab)}>
                 <Text style={styles.headerIcon}>
-                  {LAYOUT_ICON[layouts[currentLayoutKey]]}
+                  {LAYOUT_ICON[layouts[layoutKeyForActiveTab]]}
                 </Text>
               </Pressable>
             )}
@@ -219,56 +253,60 @@ export default function LibraryScreen() {
       </View>
 
       <AnimatedPagerView
+        key={pagerKey}
         ref={pagerRef}
         style={styles.pager}
-        initialPage={0}
+        initialPage={page}
         onPageScroll={Animated.event(
           [{ nativeEvent: { position, offset } }],
           { useNativeDriver: true }
         )}
         onPageSelected={(event) => {
-          setPage(event.nativeEvent.position);
+          const next = tabs[event.nativeEvent.position];
+          if (next) setActiveTabId(next.id);
           // タブを移ると選択対象の種類が変わってしまうので解除する
           clear();
         }}
       >
-        <View key="songs">
-          <SongsPage
-            tracks={tracks}
-            currentTrack={currentTrack}
-            inSelection={inSelection}
-            isSelected={isSelected}
-            toggle={toggle}
-            playFrom={playFrom}
-            refreshControl={refreshControl}
-          />
-        </View>
-
-        <View key="artists">
-          <ArtistsPage
-            artists={artists}
-            layout={layouts.artists}
-            albumCounts={albumCounts}
-            artistArtwork={artistArtwork}
-            inSelection={inSelection}
-            isSelected={isSelected}
-            toggle={toggle}
-            tileSizeFor={tileSizeFor}
-            refreshControl={refreshControl}
-          />
-        </View>
-
-        <View key="albums">
-          <AlbumsPage
-            albums={albums}
-            layout={layouts.albums}
-            inSelection={inSelection}
-            isSelected={isSelected}
-            toggle={toggle}
-            tileSizeFor={tileSizeFor}
-            refreshControl={refreshControl}
-          />
-        </View>
+        {tabs.map((tab) => (
+          <View key={tab.id}>
+            {tab.id === 'songs' && (
+              <SongsPage
+                tracks={tracks}
+                currentTrack={currentTrack}
+                inSelection={inSelection}
+                isSelected={isSelected}
+                toggle={toggle}
+                playFrom={playFrom}
+                refreshControl={refreshControl}
+              />
+            )}
+            {tab.id === 'artists' && (
+              <ArtistsPage
+                artists={artists}
+                layout={layouts.artists}
+                albumCounts={albumCounts}
+                artistArtwork={artistArtwork}
+                inSelection={inSelection}
+                isSelected={isSelected}
+                toggle={toggle}
+                tileSizeFor={tileSizeFor}
+                refreshControl={refreshControl}
+              />
+            )}
+            {tab.id === 'albums' && (
+              <AlbumsPage
+                albums={albums}
+                layout={layouts.albums}
+                inSelection={inSelection}
+                isSelected={isSelected}
+                toggle={toggle}
+                tileSizeFor={tileSizeFor}
+                refreshControl={refreshControl}
+              />
+            )}
+          </View>
+        ))}
       </AnimatedPagerView>
 
       {/* 全曲シャッフルの導線。曲一覧が空でも、選択中でもない限り、
