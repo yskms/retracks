@@ -60,6 +60,9 @@ export default {
     openA11y: 'Search',
     clearA11y: 'Clear search',
     moreCount: '+{{n}}',
+    sectionSongs: 'Songs',
+    sectionArtists: 'Artists',
+    sectionAlbums: 'Albums',
   },
   settings: {
     title: 'Settings',

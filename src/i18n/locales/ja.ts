@@ -55,6 +55,9 @@ export default {
     openA11y: '検索',
     clearA11y: '検索語をクリア',
     moreCount: '+{{n}}',
+    sectionSongs: '楽曲',
+    sectionArtists: 'アーティスト',
+    sectionAlbums: 'アルバム',
   },
   settings: {
     title: '設定',
