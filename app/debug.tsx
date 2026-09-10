@@ -52,6 +52,14 @@ export default function DebugScreen() {
               i18next.language: {i18next.language}
               {'\n'}
               getLocales(): {JSON.stringify(Localization.getLocales())}
+              {'\n'}
+              {/* Hermes には Intl.PluralRules が無く、i18next は count===1 の
+                  判定に英語の規則を使うダミーへ落ちる（2026-09-11 に発覚。
+                  → src/i18n/locales/ja.ts のコメント）。sortByField が
+                  Intl.Collator を直接使っているため、そちらも一緒に見ておく。 */}
+              Intl.PluralRules: {typeof Intl.PluralRules !== 'undefined' ? 'あり' : 'なし'}
+              {'\n'}
+              Intl.Collator: {typeof Intl.Collator !== 'undefined' ? 'あり' : 'なし'}
             </Text>
           </View>
         )}

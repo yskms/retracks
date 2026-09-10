@@ -2,7 +2,7 @@
  * 設定画面（要件 10.6）。
  *
  * デバッグ画面と違い、こちらは製品として公開する画面。
- * 除外フォルダはまだ未実装（次のフェーズで追加する）。
+ * 除外フォルダの一覧・追加・削除は専用画面（app/excluded-folders.tsx）。
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -33,6 +33,7 @@ export default function SettingsScreen() {
     excludeShortTracks,
     shortTrackThresholdSec,
     excludeNonMusic,
+    excludedFolderIds,
     ignoreLeadingThe,
     ignoreLeadingAAn,
     tabs,
@@ -201,6 +202,20 @@ export default function SettingsScreen() {
               </Pressable>
             </View>
           )}
+          <Pressable
+            style={styles.linkRow}
+            onPress={() => router.push('/excluded-folders')}
+          >
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>{t('settings.excludedFoldersTitle')}</Text>
+              <Text style={styles.rowHint}>
+                {excludedFolderIds.length > 0
+                  ? t('settings.excludedFoldersCount', { count: excludedFolderIds.length })
+                  : t('settings.excludedFoldersHint')}
+              </Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
         </View>
 
         <View style={styles.card}>
@@ -302,6 +317,8 @@ const styles = StyleSheet.create({
   card: { backgroundColor: colors.surface, borderRadius: 10, padding: 12, gap: 12 },
   cardTitle: { color: colors.accent, fontSize: 12, fontWeight: '700' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  linkRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  chevron: { color: colors.textDim, fontSize: 20 },
   rowText: { flex: 1, gap: 2 },
   rowLabel: { color: colors.text, fontSize: 14 },
   rowHint: { color: colors.textDim, fontSize: 12 },

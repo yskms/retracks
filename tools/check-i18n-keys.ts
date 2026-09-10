@@ -45,6 +45,19 @@ const enKeys = Object.keys(enFlat);
 const missingInEn = jaKeys.filter((k) => !(k in enFlat));
 const missingInJa = enKeys.filter((k) => !(k in jaFlat) && !isPluralOnlyKey(k));
 
+/**
+ * ja が _other だけ持ち、en が同じキーの _one も持っている場合、ja にも
+ * _one を足す必要がある。無いと、fallbackLng（['en', 'ja']）が
+ * count===1 のときだけ en の _one を拾ってしまい、日本語画面に
+ * "1 song" のような英語が混ざる（2026-09-11 に実際に発生）。
+ * 日本語は単数/複数で言い方が変わらないので、_one は _other と
+ * 同じ文言でよい。
+ */
+const missingJaOneVariant = enKeys
+  .filter((k) => k.endsWith('_one'))
+  .map((k) => k.replace(/_one$/, ''))
+  .filter((base) => `${base}_other` in jaFlat && !(`${base}_one` in jaFlat));
+
 let placeholderMismatches = 0;
 for (const key of jaKeys) {
   if (!(key in enFlat)) continue;
@@ -63,6 +76,13 @@ if (missingInEn.length > 0) {
 }
 if (missingInJa.length > 0) {
   console.error('unexpected extra keys in en (not a plural variant of a ja key):', missingInJa);
+  failed = true;
+}
+if (missingJaOneVariant.length > 0) {
+  console.error(
+    'ja has _other but no _one for keys where en has both (count===1 would leak English):',
+    missingJaOneVariant.map((base) => `${base}_one`)
+  );
   failed = true;
 }
 if (placeholderMismatches > 0) {
