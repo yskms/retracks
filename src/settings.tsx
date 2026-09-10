@@ -125,19 +125,25 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  /** 1フィールドだけ更新して保存する。個別の setXxx はこれの薄いラッパ。 */
-  const patch = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
-    if (!readyRef.current) return;
+  /**
+   * 1フィールドだけ更新して保存する。個別の setXxx はこれの薄いラッパ。
+   * 読み込み前で弾いた場合は false を返す。呼び出し側が「保存はできなかったが
+   * 見た目だけ変える」ような副作用（setLanguage の i18next.changeLanguage
+   * など）を連動させないための戻り値。
+   */
+  const patch = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]): boolean => {
+    if (!readyRef.current) return false;
     setSettings((prev) => {
       const next = { ...prev, [key]: value };
       void writeJson(StorageKeys.appSettings, next);
       return next;
     });
+    return true;
   }, []);
 
   const setLanguage = useCallback(
     (language: LanguagePreference) => {
-      patch('language', language);
+      if (!patch('language', language)) return;
       void i18next.changeLanguage(language === 'auto' ? detectLanguage() : language);
     },
     [patch]
