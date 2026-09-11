@@ -345,19 +345,34 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           // 当てはめてしまい、画面と音が食い違う。キューはネイティブから貰う。
           const saved = await RetracksPlayer.getSavedQueue();
           // QueueStore.kt が保存するのは id/uri/title/artist/album/durationMs/
-          // artworkUri の7つだけ（→ QueueStore.kt の saveTracks）。isMusic/
-          // folderId/folderName は持っていないので、ここで安全側の値を埋める。
+          // artworkUri の7つだけ（→ QueueStore.kt の saveTracks）。artistId/
+          // albumId/trackNumber/discNumber/isMusic/folderId/folderName は
+          // 持っていない。まず走査済みの library（result.tracks、直前の
+          // applyTracks() と同じ内容）を id で引き、そこにある曲は完全な
+          // Track で差し替える。走査後に削除・除外された曲（library 側から
+          // 消えている）だけ、安全側の値を埋めた不完全な Track にフォールバック
+          // する。
+          //
           // 埋めずに as Track[] するだけだと、型は boolean/string|null を
-          // 主張するのに実体は undefined のままになり、将来 isMusic で
-          // キューを絞る処理を足した瞬間、復元したキューの曲が軒並み
-          // 「非音楽」判定になって消える（起動直後の引き継ぎ時にしか
-          // 起きないため、原因にたどり着きにくい）。
-          const nativeQueue: Track[] = (saved.tracks as Track[]).map((t) => ({
-            ...t,
-            isMusic: t.isMusic ?? true,
-            folderId: t.folderId ?? null,
-            folderName: t.folderName ?? null,
-          }));
+          // 主張するのに実体は undefined のままになる。isMusic 等はそれで
+          // 気づかれにくい形の不具合になるだけで済んだが、artistId を
+          // 使うアーティスト詳細への遷移（→ app/player.tsx）は影響が
+          // 直接的だった。ウィジェットから起動してすぐプレイヤー画面へ来た
+          // 直後（＝この経路で currentTrack が作られた直後）にアーティスト名を
+          // 押すと、undefined の artistId から名前へフォールバックした id で
+          // 絞り込むことになり、実際は artistId を持つそのアーティストの
+          // 曲とは一致せず、アーティスト詳細が空になっていた
+          // （2026-09-11、実機で発覚）。
+          const tracksById = new Map(result.tracks.map((t) => [t.id, t]));
+          const nativeQueue: Track[] = (saved.tracks as Track[]).map(
+            (t) =>
+              tracksById.get(t.id) ?? {
+                ...t,
+                isMusic: t.isMusic ?? true,
+                folderId: t.folderId ?? null,
+                folderName: t.folderName ?? null,
+              }
+          );
 
           if (nativeQueue.length === current.queueSize) {
             applyQueue(nativeQueue);
