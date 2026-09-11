@@ -156,11 +156,14 @@ export default function PlayerScreen() {
     });
   };
 
-  // Slider の value を250ms間隔でそのまま更新すると、ネイティブ側（
+  // Slider の value を短い間隔でそのまま更新すると、ネイティブ側（
   // @react-native-community/slider）の描画コストが実機でネイティブヒープを
   // 分単位でGB級まで増やし続け、OSに強制終了される不具合につながった
   // （2026-09-11）。曲名や時刻表示は秒単位でしか見えないので、精度を落とさず
-  // 秒単位に丸めて Slider への value 変化を1秒に1回まで間引く。
+  // 秒単位に丸めて Slider への value 変化を間引く。ポーリング自体を
+  // 250ms→1秒にした（src/playback.tsx）ため今は実質的に冗長だが、将来
+  // ポーリングを速める変更をしたときの保険として残している。「二重にやって
+  // いる」ように見えても消さないこと。
   const positionMs = seeking ?? (status ? Math.floor(status.positionMs / 1000) * 1000 : 0);
   const durationMs = status?.durationMs ?? 0;
   const preview = durationMs > 0 ? resolveSegment(durationMs / 1000, setting) : null;
@@ -180,16 +183,20 @@ export default function PlayerScreen() {
   // 実際に必要なのは currentIndex（プリミティブ）だけなので、それだけを
   // 依存にして、曲が切り替わったとき以外は renderItem の参照を固定する。
   const currentIndex = status?.index ?? -1;
+  // QueueRow へ渡す onPress もここで1つに固定する。インラインで
+  // (index) => () => skipTo(index) のように行ごとに新しい関数を作ると、
+  // QueueRow 側の React.memo が onPress の変化で毎回失敗してしまう。
+  const handleQueuePress = useCallback((index: number) => skipTo(index), [skipTo]);
   const renderQueueItem = useCallback(
     ({ item, index }: { item: Track; index: number }) => (
       <QueueRow
         track={item}
         index={index}
         active={currentIndex === index}
-        onPress={() => skipTo(index)}
+        onPress={handleQueuePress}
       />
     ),
-    [currentIndex, skipTo]
+    [currentIndex, handleQueuePress]
   );
 
   return (
@@ -500,10 +507,19 @@ const QueueRow = memo(function QueueRow({
   track: Track;
   index: number;
   active: boolean;
-  onPress: () => void;
+  // index を受け取って親（安定した1つの useCallback）へ渡す形にしている。
+  // ここが onPress: () => void で「onPress={() => skipTo(index)}」のように
+  // 行ごと・レンダーごとに新しい関数を親から渡されると、React.memo の浅い
+  // 比較が毎回失敗し、このコンポーネントが memo 化されていないのと同じに
+  // なる（2026-09-11、表示中の十数行が毎秒まるごと再レンダーされる原因の
+  // 一つだった）。
+  onPress: (index: number) => void;
 }) {
   return (
-    <Pressable style={[styles.queueRow, active && styles.queueRowActive]} onPress={onPress}>
+    <Pressable
+      style={[styles.queueRow, active && styles.queueRowActive]}
+      onPress={() => onPress(index)}
+    >
       <Text style={[styles.queueIndex, active && styles.queueTextActive]}>
         {index + 1}
       </Text>

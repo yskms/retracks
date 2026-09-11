@@ -148,6 +148,29 @@ async function waitForConnection(timeoutMs = 1500) {
   }
 }
 
+/**
+ * RetracksPlayer.getStatus() は中身が同じでも呼ぶたびに新しいオブジェクトを
+ * 返す。ポーリングのたびに素直に setStatus すると、一時停止中で値が1つも
+ * 変わっていなくても PlaybackStatusContext の購読者（MiniPlayer・プレイヤー
+ * 画面・デバッグ画面）が毎秒再レンダーされ続けてしまう（2026-09-11）。
+ * フィールドを浅く比較し、同じなら setStatus 側で prev をそのまま返させて
+ * Reactに再レンダーを止めさせる。
+ */
+function statusEquals(a: PlayerStatus | null, b: PlayerStatus | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.connected === b.connected &&
+    a.isPlaying === b.isPlaying &&
+    a.index === b.index &&
+    a.positionMs === b.positionMs &&
+    a.durationMs === b.durationMs &&
+    a.queueSize === b.queueSize &&
+    a.repeatMode === b.repeatMode &&
+    a.fullPlayback === b.fullPlayback
+  );
+}
+
 export function PlaybackProvider({ children }: { children: ReactNode }) {
   const {
     excludeShortTracks,
@@ -412,7 +435,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       void writeJson(StorageKeys.playbackPosition(queueKeyRef.current), 0);
     });
 
-    const timer = setInterval(() => setStatus(RetracksPlayer.getStatus()), 1000);
+    const timer = setInterval(() => {
+      const next = RetracksPlayer.getStatus();
+      setStatus((prev) => (statusEquals(prev, next) ? prev : next));
+    }, 1000);
 
     // 再生位置を定期保存。サービスごと終了した場合に途中から再開できる。
     const saver = setInterval(() => {
@@ -579,6 +605,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     addLog('保存内容を消去しました');
   }, [addLog, applyShuffle, applyQueue]);
 
+  // status が変わるたび（毎秒）再計算されるが、返すのは queue の要素そのもの
+  // （コピーではない）なので、index が変わらない限り参照は同じになる。
+  // これにより value の useMemo が毎秒作り直されずに済んでいる——ここで
+  // 新しいオブジェクト/配列を返す実装に変えると、この下の value が毎秒
+  // 新しい参照になり、usePlayback() 全消費者の再レンダー止めが丸ごと
+  // 効かなくなる（2026-09-11 のネイティブメモリリーク修正の前提）。
   const currentTrack = useMemo(() => {
     if (!status || status.index < 0) return null;
     return queue[status.index] ?? null;
