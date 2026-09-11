@@ -35,10 +35,22 @@ export type Track = {
   folderId: string | null;
   /** 所属フォルダの表示名。folderId が null なら null。 */
   folderName: string | null;
+  /**
+   * アルバムID。無い曲もある（asset.albumId は string | undefined）ため、
+   * アーティスト/アルバム一覧はこれが無ければ album（名前）でまとめる。
+   * → deriveAlbums()
+   */
+  albumId: string | null;
+  /** アーティストID。albumId と同じ理由で無い曲があり得る。→ deriveArtists() */
+  artistId: string | null;
+  /** アルバム内のトラック番号。無いこともある。アルバム詳細の並べ替えに使う。 */
+  trackNumber: number | null;
+  /** ディスク番号。無ければ1枚組として扱う。→ compareByTrackOrder() */
+  discNumber: number | null;
 };
 
 export type LibrarySnapshot = {
-  version: 4;
+  version: 5;
   scannedAt: number;
   tracks: Track[];
 };
@@ -111,6 +123,10 @@ function toTrack(
     isMusic: !isNonMusic,
     folderId,
     folderName: folderId ? (folders.folderNames[folderId] ?? null) : null,
+    albumId: asset.albumId ?? null,
+    artistId: asset.artistId ?? null,
+    trackNumber: asset.trackNumber ?? null,
+    discNumber: asset.discNumber ?? null,
   };
 }
 
@@ -154,13 +170,13 @@ export async function scanLibrary(): Promise<Track[]> {
 export async function readCache(): Promise<LibrarySnapshot | null> {
   const cached = await readJson<LibrarySnapshot>(StorageKeys.library);
   // 版が上がったらキャッシュを捨てて走査し直す（アートワーク追加など）
-  if (!cached || cached.version !== 4 || !Array.isArray(cached.tracks)) return null;
+  if (!cached || cached.version !== 5 || !Array.isArray(cached.tracks)) return null;
   return cached;
 }
 
 export async function writeCache(tracks: Track[]): Promise<LibrarySnapshot> {
   const snapshot: LibrarySnapshot = {
-    version: 4,
+    version: 5,
     scannedAt: Date.now(),
     tracks,
   };
@@ -250,16 +266,76 @@ export type Album = {
   year: number | null;
 };
 
-export async function getArtists(): Promise<Artist[]> {
-  const list = await MusicLibrary.getArtistsAsync();
-  // 注意: Artist の albumSongs は MediaStore の NUMBER_OF_TRACKS（曲数）であって
-  // アルバム数ではない。アルバム数は公開されていないため、アルバム一覧から数える
-  // （→ countAlbumsByArtist）。
-  return list.map((a) => ({
-    id: a.id,
-    name: a.title || 'Unknown',
-    trackCount: a.assetCount ?? 0,
-  }));
+/**
+ * 曲一覧からアーティスト一覧を作る。MediaStore への別クエリ
+ * （旧 getArtists()）を使わない。グループ化キーは artistId、無ければ
+ * 名前（Asset.artistId は string | undefined）。これにより
+ * 「曲一覧では見えるのにアーティストタブには出てこない」の逆
+ * （タブには出るが曲一覧には出ない）が起きなくなる — 渡した tracks が
+ * そのまま情報源になるため。
+ */
+export function deriveArtists(tracks: Track[]): Artist[] {
+  const byId = new Map<string, Artist>();
+  for (const t of tracks) {
+    const id = t.artistId || t.artist;
+    const existing = byId.get(id);
+    if (existing) {
+      existing.trackCount += 1;
+      continue;
+    }
+    byId.set(id, { id, name: t.artist, trackCount: 1 });
+  }
+  return [...byId.values()];
+}
+
+/**
+ * 曲一覧からアルバム一覧を作る（旧 getAlbums() を使わない）。
+ * グループ化キーは albumId、無ければアルバム名。album が無い曲（アルバム
+ * 情報そのものが無い）はどちらのアルバムにも属せないため対象外にする
+ * （決定：2026-09-11。アルバム名でまとめる方針）。
+ *
+ * artworkUri は各曲の値をそのまま使う。albumId がある曲では
+ * `artworkUriOf()` がアルバムIDだけから組み立てた値になっているため、
+ * 実質アルバムのアートワークと同じもの。
+ *
+ * year は expo-music-library が公開していないため、別途
+ * RetracksPlayer.getAlbumYears() で取った albumId→year の対応表を渡す。
+ * albumId が無いアルバム（名前でまとめたもの）は year が引けないので null。
+ */
+export function deriveAlbums(tracks: Track[], years: Record<string, number> = {}): Album[] {
+  const byId = new Map<string, Album>();
+  for (const t of tracks) {
+    if (!t.album) continue;
+    const id = t.albumId || t.album;
+    const existing = byId.get(id);
+    if (existing) {
+      existing.trackCount += 1;
+      continue;
+    }
+    byId.set(id, {
+      id,
+      title: t.album,
+      artist: t.artist,
+      trackCount: 1,
+      artworkUri: t.artworkUri,
+      year: (t.albumId ? years[t.albumId] : undefined) ?? null,
+    });
+  }
+  return [...byId.values()];
+}
+
+/**
+ * アルバム内での並び順。ディスク→トラック番号→タイトルの順で比較する。
+ * どちらも無い曲はタイトル順の末尾側に寄る（Number.MAX_SAFE_INTEGER）。
+ */
+export function compareByTrackOrder(a: Track, b: Track): number {
+  const discA = a.discNumber ?? 1;
+  const discB = b.discNumber ?? 1;
+  if (discA !== discB) return discA - discB;
+  const trackA = a.trackNumber ?? Number.MAX_SAFE_INTEGER;
+  const trackB = b.trackNumber ?? Number.MAX_SAFE_INTEGER;
+  if (trackA !== trackB) return trackA - trackB;
+  return a.title.localeCompare(b.title);
 }
 
 /**
@@ -295,118 +371,4 @@ export function countAlbumsByArtist(albums: Album[]): Map<string, number> {
     counts.set(album.artist, (counts.get(album.artist) ?? 0) + 1);
   }
   return counts;
-}
-
-export async function getAlbums(): Promise<Album[]> {
-  const [list, years] = await Promise.all([
-    MusicLibrary.getAlbumsAsync(),
-    RetracksPlayer.getAlbumYears().catch(() => ({}) as Record<string, number>),
-  ]);
-
-  return list.map((a) => ({
-    id: a.id,
-    title: a.title || 'Unknown',
-    artist: a.artist || 'Unknown',
-    trackCount: a.assetCount ?? 0,
-    artworkUri: artworkUriOf({ albumId: a.id, artworkUri: a.artworkUri, artwork: a.artwork }),
-    year: years[a.id] ?? null,
-  }));
-}
-
-/** 指定したアーティスト群に属する曲を集める（重複は排除。要件 5.2）。 */
-export async function getTracksForArtists(ids: string[]): Promise<Track[]> {
-  const seen = new Set<string>();
-  const tracks: Track[] = [];
-  for (const id of ids) {
-    const page = await MusicLibrary.getArtistAssetsAsync(id, {
-      first: PAGE_SIZE,
-      artwork: ARTWORK_MODE,
-    });
-    for (const asset of page.assets) {
-      if (seen.has(asset.id)) continue;
-      seen.add(asset.id);
-      tracks.push(toTrack(asset));
-    }
-  }
-  return tracks;
-}
-
-/** 指定したアルバム群に属する曲を集める（重複は排除）。 */
-export async function getTracksForAlbums(ids: string[]): Promise<Track[]> {
-  const seen = new Set<string>();
-  const tracks: Track[] = [];
-  for (const id of ids) {
-    const page = await MusicLibrary.getAlbumAssetsAsync(id, {
-      first: PAGE_SIZE,
-      artwork: ARTWORK_MODE,
-    });
-    for (const asset of page.assets) {
-      if (seen.has(asset.id)) continue;
-      seen.add(asset.id);
-      tracks.push(toTrack(asset));
-    }
-  }
-  return tracks;
-}
-
-/** アーティスト1人ぶんの内訳。アルバム単位でまとめつつ、全曲も返す。 */
-export type ArtistDetail = {
-  albums: Album[];
-  tracks: Track[];
-};
-
-export async function getArtistDetail(artistId: string): Promise<ArtistDetail> {
-  const years = await RetracksPlayer.getAlbumYears().catch(
-    () => ({}) as Record<string, number>
-  );
-  const page = await MusicLibrary.getArtistAssetsAsync(artistId, {
-    first: PAGE_SIZE,
-    artwork: ARTWORK_MODE,
-  });
-
-  const tracks: Track[] = [];
-  const albums = new Map<string, Album>();
-
-  for (const asset of page.assets) {
-    tracks.push(toTrack(asset));
-
-    // アルバムIDが取れない曲もあるので、その場合はアルバム名で束ねる
-    const key = asset.albumId || asset.albumTitle || '';
-    if (!key) continue;
-
-    const existing = albums.get(key);
-    if (existing) {
-      existing.trackCount += 1;
-      continue;
-    }
-    albums.set(key, {
-      id: asset.albumId || key,
-      title: asset.albumTitle || 'Unknown',
-      artist: asset.artist || 'Unknown',
-      trackCount: 1,
-      artworkUri: artworkUriOf(asset),
-      year: null,
-    });
-  }
-
-  // 年が分かるものは新しい順、分からないものは後ろへ
-  const sorted = [...albums.values()]
-    .map((album) => ({ ...album, year: years[album.id] ?? null }))
-    .sort((a, b) => {
-      if (a.year && b.year && a.year !== b.year) return b.year - a.year;
-      if (a.year && !b.year) return -1;
-      if (!a.year && b.year) return 1;
-      return a.title.localeCompare(b.title);
-    });
-
-  return { albums: sorted, tracks };
-}
-
-/** アルバム1枚ぶんの曲。 */
-export async function getAlbumTracks(albumId: string): Promise<Track[]> {
-  const page = await MusicLibrary.getAlbumAssetsAsync(albumId, {
-    first: PAGE_SIZE,
-    artwork: ARTWORK_MODE,
-  });
-  return page.assets.map((asset) => toTrack(asset));
 }

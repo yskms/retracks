@@ -21,13 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { usePlayback } from '../src/playback';
-import {
-  artworkByArtist,
-  countAlbumsByArtist,
-  getTracksForAlbums,
-  getTracksForArtists,
-  type Track,
-} from '../src/library';
+import { artworkByArtist, countAlbumsByArtist, type Track } from '../src/library';
 import { colors } from '../src/theme';
 import {
   AlbumsPage,
@@ -189,11 +183,13 @@ export default function LibraryScreen() {
       // 'all' を使うと全曲シャッフルの1巡状態を上書きしてしまうため専用のキーにする
       await playTracks('selection', ids, picked);
     } else if (kind === 'artists') {
-      const picked = await getTracksForArtists(ids);
+      // artists/albums の id は artistId||artist（→ deriveArtists()）と同じ
+      // キーなので、tracks を直接絞り込める
+      const picked = tracks.filter((t) => ids.includes(t.artistId || t.artist));
       if (shuffled) await playTracks('artist', ids, picked);
       else await playFrom(picked, 0);
     } else {
-      const picked = await getTracksForAlbums(ids);
+      const picked = tracks.filter((t) => ids.includes(t.albumId || t.album || ''));
       if (shuffled) await playTracks('album', ids, picked);
       else await playFrom(picked, 0);
     }
