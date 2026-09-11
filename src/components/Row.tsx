@@ -12,6 +12,7 @@ export function Row({
   playing,
   chevron,
   artworkUri,
+  trackNumber,
   onPress,
   onLongPress,
 }: {
@@ -23,6 +24,8 @@ export function Row({
   chevron?: boolean;
   /** 指定するとジャケットを左に出す。undefined なら枠ごと出さない。 */
   artworkUri?: string | null;
+  /** 指定するとジャケットの左にトラック番号を出す（アルバム詳細用）。 */
+  trackNumber?: number | null;
   onPress: () => void;
   onLongPress?: () => void;
 }) {
@@ -33,6 +36,9 @@ export function Row({
       onLongPress={onLongPress}
       delayLongPress={300}
     >
+      {trackNumber !== undefined ? (
+        <Text style={styles.trackNumber}>{trackNumber ?? ''}</Text>
+      ) : null}
       {artworkUri !== undefined ? <Artwork uri={artworkUri} size={44} /> : null}
       <View style={styles.rowText}>
         <Text style={[styles.rowTitle, playing && styles.rowTitlePlaying]} numberOfLines={1}>
@@ -64,6 +70,7 @@ const styles = StyleSheet.create({
   rowTitle: { color: colors.text, fontSize: 14 },
   rowTitlePlaying: { color: colors.accent, fontWeight: '700' },
   rowSubtitle: { color: colors.textDim, fontSize: 12, marginTop: 2 },
+  trackNumber: { color: colors.textDim, fontSize: 13, width: 20, textAlign: 'center' },
   rowTrailing: { color: colors.textDim, fontSize: 12 },
   chevron: { color: colors.textDim, fontSize: 20 },
 });
