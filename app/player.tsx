@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -203,7 +204,7 @@ export default function PlayerScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable hitSlop={12} onPress={() => router.back()}>
-          <Text style={styles.headerIcon}>▾</Text>
+          <Ionicons name="chevron-down-outline" size={24} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>
           {progress
@@ -549,7 +550,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 48,
   },
-  headerIcon: { color: colors.text, fontSize: 20 },
   headerTitle: { color: colors.textDim, fontSize: 12 },
   listContent: { paddingBottom: 32 },
   queueBarPinned: {

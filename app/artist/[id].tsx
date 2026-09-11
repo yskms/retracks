@@ -6,6 +6,7 @@
 
 import { useCallback, useMemo } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -122,7 +123,7 @@ export default function ArtistScreen() {
       {inSelection ? (
         <View style={styles.header}>
           <Pressable hitSlop={12} onPress={clear}>
-            <Text style={styles.headerIcon}>✕</Text>
+            <Ionicons name="close-outline" size={22} color={colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>
             {t('artist.selectedCount', { count: selection?.ids.length ?? 0 })}
@@ -142,13 +143,13 @@ export default function ArtistScreen() {
       ) : (
         <View style={styles.header}>
           <Pressable hitSlop={12} onPress={() => router.back()}>
-            <Text style={styles.headerIcon}>←</Text>
+            <Ionicons name="arrow-back-outline" size={22} color={colors.text} />
           </Pressable>
           <Text style={styles.headerTitle} numberOfLines={1}>
             {name ?? t('artist.fallbackTitle')}
           </Text>
           <Pressable hitSlop={10} onPress={() => cycle('artistAlbums')}>
-            <Text style={styles.headerIcon}>{LAYOUT_ICON[albumLayout]}</Text>
+            <Ionicons name={LAYOUT_ICON[albumLayout]} size={20} color={colors.text} />
           </Pressable>
         </View>
       )}
@@ -273,7 +274,6 @@ const styles = StyleSheet.create({
     height: 52,
     gap: 12,
   },
-  headerIcon: { color: colors.text, fontSize: 18 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '700', flex: 1 },
   listContent: { paddingBottom: 24 },
   summaryRow: {

@@ -204,7 +204,7 @@ export default function LibraryScreen() {
       {inSelection ? (
         <View style={styles.header}>
           <Pressable hitSlop={10} onPress={clear}>
-            <Ionicons name="close" size={24} color={colors.text} />
+            <Ionicons name="close-outline" size={22} color={colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>
             {t('library.selectedCount', { count: selection?.ids.length ?? 0 })}

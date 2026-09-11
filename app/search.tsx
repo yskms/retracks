@@ -22,6 +22,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -142,7 +143,7 @@ export default function SearchScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable hitSlop={12} onPress={() => router.back()}>
-          <Text style={styles.headerIcon}>←</Text>
+          <Ionicons name="arrow-back-outline" size={22} color={colors.text} />
         </Pressable>
         <TextInput
           ref={inputRef}
@@ -161,7 +162,7 @@ export default function SearchScreen() {
             onPress={() => setQuery('')}
             accessibilityLabel={t('search.clearA11y')}
           >
-            <Text style={styles.headerIcon}>✕</Text>
+            <Ionicons name="close-outline" size={22} color={colors.text} />
           </Pressable>
         )}
       </View>
@@ -281,7 +282,6 @@ const styles = StyleSheet.create({
     height: 56,
     gap: 12,
   },
-  headerIcon: { color: colors.text, fontSize: 18 },
   input: {
     flex: 1,
     color: colors.text,
