@@ -5,6 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Localization from 'expo-localization';
@@ -37,7 +38,7 @@ export default function DebugScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable hitSlop={12} onPress={() => router.back()}>
-          <Text style={styles.headerIcon}>←</Text>
+          <Ionicons name="arrow-back-outline" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('debug.title')}</Text>
         <View style={{ width: 20 }} />
@@ -138,7 +139,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 48,
   },
-  headerIcon: { color: colors.text, fontSize: 18 },
   headerTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
   body: { padding: 16, gap: 12, paddingBottom: 40 },
   card: { backgroundColor: colors.surface, borderRadius: 10, padding: 12, gap: 8 },

@@ -12,6 +12,7 @@
 
 import { useMemo, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -75,7 +76,7 @@ export default function ExcludedFoldersScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable hitSlop={12} onPress={() => router.back()}>
-          <Text style={styles.headerIcon}>←</Text>
+          <Ionicons name="arrow-back-outline" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>{t('settings.excludedFoldersTitle')}</Text>
         <Pressable
@@ -83,7 +84,7 @@ export default function ExcludedFoldersScreen() {
           onPress={openPicker}
           accessibilityLabel={t('settings.excludedFoldersAddA11y')}
         >
-          <Text style={styles.headerIcon}>＋</Text>
+          <Ionicons name="add-outline" size={22} color={colors.text} />
         </Pressable>
       </View>
 
@@ -184,7 +185,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     height: 48,
   },
-  headerIcon: { color: colors.text, fontSize: 18 },
   headerTitle: { color: colors.text, fontSize: 15, fontWeight: '600' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   emptyText: { color: colors.textDim, fontSize: 13, textAlign: 'center' },

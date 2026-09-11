@@ -4,6 +4,7 @@
 
 import { useMemo } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -36,7 +37,7 @@ export default function AlbumScreen() {
     <View style={[styles.root, { paddingTop: insets.top }]}>
       <View style={styles.header}>
         <Pressable hitSlop={12} onPress={() => router.back()}>
-          <Text style={styles.headerIcon}>←</Text>
+          <Ionicons name="arrow-back-outline" size={22} color={colors.text} />
         </Pressable>
         <View style={styles.headerText}>
           <Text style={styles.headerTitle} numberOfLines={1}>
@@ -74,7 +75,8 @@ export default function AlbumScreen() {
                   router.push('/player');
                 }}
               >
-                <Text style={styles.actionPrimaryText}>{`⤮ ${t('common.shufflePlay')}`}</Text>
+                <Ionicons name="shuffle-outline" size={14} color="#1a1206" />
+                <Text style={styles.actionPrimaryText}>{t('common.shufflePlay')}</Text>
               </Pressable>
             </View>
           </View>
@@ -104,7 +106,6 @@ const styles = StyleSheet.create({
     height: 56,
     gap: 12,
   },
-  headerIcon: { color: colors.text, fontSize: 18 },
   headerText: { flex: 1 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '700' },
   headerSub: { color: colors.textDim, fontSize: 12, marginTop: 1 },
@@ -119,6 +120,9 @@ const styles = StyleSheet.create({
   summary: { color: colors.textDim, fontSize: 12 },
   actions: { flexDirection: 'row', gap: 8 },
   action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: colors.surfaceHigh,
     paddingHorizontal: 14,
     paddingVertical: 8,

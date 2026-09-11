@@ -16,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import PagerView from 'react-native-pager-view';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -203,7 +204,7 @@ export default function LibraryScreen() {
       {inSelection ? (
         <View style={styles.header}>
           <Pressable hitSlop={10} onPress={clear}>
-            <Text style={styles.headerIcon}>✕</Text>
+            <Ionicons name="close-outline" size={22} color={colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>
             {t('library.selectedCount', { count: selection?.ids.length ?? 0 })}
@@ -216,7 +217,8 @@ export default function LibraryScreen() {
               style={[styles.headerAction, styles.headerActionPrimary]}
               onPress={() => void playSelection(true)}
             >
-              <Text style={styles.headerActionPrimaryText}>{`⤮ ${t('common.shufflePlay')}`}</Text>
+              <Ionicons name="shuffle-outline" size={14} color="#1a1206" />
+              <Text style={styles.headerActionPrimaryText}>{t('common.shufflePlay')}</Text>
             </Pressable>
           </View>
         </View>
@@ -226,9 +228,11 @@ export default function LibraryScreen() {
           <View style={styles.headerRight}>
             {layoutKeyForActiveTab && (
               <Pressable hitSlop={10} onPress={() => cycle(layoutKeyForActiveTab)}>
-                <Text style={styles.headerIcon}>
-                  {LAYOUT_ICON[layouts[layoutKeyForActiveTab]]}
-                </Text>
+                <Ionicons
+                  name={LAYOUT_ICON[layouts[layoutKeyForActiveTab]]}
+                  size={20}
+                  color={colors.text}
+                />
               </Pressable>
             )}
             <Pressable
@@ -236,14 +240,14 @@ export default function LibraryScreen() {
               onPress={() => router.push('/search')}
               accessibilityLabel={t('search.openA11y')}
             >
-              <Text style={styles.headerIcon}>⌕</Text>
+              <Ionicons name="search-outline" size={20} color={colors.text} />
             </Pressable>
             <Pressable
               hitSlop={10}
               onPress={() => router.push('/settings')}
               accessibilityLabel={t('settings.openA11y')}
             >
-              <Text style={styles.headerIcon}>⚙</Text>
+              <Ionicons name="settings-outline" size={20} color={colors.text} />
             </Pressable>
           </View>
         </View>
@@ -349,7 +353,7 @@ export default function LibraryScreen() {
             router.push('/player');
           }}
         >
-          <Text style={styles.fabGlyph}>⤮</Text>
+          <Ionicons name="shuffle-outline" size={18} color="#1a1206" />
           <Text style={styles.fabLabel}>
             {allProgress && allProgress.played > 1
               ? t('library.continueFrom', {
@@ -374,11 +378,13 @@ const styles = StyleSheet.create({
     height: 52,
   },
   brand: { color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 20 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  headerIcon: { color: colors.text, fontSize: 18 },
   headerActions: { flexDirection: 'row', gap: 8 },
   headerAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: colors.surfaceHigh,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -407,7 +413,6 @@ const styles = StyleSheet.create({
   rowSubtitle: { color: colors.textDim, fontSize: 12, marginTop: 2 },
   rowTrailing: { color: colors.textDim, fontSize: 12 },
   chevron: { color: colors.textDim, fontSize: 20 },
-  check: { color: colors.accent, fontSize: 16, fontWeight: '700' },
   fab: {
     position: 'absolute',
     right: 16,
@@ -420,6 +425,5 @@ const styles = StyleSheet.create({
     borderRadius: FAB_HEIGHT / 2,
     backgroundColor: colors.accent,
   },
-  fabGlyph: { color: '#1a1206', fontSize: 18, fontWeight: '700' },
   fabLabel: { color: '#1a1206', fontSize: 13, fontWeight: '700' },
 });
