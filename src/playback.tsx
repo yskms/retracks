@@ -22,6 +22,7 @@ import {
   RetracksPlayer,
   RepeatMode,
   type PlayerStatus,
+  type TrackInput,
 } from '../modules/retracks-player/src';
 import { DEFAULT_SEGMENT, type SegmentSetting } from './rush';
 import {
@@ -353,25 +354,41 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           // 消えている）だけ、安全側の値を埋めた不完全な Track にフォールバック
           // する。
           //
-          // 埋めずに as Track[] するだけだと、型は boolean/string|null を
-          // 主張するのに実体は undefined のままになる。isMusic 等はそれで
-          // 気づかれにくい形の不具合になるだけで済んだが、artistId を
-          // 使うアーティスト詳細への遷移（→ app/player.tsx）は影響が
-          // 直接的だった。ウィジェットから起動してすぐプレイヤー画面へ来た
-          // 直後（＝この経路で currentTrack が作られた直後）にアーティスト名を
-          // 押すと、undefined の artistId から名前へフォールバックした id で
-          // 絞り込むことになり、実際は artistId を持つそのアーティストの
-          // 曲とは一致せず、アーティスト詳細が空になっていた
-          // （2026-09-11、実機で発覚）。
+          // getSavedQueue() は正直に TrackInput（7フィールドだけ）を返す。
+          // 以前はここを as Track[] でキャストしていたが、それは型が
+          // 「isMusic は boolean」「artistId は string | null」と主張する
+          // フィールドの実体を、埋めないまま undefined にできてしまうという
+          // ことでもあった。isMusic 等はそれで気づかれにくい形の不具合に
+          // なるだけで済んだが、artistId は影響が直接的だった。ウィジェットから
+          // 起動してすぐプレイヤー画面へ来た直後（＝この経路で currentTrack が
+          // 作られた直後）にアーティスト名を押すと、undefined の artistId から
+          // 名前へフォールバックした id で絞り込むことになり、実際は artistId
+          // を持つそのアーティストの曲とは一致せず、アーティスト詳細が空に
+          // なっていた（2026-09-11、実機で発覚）。
+          //
+          // fallback() を Track を返す関数として書くことで、Track に
+          // フィールドを足したとき（今後もありうる：追加日、アルバムアーティスト
+          // 等）ここが型エラーで止まるようにする。「復元経路も直さなきゃ」を
+          // 人間が思い出す前提にしない。
+          const fallback = (t: TrackInput): Track => ({
+            id: t.id,
+            uri: t.uri,
+            title: t.title,
+            artist: t.artist,
+            album: t.album ?? null,
+            durationMs: t.durationMs,
+            artworkUri: t.artworkUri ?? null,
+            isMusic: true,
+            folderId: null,
+            folderName: null,
+            albumId: null,
+            artistId: null,
+            trackNumber: null,
+            discNumber: null,
+          });
           const tracksById = new Map(result.tracks.map((t) => [t.id, t]));
-          const nativeQueue: Track[] = (saved.tracks as Track[]).map(
-            (t) =>
-              tracksById.get(t.id) ?? {
-                ...t,
-                isMusic: t.isMusic ?? true,
-                folderId: t.folderId ?? null,
-                folderName: t.folderName ?? null,
-              }
+          const nativeQueue: Track[] = saved.tracks.map(
+            (t) => tracksById.get(t.id) ?? fallback(t)
           );
 
           if (nativeQueue.length === current.queueSize) {
