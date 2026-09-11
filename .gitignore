@@ -17,6 +17,9 @@ expo-env.d.ts
 *.p12
 *.key
 *.mobileprovision
+# リリース署名鍵の認証情報。/android 自体が既に対象外だが、鍵は誤って
+# コミットされると被害が大きいため明示しておく（→ android/app/build.gradle）。
+keystore.properties
 
 # Metro
 .metro-health-check*

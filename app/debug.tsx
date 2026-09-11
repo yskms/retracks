@@ -15,6 +15,7 @@ import { useTranslation } from 'react-i18next';
 import { usePlayback, usePlaybackStatus } from '../src/playback';
 import { RetracksPlayer } from '../modules/retracks-player/src';
 import { colors } from '../src/theme';
+import { loadCrashLog, type CrashEntry } from '../src/crashLog';
 
 export default function DebugScreen() {
   const { t } = useTranslation();
@@ -32,6 +33,15 @@ export default function DebugScreen() {
     void RetracksPlayer.getExitReasons()
       .then(setExits)
       .catch(() => setExits([]));
+  }, []);
+
+  // ErrorBoundary が捕まえた JS側の未捕捉例外。→ src/crashLog.ts
+  const [crashes, setCrashes] = useState<CrashEntry[]>([]);
+
+  useEffect(() => {
+    void loadCrashLog()
+      .then(setCrashes)
+      .catch(() => setCrashes([]));
   }, []);
 
   return (
@@ -108,6 +118,19 @@ export default function DebugScreen() {
               <Text key={index} style={styles.logLine}>
                 {new Date(exit.timestamp).toLocaleString(i18next.language)}　{exit.reason}
                 {exit.description ? `　${exit.description}` : ''}
+              </Text>
+            ))
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('debug.crashHistoryCardTitle')}</Text>
+          {crashes.length === 0 ? (
+            <Text style={styles.mono}>{t('debug.noRecords')}</Text>
+          ) : (
+            crashes.map((crash, index) => (
+              <Text key={index} style={styles.logLine}>
+                {new Date(crash.timestamp).toLocaleString(i18next.language)}　{crash.message}
               </Text>
             ))
           )}

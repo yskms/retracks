@@ -10,6 +10,7 @@ import { SettingsProvider } from '../src/settings';
 import { PlaybackProvider } from '../src/playback';
 import { MiniPlayer } from '../src/components/MiniPlayer';
 import { SplashFade } from '../src/components/SplashFade';
+import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { colors } from '../src/theme';
 
 export default function RootLayout() {
@@ -21,35 +22,37 @@ export default function RootLayout() {
   const hideSplash = useCallback(() => setShowSplash(false), []);
 
   return (
-    <GestureHandlerRootView style={styles.root}>
-      <SafeAreaProvider>
-        <SettingsProvider>
-          <PlaybackProvider>
-            <StatusBar style="light" />
-            <View style={styles.root}>
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: colors.background },
-                  animation: 'slide_from_right',
-                }}
-              >
-                <Stack.Screen name="index" />
-                <Stack.Screen name="player" options={{ animation: 'slide_from_bottom' }} />
-                <Stack.Screen name="search" />
-                <Stack.Screen name="settings" />
-                <Stack.Screen name="excluded-folders" />
-                <Stack.Screen name="debug" />
-                <Stack.Screen name="artist/[id]" />
-                <Stack.Screen name="album/[id]" />
-              </Stack>
-              <MiniPlayerSlot />
-            </View>
-            {showSplash && <SplashFade onDone={hideSplash} />}
-          </PlaybackProvider>
-        </SettingsProvider>
-      </SafeAreaProvider>
-    </GestureHandlerRootView>
+    <ErrorBoundary>
+      <GestureHandlerRootView style={styles.root}>
+        <SafeAreaProvider>
+          <SettingsProvider>
+            <PlaybackProvider>
+              <StatusBar style="light" />
+              <View style={styles.root}>
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: colors.background },
+                    animation: 'slide_from_right',
+                  }}
+                >
+                  <Stack.Screen name="index" />
+                  <Stack.Screen name="player" options={{ animation: 'slide_from_bottom' }} />
+                  <Stack.Screen name="search" />
+                  <Stack.Screen name="settings" />
+                  <Stack.Screen name="excluded-folders" />
+                  <Stack.Screen name="debug" />
+                  <Stack.Screen name="artist/[id]" />
+                  <Stack.Screen name="album/[id]" />
+                </Stack>
+                <MiniPlayerSlot />
+              </View>
+              {showSplash && <SplashFade onDone={hideSplash} />}
+            </PlaybackProvider>
+          </SettingsProvider>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    </ErrorBoundary>
   );
 }
 
