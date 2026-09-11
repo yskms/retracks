@@ -28,6 +28,10 @@ export default {
     sortFieldAlbum: 'Album',
     sortFieldDuration: 'Length',
     sortFieldYear: 'Release year',
+    permissionTitle: 'Music library access needed',
+    permissionMessage: 'Allow access to the music on this device to see and play your songs.',
+    permissionGrant: 'Allow access',
+    permissionOpenSettings: 'Open settings',
   },
   player: {
     segmentStart: 'Start',

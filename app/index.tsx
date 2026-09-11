@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Linking,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -55,6 +56,39 @@ const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
 const GRID_PADDING = 12;
 const GRID_GAP = 10;
 
+/**
+ * メディア権限が拒否されているときに、タブ・一覧の代わりに出す画面
+ * （2026-09-11、拒否したまま「ライブラリを読み込んでいます」が無限に
+ * 出続ける不具合を修正 → 要件定義書13章）。
+ *
+ * canAskAgain が false（「今後表示しない」を選んだ後）だと OS はダイアログを
+ * 二度と出さないため、その場合はアプリの設定画面へ誘導する。
+ */
+function PermissionGate({
+  canAskAgain,
+  onRetry,
+}: {
+  canAskAgain: boolean;
+  onRetry: () => void;
+}) {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.permissionGate}>
+      <Ionicons name="musical-notes-outline" size={40} color={colors.textDim} />
+      <Text style={styles.permissionTitle}>{t('library.permissionTitle')}</Text>
+      <Text style={styles.permissionMessage}>{t('library.permissionMessage')}</Text>
+      <Pressable
+        style={styles.permissionButton}
+        onPress={canAskAgain ? onRetry : () => void Linking.openSettings()}
+      >
+        <Text style={styles.permissionButtonText}>
+          {t(canAskAgain ? 'library.permissionGrant' : 'library.permissionOpenSettings')}
+        </Text>
+      </Pressable>
+    </View>
+  );
+}
+
 export default function LibraryScreen() {
   const { t } = useTranslation();
   const router = useRouter();
@@ -79,6 +113,8 @@ export default function LibraryScreen() {
     currentTrack,
     allProgress,
     rescan,
+    permissionDenied,
+    retryPermission,
   } = usePlayback();
   const { selection, active: inSelection, toggle, clear, isSelected } =
     useSelection<TabId>();
@@ -322,55 +358,62 @@ export default function LibraryScreen() {
         </View>
       )}
 
-      <View>
-        <View style={styles.tabBar}>
-          {tabs.map((tab, index) => (
-            <Pressable
-              key={tab.id}
-              style={styles.tab}
-              onPress={() => pagerRef.current?.setPage(index)}
-            >
-              <Text style={[styles.tabLabel, page === index && styles.tabLabelActive]}>
-                {tab.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <Animated.View
-          style={[
-            styles.indicator,
-            {
-              width: tabWidth * 0.5,
-              marginLeft: tabWidth * 0.25,
-              transform: [
-                {
-                  translateX: Animated.multiply(
-                    Animated.add(position, offset),
-                    tabWidth
-                  ),
-                },
-              ],
-            },
-          ]}
+      {permissionDenied ? (
+        <PermissionGate
+          canAskAgain={permissionDenied.canAskAgain}
+          onRetry={() => void retryPermission()}
         />
-      </View>
+      ) : (
+        <>
+          <View>
+            <View style={styles.tabBar}>
+              {tabs.map((tab, index) => (
+                <Pressable
+                  key={tab.id}
+                  style={styles.tab}
+                  onPress={() => pagerRef.current?.setPage(index)}
+                >
+                  <Text style={[styles.tabLabel, page === index && styles.tabLabelActive]}>
+                    {tab.label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+            <Animated.View
+              style={[
+                styles.indicator,
+                {
+                  width: tabWidth * 0.5,
+                  marginLeft: tabWidth * 0.25,
+                  transform: [
+                    {
+                      translateX: Animated.multiply(
+                        Animated.add(position, offset),
+                        tabWidth
+                      ),
+                    },
+                  ],
+                },
+              ]}
+            />
+          </View>
 
-      <AnimatedPagerView
-        key={pagerKey}
-        ref={pagerRef}
-        style={styles.pager}
-        initialPage={page}
-        onPageScroll={Animated.event(
-          [{ nativeEvent: { position, offset } }],
-          { useNativeDriver: true }
-        )}
-        onPageSelected={(event) => {
-          const next = tabs[event.nativeEvent.position];
-          if (next) setActiveTabId(next.id);
-          // タブを移ると選択対象の種類が変わってしまうので解除する
-          clear();
-        }}
-      >
+          <AnimatedPagerView
+            key={pagerKey}
+            ref={pagerRef}
+            style={styles.pager}
+            initialPage={page}
+            onPageScroll={Animated.event(
+              [{ nativeEvent: { position, offset } }],
+              { useNativeDriver: true }
+            )}
+            onPageSelected={(event) => {
+              const next = tabs[event.nativeEvent.position];
+              if (next) setActiveTabId(next.id);
+              // タブを移ると選択対象の種類が変わってしまうので解除する
+              clear();
+            }}
+          >
         {tabs.map((tab) => (
           <View key={tab.id}>
             {tab.id === 'songs' && (
@@ -411,6 +454,8 @@ export default function LibraryScreen() {
           </View>
         ))}
       </AnimatedPagerView>
+      </>
+      )}
 
       {/* 全曲シャッフルの導線。曲一覧が空でも、選択中でもない限り、
           どのタブを見ていても押せる（タブの表示/非表示の影響を受けない）。 */}
@@ -505,4 +550,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   fabLabel: { color: '#1a1206', fontSize: 13, fontWeight: '700' },
+  permissionGate: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap: 12,
+  },
+  permissionTitle: { color: colors.text, fontSize: 16, fontWeight: '700', textAlign: 'center' },
+  permissionMessage: { color: colors.textDim, fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  permissionButton: {
+    marginTop: 8,
+    backgroundColor: colors.accent,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 24,
+  },
+  permissionButtonText: { color: '#1a1206', fontSize: 14, fontWeight: '700' },
 });
