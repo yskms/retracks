@@ -222,6 +222,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const tracksRef = useRef<Track[]>([]);
   const shuffleRef = useRef<ShuffleState | null>(null);
   const lastIndexRef = useRef(-1);
+  /**
+   * バックグラウンドの間、位置ポーリング（1秒間隔）を止めるためのフラグ。
+   * 画面が見えていない間は誰も status を見ていないので、毎秒ネイティブを
+   * 呼び続けるのは電池の無駄（2026-09-11、メモリリーク修正の副次的な
+   * 改善候補として記録していたもの）。stateにせず ref にしているのは、
+   * この値が変わってもコンポーネントを再レンダーする必要が無いため
+   * （setInterval のコールバック内で毎回読むだけで足りる）。
+   */
+  const isBackgroundRef = useRef(AppState.currentState !== 'active');
 
   /**
    * state と ref を同時に更新する。
@@ -439,6 +448,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     });
 
     const timer = setInterval(() => {
+      // status を見ているのは画面（MiniPlayer・プレイヤー画面・デバッグ画面）
+      // だけで、バックグラウンドでは誰も見ていない。再生自体はサービス側で
+      // 続くので、ここを止めても音は途切れない。→ isBackgroundRef のコメント。
+      if (isBackgroundRef.current) return;
       const next = RetracksPlayer.getStatus();
       setStatus((prev) => (statusEquals(prev, next) ? prev : next));
     }, 1000);
@@ -461,13 +474,23 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     };
   }, [addLog, applyShuffle, applyQueue]);
 
-  // ---- 背景では画像のキャッシュを捨てる ---------------------------------
+  // ---- バックグラウンドでの振る舞い -------------------------------------
   useEffect(() => {
-    // 一覧の画像がメモリの大半を占める。背景では誰も見ていないので手放す。
-    // 実測でビットマップが 790枚/79MB から 633枚/59MB へ減った。
-    // 再生はサービス側で続くので、捨てても音は途切れない。
     const subscription = AppState.addEventListener('change', (state) => {
+      // 一覧の画像がメモリの大半を占める。背景では誰も見ていないので手放す。
+      // 実測でビットマップが 790枚/79MB から 633枚/59MB へ減った。
+      // 再生はサービス側で続くので、捨てても音は途切れない。
       if (state === 'background') Image.clearMemoryCache();
+      // 位置ポーリング（下の再生イベント effect）を止める・再開するため
+      // のフラグ更新。→ isBackgroundRef の宣言コメント参照。
+      isBackgroundRef.current = state !== 'active';
+      // 前面に戻った瞬間に一度だけ即時反映する。ポーリングは止めていた間
+      // 動いていないので、次の1秒待ちにすると戻った直後だけ古い位置・
+      // 再生状態が一瞬見えてしまう。
+      if (state === 'active') {
+        const latest = RetracksPlayer.getStatus();
+        setStatus((prev) => (statusEquals(prev, latest) ? prev : latest));
+      }
     });
     return () => subscription.remove();
   }, []);
