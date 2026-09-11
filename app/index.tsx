@@ -8,7 +8,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
-  Modal,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -36,6 +35,7 @@ import { useSelection } from '../src/useSelection';
 import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
 import { TAB_LABEL_KEY, TAB_LAYOUT_KEY, TAB_SORT_KEY, type TabId } from '../src/tabs';
 import { useSettings } from '../src/settings';
+import { SortMenu } from '../src/components/SortMenu';
 import {
   sortAlbums,
   sortTracks,
@@ -43,6 +43,7 @@ import {
   type AlbumSortField,
   type SongSortField,
   type SortDirection,
+  type SortFieldLabelKey,
 } from '../src/sortOrder';
 
 /**
@@ -50,13 +51,6 @@ import {
  * JS スレッドで値を更新すると、イベントのたびに段付きの動きになる。
  */
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
-
-type SortFieldLabelKey =
-  | 'library.sortFieldTitle'
-  | 'library.sortFieldAlbum'
-  | 'library.sortFieldArtist'
-  | 'library.sortFieldDuration'
-  | 'library.sortFieldYear';
 
 const GRID_PADDING = 12;
 const GRID_GAP = 10;
@@ -440,61 +434,15 @@ export default function LibraryScreen() {
         </Pressable>
       )}
 
-      <Modal
+      <SortMenu
         visible={sortMenuOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setSortMenuOpen(false)}
-      >
-        <Pressable style={styles.modalBackdrop} onPress={() => setSortMenuOpen(false)}>
-          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>{t('library.sortTitle')}</Text>
-            {activeSortOrder && (
-              <View style={styles.sortDirectionRow}>
-                {(['asc', 'desc'] as const).map((direction) => {
-                  const active = activeSortOrder.direction === direction;
-                  return (
-                    <Pressable
-                      key={direction}
-                      style={[styles.sortDirectionPill, active && styles.sortDirectionPillActive]}
-                      onPress={() => applySortDirection(direction)}
-                    >
-                      <Text
-                        style={[
-                          styles.sortDirectionText,
-                          active && styles.sortDirectionTextActive,
-                        ]}
-                      >
-                        {t(direction === 'asc' ? 'library.sortDirectionAsc' : 'library.sortDirectionDesc')}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            )}
-            {sortFieldOptions.map(({ value, labelKey }) => {
-              const checked = activeSortOrder?.field === value;
-              return (
-                <Pressable
-                  key={value}
-                  style={styles.pickerRow}
-                  onPress={() => {
-                    applySortField(value);
-                    setSortMenuOpen(false);
-                  }}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked }}
-                >
-                  <View style={[styles.radio, checked && styles.radioChecked]}>
-                    {checked ? <View style={styles.radioDot} /> : null}
-                  </View>
-                  <Text style={styles.rowLabel}>{t(labelKey)}</Text>
-                </Pressable>
-              );
-            })}
-          </Pressable>
-        </Pressable>
-      </Modal>
+        onClose={() => setSortMenuOpen(false)}
+        direction={activeSortOrder?.direction ?? 'asc'}
+        onDirectionChange={applySortDirection}
+        fields={sortFieldOptions}
+        activeField={activeSortOrder?.field ?? 'title'}
+        onSelectField={applySortField}
+      />
     </View>
   );
 }
@@ -557,49 +505,4 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   fabLabel: { color: '#1a1206', fontSize: 13, fontWeight: '700' },
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modalCard: {
-    width: '100%',
-    maxWidth: 360,
-    backgroundColor: colors.surface,
-    borderRadius: 12,
-    padding: 16,
-    gap: 4,
-  },
-  modalTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 8 },
-  sortDirectionRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
-  sortDirectionPill: {
-    flex: 1,
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: colors.surfaceHigh,
-  },
-  sortDirectionPillActive: { backgroundColor: colors.accent },
-  sortDirectionText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-  sortDirectionTextActive: { color: '#1a1206' },
-  pickerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
-  },
-  radio: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  radioChecked: { borderColor: colors.accent },
-  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent },
-  rowLabel: { color: colors.text, fontSize: 14 },
 });

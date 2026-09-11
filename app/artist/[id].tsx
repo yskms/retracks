@@ -4,7 +4,7 @@
  * 長押しで複数選択に入り、まとめて再生できる。
  */
 
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -12,12 +12,27 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { usePlayback } from '../../src/playback';
+import { useSettings } from '../../src/settings';
 import { deriveAlbums, type Album, type Track } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
 import { Tile } from '../../src/components/Tile';
+import { SortMenu } from '../../src/components/SortMenu';
 import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../../src/layout';
+import {
+  sortTracks,
+  useSortOrders,
+  type ArtistTrackSortField,
+  type SortFieldLabelKey,
+} from '../../src/sortOrder';
 import { useSelection } from '../../src/useSelection';
+
+const ARTIST_TRACK_FIELD_OPTIONS: { value: ArtistTrackSortField; labelKey: SortFieldLabelKey }[] = [
+  { value: 'title', labelKey: 'library.sortFieldTitle' },
+  { value: 'album', labelKey: 'library.sortFieldAlbum' },
+  { value: 'duration', labelKey: 'library.sortFieldDuration' },
+  { value: 'year', labelKey: 'library.sortFieldYear' },
+];
 
 /**
  * 選択の単位は常に曲。アルバムを選んだときは収録曲をまとめて選ぶ。
@@ -55,10 +70,14 @@ export default function ArtistScreen() {
     isSelected,
     areAllSelected,
   } = useSelection<Kind>();
+  const { articleOptions } = useSettings();
 
   const { layouts, cycle } = useLayouts();
   const albumLayout = layouts.artistAlbums;
   const tileSize = tileSizeOf(width, albumLayout, 16, 10);
+
+  const { sortOrders, setArtistTrackSort } = useSortOrders();
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
 
   // このアーティストの曲だけを曲一覧から抜き出す（deriveArtists() と同じ
   // グループ化キー）。曲一覧のフィルタ・並び順をそのまま引き継ぐので、
@@ -81,6 +100,21 @@ export default function ArtistScreen() {
   const albums = useMemo(
     () => deriveAlbums(tracks, albumYears).sort(compareAlbumByYear),
     [tracks, albumYears]
+  );
+
+  // 曲一覧の並べ替え（要件 10.4）。既定はアルバム順（→ useSortOrders() の
+  // artistTracks のコメント）。tracks（アルバム導出・複数選択の元）は
+  // タイトル順のまま触らず、表示・「順番に再生」用にこちらを別に持つ。
+  const sortedTracks = useMemo(
+    () =>
+      sortTracks(
+        tracks,
+        sortOrders.artistTracks.field,
+        sortOrders.artistTracks.direction,
+        articleOptions,
+        albumYears
+      ),
+    [tracks, sortOrders.artistTracks, articleOptions, albumYears]
   );
 
   /** アルバムID（無ければ名前）→ 収録曲。アルバム行の選択に使う。 */
@@ -106,8 +140,8 @@ export default function ArtistScreen() {
     async (shuffled: boolean) => {
       if (!selection) return;
       const ids = selection.ids;
-      // 一覧の並び順を保つため、選択順ではなく表示順で拾う
-      const picked = tracks.filter((t) => ids.includes(t.id));
+      // 一覧の並び順を保つため、選択順ではなく表示順（並べ替え反映後）で拾う
+      const picked = sortedTracks.filter((t) => ids.includes(t.id));
 
       if (shuffled) await playTracks('selection', ids, picked);
       else await playFrom(picked, 0);
@@ -115,7 +149,7 @@ export default function ArtistScreen() {
       clear();
       router.push('/player');
     },
-    [selection, tracks, playTracks, playFrom, clear, router]
+    [selection, sortedTracks, playTracks, playFrom, clear, router]
   );
 
   return (
@@ -149,6 +183,14 @@ export default function ArtistScreen() {
           <Text style={styles.headerTitle} numberOfLines={1}>
             {name ?? t('artist.fallbackTitle')}
           </Text>
+          <Pressable
+            hitSlop={10}
+            onPress={() => setSortMenuOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel={t('library.sortA11y')}
+          >
+            <Ionicons name="swap-vertical-outline" size={20} color={colors.text} />
+          </Pressable>
           <Pressable hitSlop={10} onPress={() => cycle('artistAlbums')}>
             <Ionicons name={LAYOUT_ICON[albumLayout]} size={20} color={colors.text} />
           </Pressable>
@@ -156,7 +198,7 @@ export default function ArtistScreen() {
       )}
 
       <FlatList
-        data={tracks}
+        data={sortedTracks}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         initialNumToRender={14}
@@ -175,7 +217,7 @@ export default function ArtistScreen() {
                   <Pressable
                     style={styles.action}
                     onPress={async () => {
-                      await playFrom(tracks, 0);
+                      await playFrom(sortedTracks, 0);
                       router.push('/player');
                     }}
                   >
@@ -184,7 +226,7 @@ export default function ArtistScreen() {
                   <Pressable
                     style={[styles.action, styles.actionPrimary]}
                     onPress={async () => {
-                      await playTracks('artist', [id], tracks);
+                      await playTracks('artist', [id], sortedTracks);
                       router.push('/player');
                     }}
                   >
@@ -257,10 +299,22 @@ export default function ArtistScreen() {
             selected={isSelected('songs', item.id)}
             playing={currentTrack?.id === item.id}
             // 曲を直接タップしたときは画面を移さない
-            onPress={() => (inSelection ? toggle('songs', item.id) : void playFrom(tracks, index))}
+            onPress={() =>
+              inSelection ? toggle('songs', item.id) : void playFrom(sortedTracks, index)
+            }
             onLongPress={() => toggle('songs', item.id)}
           />
         )}
+      />
+
+      <SortMenu
+        visible={sortMenuOpen}
+        onClose={() => setSortMenuOpen(false)}
+        direction={sortOrders.artistTracks.direction}
+        onDirectionChange={(direction) => setArtistTrackSort(sortOrders.artistTracks.field, direction)}
+        fields={ARTIST_TRACK_FIELD_OPTIONS}
+        activeField={sortOrders.artistTracks.field}
+        onSelectField={(field) => setArtistTrackSort(field, sortOrders.artistTracks.direction)}
       />
     </View>
   );

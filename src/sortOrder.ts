@@ -10,9 +10,13 @@
  * ので、各タブが自分の表示用に並べ替えた配列を持つ（プロバイダの tracks/
  * albums はタイトル順の正本のまま触らない）。
  *
- * v1 はライブラリ画面の曲・アルバムタブのみが対象。アーティストタブは
- * 軸が「名前」の1つしか無いため対象外、アルバム詳細・アーティスト詳細の
- * 一覧（ディスク/トラック番号順が前提）も対象外（→ 要件定義書 10.4）。
+ * v1 はライブラリ画面の曲・アルバムタブとアーティスト詳細の曲一覧が対象。
+ * ライブラリ画面のアーティストタブは軸が「名前」の1つしか無いため対象外、
+ * アルバム詳細・アーティスト詳細のアルバム一覧（ディスク/トラック番号順・
+ * 発売年降順が前提）も対象外（→ 要件定義書 10.4）。「追加日」軸は
+ * Track が持っていない（Asset.creationTime を保存しておらず、足すなら
+ * キャッシュ版を5→6に上げる走査が要る）ため、曲タブの分もまとめて
+ * 見送っている。
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -23,25 +27,45 @@ import { readJson, StorageKeys, writeJson } from './storage';
 
 export type SongSortField = 'title' | 'album' | 'artist' | 'duration';
 export type AlbumSortField = 'title' | 'artist' | 'year';
+/** アーティスト詳細の曲一覧用。同一アーティストの曲なので 'artist' 軸は無い。 */
+export type ArtistTrackSortField = 'title' | 'album' | 'duration' | 'year';
 export type SortDirection = 'asc' | 'desc';
+
+/** SortMenu の項目ラベルに使う i18n キー。並べ替え軸を足すときはここにも足す。 */
+export type SortFieldLabelKey =
+  | 'library.sortFieldTitle'
+  | 'library.sortFieldAlbum'
+  | 'library.sortFieldArtist'
+  | 'library.sortFieldDuration'
+  | 'library.sortFieldYear';
 
 export type SortOrders = {
   songs: { field: SongSortField; direction: SortDirection };
   albums: { field: AlbumSortField; direction: SortDirection };
+  /**
+   * アーティスト詳細の曲一覧。既定をアルバム順にしている（曲タブの既定は
+   * タイトル順のまま）ため、曲タブとは別のキーで持つ。アーティストページは
+   * 本来ディスコグラフィで、1枚のアルバムの曲がタイトル順でバラバラに並ぶより
+   * アルバム→ディスク→トラック番号の方が読みやすい（2026-09-11 決定）。
+   */
+  artistTracks: { field: ArtistTrackSortField; direction: SortDirection };
 };
 
 const SONG_FIELDS: SongSortField[] = ['title', 'album', 'artist', 'duration'];
 const ALBUM_FIELDS: AlbumSortField[] = ['title', 'artist', 'year'];
+const ARTIST_TRACK_FIELDS: ArtistTrackSortField[] = ['title', 'album', 'duration', 'year'];
 
 const DEFAULTS: SortOrders = {
   songs: { field: 'title', direction: 'asc' },
   albums: { field: 'title', direction: 'asc' },
+  artistTracks: { field: 'album', direction: 'asc' },
 };
 
 function normalize(value: unknown): SortOrders {
   const saved = (value ?? {}) as Partial<{
     songs: Partial<SortOrders['songs']>;
     albums: Partial<SortOrders['albums']>;
+    artistTracks: Partial<SortOrders['artistTracks']>;
   }>;
   const direction = (d: unknown): SortDirection => (d === 'desc' ? 'desc' : 'asc');
   return {
@@ -56,6 +80,12 @@ function normalize(value: unknown): SortOrders {
         ? (saved.albums!.field as AlbumSortField)
         : DEFAULTS.albums.field,
       direction: direction(saved.albums?.direction),
+    },
+    artistTracks: {
+      field: ARTIST_TRACK_FIELDS.includes(saved.artistTracks?.field as ArtistTrackSortField)
+        ? (saved.artistTracks!.field as ArtistTrackSortField)
+        : DEFAULTS.artistTracks.field,
+      direction: direction(saved.artistTracks?.direction),
     },
   };
 }
@@ -111,7 +141,15 @@ export function useSortOrders() {
     setSortOrders((prev) => ({ ...prev, albums: { field, direction } }));
   }, []);
 
-  return { sortOrders, setSongSort, setAlbumSort };
+  const setArtistTrackSort = useCallback(
+    (field: ArtistTrackSortField, direction: SortDirection) => {
+      if (!readyRef.current) return;
+      setSortOrders((prev) => ({ ...prev, artistTracks: { field, direction } }));
+    },
+    []
+  );
+
+  return { sortOrders, setSongSort, setAlbumSort, setArtistTrackSort };
 }
 
 const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: true });
@@ -119,21 +157,28 @@ const collator = new Intl.Collator(undefined, { sensitivity: 'base', numeric: tr
 /**
  * 曲一覧を軸・方向で並べ替える。
  *
- * 方向（昇順/降順）は主軸にだけ効かせる。第2キー（アルバム順のときは
- * アルバム名、それ以外は compareByTrackOrder＝ディスク・トラック番号）は
- * 常に自然な順のままにする。降順にしたときアルバム内の曲順まで逆転すると
- * 使い物にならない（Pulsar 等の一般的な音楽アプリの挙動に合わせる）。
+ * 方向（昇順/降順）は主軸にだけ効かせる。第2キー（アルバム順・発売年順の
+ * ときはアルバム名、アーティスト順のときもアルバム名を挟んでから、最後は
+ * 必ず compareByTrackOrder＝ディスク・トラック番号）は常に自然な順のままに
+ * する。降順にしたときアルバム内の曲順まで逆転すると使い物にならない
+ * （Pulsar 等の一般的な音楽アプリの挙動に合わせる）。
+ *
+ * 'year'（アーティスト詳細用）は曲ではなくアルバムの発売年で比較する。
+ * albumYears（albumId→year）を渡さない/引けない曲は常に末尾に寄せる
+ * （sortAlbums() の year 扱いと同じ理由・同じ形）。
  */
 export function sortTracks(
   tracks: Track[],
-  field: SongSortField,
+  field: SongSortField | ArtistTrackSortField,
   direction: SortDirection,
-  articleOptions: ArticleOptions
+  articleOptions: ArticleOptions,
+  albumYears: Record<string, number> = {}
 ): Track[] {
   const sign = direction === 'asc' ? 1 : -1;
   const titleKey = (t: Track) => sortKeyOf(t.title, articleOptions);
   const artistKey = (t: Track) => sortKeyOf(t.artist, articleOptions);
   const albumKey = (t: Track) => sortKeyOf(t.album ?? '', articleOptions);
+  const yearOf = (t: Track): number | null => (t.albumId ? (albumYears[t.albumId] ?? null) : null);
 
   const comparePrimary = (a: Track, b: Track): number => {
     switch (field) {
@@ -150,7 +195,7 @@ export function sortTracks(
   };
 
   const compareSecondary = (a: Track, b: Track): number => {
-    if (field === 'artist') {
+    if (field === 'artist' || field === 'year') {
       const albumDiff = collator.compare(albumKey(a), albumKey(b));
       if (albumDiff !== 0) return albumDiff;
     }
@@ -158,6 +203,14 @@ export function sortTracks(
   };
 
   return [...tracks].sort((a, b) => {
+    if (field === 'year') {
+      const ya = yearOf(a);
+      const yb = yearOf(b);
+      if (ya == null && yb != null) return 1;
+      if (ya != null && yb == null) return -1;
+      const primary = ya != null && yb != null && ya !== yb ? (ya - yb) * sign : 0;
+      return primary !== 0 ? primary : compareSecondary(a, b);
+    }
     const primary = comparePrimary(a, b) * sign;
     return primary !== 0 ? primary : compareSecondary(a, b);
   });
