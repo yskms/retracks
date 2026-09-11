@@ -635,6 +635,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     return queue[status.index] ?? null;
   }, [queue, status]);
 
+  // 次の曲のジャケットを先読みしておく。onTrackChange 自体はほぼ即座に
+  // 届く（2026-09-11 に確認済み）が、そのアルバムのジャケットを初めて
+  // 表示する場合は content:// からの読み込みが数百ms かかることがあり、
+  // 「音はすぐ切り替わるのにジャケットだけ遅れる」ように見える。index
+  // だけを依存にしているのは、status は毎秒（positionMs）新しい参照に
+  // なるが、先読みしたいのは曲が実際に変わったときだけのため。
+  useEffect(() => {
+    const index = status?.index ?? -1;
+    if (index < 0) return;
+    const nextUri = queue[index + 1]?.artworkUri;
+    if (nextUri) void Image.prefetch([nextUri], 'memory-disk');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queue, status?.index]);
+
   const progress = useMemo(() => (shuffle ? progressOf(shuffle) : null), [shuffle]);
 
   // 設定（音楽以外の除外・短い曲の除外・除外フォルダ・並べ替え）を適用した
