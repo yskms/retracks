@@ -65,7 +65,6 @@ type PlaybackValue = {
    */
   folders: { id: string; name: string; trackCount: number }[];
   queue: Track[];
-  status: PlayerStatus | null;
   currentTrack: Track | null;
   progress: { played: number; total: number } | null;
   /**
@@ -123,6 +122,22 @@ export function usePlayback(): PlaybackValue {
   return value;
 }
 
+/**
+ * 再生位置など高頻度（250ms間隔）で更新される部分だけを別コンテキストに
+ * 分けている。usePlayback() の value に含めると、position が動くたびに
+ * それを使うすべての画面・コンポーネントが再レンダーされてしまう
+ * （2026-09-11、実機で再生中にネイティブヒープが数分でGB単位まで増え続け
+ * OSに強制終了される不具合として発覚。usePlayback() の value オブジェクトを
+ * 毎レンダー作り直していたため、Context の仕組み上 status の変化のたびに
+ * 全画面が再レンダーされていた）。位置を必要とする少数のコンポーネント
+ * （MiniPlayer・プレイヤー画面など）だけがこちらを読む。
+ */
+const PlaybackStatusContext = createContext<PlayerStatus | null>(null);
+
+export function usePlaybackStatus(): PlayerStatus | null {
+  return useContext(PlaybackStatusContext);
+}
+
 async function waitForConnection(timeoutMs = 1500) {
   const started = Date.now();
   for (;;) {
@@ -131,6 +146,29 @@ async function waitForConnection(timeoutMs = 1500) {
     if (Date.now() - started > timeoutMs) return status;
     await new Promise((resolve) => setTimeout(resolve, 100));
   }
+}
+
+/**
+ * RetracksPlayer.getStatus() は中身が同じでも呼ぶたびに新しいオブジェクトを
+ * 返す。ポーリングのたびに素直に setStatus すると、一時停止中で値が1つも
+ * 変わっていなくても PlaybackStatusContext の購読者（MiniPlayer・プレイヤー
+ * 画面・デバッグ画面）が毎秒再レンダーされ続けてしまう（2026-09-11）。
+ * フィールドを浅く比較し、同じなら setStatus 側で prev をそのまま返させて
+ * Reactに再レンダーを止めさせる。
+ */
+function statusEquals(a: PlayerStatus | null, b: PlayerStatus | null): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.connected === b.connected &&
+    a.isPlaying === b.isPlaying &&
+    a.index === b.index &&
+    a.positionMs === b.positionMs &&
+    a.durationMs === b.durationMs &&
+    a.queueSize === b.queueSize &&
+    a.repeatMode === b.repeatMode &&
+    a.fullPlayback === b.fullPlayback
+  );
 }
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
@@ -158,6 +196,22 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [albumYears, setAlbumYears] = useState<Record<string, number>>({});
   const [queue, setQueue] = useState<Track[]>([]);
   const [status, setStatus] = useState<PlayerStatus | null>(null);
+  // toggle() 等、usePlayback() の value（250ms ごとには作り直さない）から
+  // isPlaying を読みたい箇所向け。クロージャに status を持たせると、value を
+  // メモ化した時点の古い値のまま固まってしまうため、常に最新を指す ref で読む。
+  const statusRef = useRef<PlayerStatus | null>(null);
+  useEffect(() => {
+    statusRef.current = status;
+  }, [status]);
+  // repeatMode は status（250ms ごとに新しいオブジェクトになる）由来だが、
+  // 値そのものはユーザー操作でしか変わらない。value に status をそのまま
+  // 含めると再生中ずっと value が作り直され続けてしまうため、実際に値が
+  // 変わったときだけ更新される独立した state にして切り離す。
+  const [repeatModeState, setRepeatModeState] = useState<number>(RepeatMode.All);
+  useEffect(() => {
+    const next = status?.repeatMode ?? RepeatMode.All;
+    setRepeatModeState((prev) => (prev === next ? prev : next));
+  }, [status]);
   const [shuffle, setShuffle] = useState<ShuffleState | null>(null);
   const [setting, setSettingState] = useState<SegmentSetting>(DEFAULT_SEGMENT);
   const [rushOn, setRushOn] = useState(true);
@@ -381,7 +435,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       void writeJson(StorageKeys.playbackPosition(queueKeyRef.current), 0);
     });
 
-    const timer = setInterval(() => setStatus(RetracksPlayer.getStatus()), 250);
+    const timer = setInterval(() => {
+      const next = RetracksPlayer.getStatus();
+      setStatus((prev) => (statusEquals(prev, next) ? prev : next));
+    }, 1000);
 
     // 再生位置を定期保存。サービスごと終了した場合に途中から再開できる。
     const saver = setInterval(() => {
@@ -503,7 +560,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * 設定そのものはネイティブ側のプレイヤーが持っていて、次回の起動でも
    * 復元される。ここでは巡回の順番だけを決める。
    */
-  const cycleRepeat = () => {
+  const cycleRepeat = useCallback(() => {
     const current = RetracksPlayer.getStatus().repeatMode ?? RepeatMode.All;
     const next =
       current === RepeatMode.Off
@@ -513,7 +570,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           : RepeatMode.Off;
     RetracksPlayer.setRepeatMode(next);
     setStatus(RetracksPlayer.getStatus());
-  };
+  }, []);
 
   const rescan = useCallback(async () => {
     // 2本まとめて Promise.all にすると、アルバムの年の取得だけが失敗した
@@ -548,6 +605,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     addLog('保存内容を消去しました');
   }, [addLog, applyShuffle, applyQueue]);
 
+  // status が変わるたび（毎秒）再計算されるが、返すのは queue の要素そのもの
+  // （コピーではない）なので、index が変わらない限り参照は同じになる。
+  // これにより value の useMemo が毎秒作り直されずに済んでいる——ここで
+  // 新しいオブジェクト/配列を返す実装に変えると、この下の value が毎秒
+  // 新しい参照になり、usePlayback() 全消費者の再レンダー止めが丸ごと
+  // 効かなくなる（2026-09-11 のネイティブメモリリーク修正の前提）。
   const currentTrack = useMemo(() => {
     if (!status || status.index < 0) return null;
     return queue[status.index] ?? null;
@@ -628,39 +691,70 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     tracksRef.current = tracks;
   }, [tracks]);
 
-  const value: PlaybackValue = {
-    ready,
-    tracks,
-    artists,
-    albums,
-    folders,
-    queue,
-    status,
-    currentTrack,
-    progress,
-    allProgress,
-    setting,
-    rushOn,
-    log,
-    setSetting: (update) => setSettingState((prev) => update(prev)),
-    setRushOn,
-    playTracks,
-    playAll,
-    playFrom,
-    play: () => RetracksPlayer.play(),
-    pause: () => RetracksPlayer.pause(),
-    toggle: () =>
-      status?.isPlaying ? RetracksPlayer.pause() : RetracksPlayer.play(),
-    next: () => RetracksPlayer.next(),
-    previous: () => RetracksPlayer.previous(),
-    skipTo: (index: number) => RetracksPlayer.skipTo(index),
-    seekTo: (positionMs: number) => void RetracksPlayer.seekTo(positionMs),
-    playCurrentFromStart: () => RetracksPlayer.playCurrentFromStart(),
-    repeatMode: status?.repeatMode ?? RepeatMode.All,
-    cycleRepeat,
-    rescan,
-    clearStorage,
-  };
+  // status は含めない（250msごとに新しいオブジェクトになるため。
+  // → usePlaybackStatus()）。toggle は statusRef 経由で最新の isPlaying を
+  // 読むので、この value が古いタイミングで作られていても問題ない。
+  const value: PlaybackValue = useMemo(
+    () => ({
+      ready,
+      tracks,
+      artists,
+      albums,
+      folders,
+      queue,
+      currentTrack,
+      progress,
+      allProgress,
+      setting,
+      rushOn,
+      log,
+      setSetting: (update: (prev: SegmentSetting) => SegmentSetting) =>
+        setSettingState((prev) => update(prev)),
+      setRushOn,
+      playTracks,
+      playAll,
+      playFrom,
+      play: () => RetracksPlayer.play(),
+      pause: () => RetracksPlayer.pause(),
+      toggle: () =>
+        statusRef.current?.isPlaying ? RetracksPlayer.pause() : RetracksPlayer.play(),
+      next: () => RetracksPlayer.next(),
+      previous: () => RetracksPlayer.previous(),
+      skipTo: (index: number) => RetracksPlayer.skipTo(index),
+      seekTo: (positionMs: number) => void RetracksPlayer.seekTo(positionMs),
+      playCurrentFromStart: () => RetracksPlayer.playCurrentFromStart(),
+      repeatMode: repeatModeState,
+      cycleRepeat,
+      rescan,
+      clearStorage,
+    }),
+    [
+      ready,
+      tracks,
+      artists,
+      albums,
+      folders,
+      queue,
+      currentTrack,
+      progress,
+      allProgress,
+      setting,
+      rushOn,
+      log,
+      setRushOn,
+      playTracks,
+      playAll,
+      playFrom,
+      repeatModeState,
+      cycleRepeat,
+      rescan,
+      clearStorage,
+    ]
+  );
 
-  return <PlaybackContext.Provider value={value}>{children}</PlaybackContext.Provider>;
+  return (
+    <PlaybackStatusContext.Provider value={status}>
+      <PlaybackContext.Provider value={value}>{children}</PlaybackContext.Provider>
+    </PlaybackStatusContext.Provider>
+  );
 }

@@ -3,7 +3,7 @@
  * 再生操作、RUSH の区間設定、再生キューをここに集約する。
  */
 
-import { useRef, useState } from 'react';
+import { memo, useCallback, useRef, useState } from 'react';
 import {
   FlatList,
   Image,
@@ -18,7 +18,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
-import { usePlayback } from '../src/playback';
+import { usePlayback, usePlaybackStatus } from '../src/playback';
 import { RepeatMode } from '../modules/retracks-player/src';
 import type { Track } from '../src/library';
 import { resolveSegment, type SegmentSetting } from '../src/rush';
@@ -47,6 +47,41 @@ const SEGMENT_ROWS: {
 /** キューの行の高さ。scrollToIndex を正確に効かせるため固定する。 */
 const QUEUE_ROW_HEIGHT = 54;
 
+/**
+ * 再生位置のシークバー。250msごとの再生位置更新のたびに PlayerScreen 全体が
+ * 再レンダーされる（→ usePlaybackStatus()）ため、React.memo で包んで
+ * props が実際に変わっていないときは再レンダーしないようにする。
+ *
+ * 直接 <Slider> を使っていたときは、value が同じでも毎レンダーごとに
+ * ネイティブ側の処理が走り、ネイティブヒープが再生中ずっと増え続けて
+ * OSに強制終了される不具合があった（2026-09-11、実機で確認）。
+ */
+const PositionSlider = memo(function PositionSlider({
+  value,
+  maximumValue,
+  onValueChange,
+  onSlidingComplete,
+}: {
+  value: number;
+  maximumValue: number;
+  onValueChange: (value: number) => void;
+  onSlidingComplete: (value: number) => void;
+}) {
+  return (
+    <Slider
+      style={styles.seek}
+      minimumValue={0}
+      maximumValue={maximumValue}
+      value={value}
+      minimumTrackTintColor={colors.accent}
+      maximumTrackTintColor={colors.border}
+      thumbTintColor={colors.accent}
+      onValueChange={onValueChange}
+      onSlidingComplete={onSlidingComplete}
+    />
+  );
+});
+
 type RepeatLabelKey = 'player.repeatOff' | 'player.repeatAll' | 'player.repeatOne';
 
 /** 読み上げ用のリピートの状態名（キー）。 */
@@ -62,7 +97,6 @@ export default function PlayerScreen() {
   const insets = useSafeAreaInsets();
   const {
     currentTrack,
-    status,
     progress,
     queue,
     setting,
@@ -78,6 +112,7 @@ export default function PlayerScreen() {
     repeatMode,
     cycleRepeat,
   } = usePlayback();
+  const status = usePlaybackStatus();
 
   const listRef = useRef<FlatList<Track>>(null);
   const { width } = useWindowDimensions();
@@ -121,9 +156,48 @@ export default function PlayerScreen() {
     });
   };
 
-  const positionMs = seeking ?? status?.positionMs ?? 0;
+  // Slider の value を短い間隔でそのまま更新すると、ネイティブ側（
+  // @react-native-community/slider）の描画コストが実機でネイティブヒープを
+  // 分単位でGB級まで増やし続け、OSに強制終了される不具合につながった
+  // （2026-09-11）。曲名や時刻表示は秒単位でしか見えないので、精度を落とさず
+  // 秒単位に丸めて Slider への value 変化を間引く。ポーリング自体を
+  // 250ms→1秒にした（src/playback.tsx）ため今は実質的に冗長だが、将来
+  // ポーリングを速める変更をしたときの保険として残している。「二重にやって
+  // いる」ように見えても消さないこと。
+  const positionMs = seeking ?? (status ? Math.floor(status.positionMs / 1000) * 1000 : 0);
   const durationMs = status?.durationMs ?? 0;
   const preview = durationMs > 0 ? resolveSegment(durationMs / 1000, setting) : null;
+
+  const handleSeekComplete = useCallback(
+    (value: number) => {
+      seekTo(value);
+      setSeeking(null);
+    },
+    [seekTo]
+  );
+
+  // renderItem に status をまるごと渡すと、250msごとの再生位置更新のたびに
+  // 関数の参照が変わり、キュー内の表示中の行（initialNumToRender/windowSize
+  // 分、数十行）が丸ごと再レンダーされ続けてしまう（2026-09-11、実機で
+  // ネイティブヒープが再生中ずっと増え続ける不具合の主因の一つと判明）。
+  // 実際に必要なのは currentIndex（プリミティブ）だけなので、それだけを
+  // 依存にして、曲が切り替わったとき以外は renderItem の参照を固定する。
+  const currentIndex = status?.index ?? -1;
+  // QueueRow へ渡す onPress もここで1つに固定する。インラインで
+  // (index) => () => skipTo(index) のように行ごとに新しい関数を作ると、
+  // QueueRow 側の React.memo が onPress の変化で毎回失敗してしまう。
+  const handleQueuePress = useCallback((index: number) => skipTo(index), [skipTo]);
+  const renderQueueItem = useCallback(
+    ({ item, index }: { item: Track; index: number }) => (
+      <QueueRow
+        track={item}
+        index={index}
+        active={currentIndex === index}
+        onPress={handleQueuePress}
+      />
+    ),
+    [currentIndex, handleQueuePress]
+  );
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -160,14 +234,7 @@ export default function PlayerScreen() {
             setPinned(shouldPin);
           }
         }}
-        renderItem={({ item, index }) => (
-          <QueueRow
-            track={item}
-            index={index}
-            active={status?.index === index}
-            onPress={() => skipTo(index)}
-          />
-        )}
+        renderItem={renderQueueItem}
         ListHeaderComponent={
           <View
             style={styles.body}
@@ -206,19 +273,11 @@ export default function PlayerScreen() {
             </View>
 
             <View style={styles.seekWrap}>
-              <Slider
-                style={styles.seek}
-                minimumValue={0}
-                maximumValue={Math.max(durationMs, 1)}
+              <PositionSlider
                 value={positionMs}
-                minimumTrackTintColor={colors.accent}
-                maximumTrackTintColor={colors.border}
-                thumbTintColor={colors.accent}
+                maximumValue={Math.max(durationMs, 1)}
                 onValueChange={setSeeking}
-                onSlidingComplete={(value) => {
-                  seekTo(value);
-                  setSeeking(null);
-                }}
+                onSlidingComplete={handleSeekComplete}
               />
               <View style={styles.times}>
                 <Text style={styles.time}>{formatDuration(positionMs)}</Text>
@@ -439,7 +498,7 @@ function QueueBar({
   );
 }
 
-function QueueRow({
+const QueueRow = memo(function QueueRow({
   track,
   index,
   active,
@@ -448,10 +507,19 @@ function QueueRow({
   track: Track;
   index: number;
   active: boolean;
-  onPress: () => void;
+  // index を受け取って親（安定した1つの useCallback）へ渡す形にしている。
+  // ここが onPress: () => void で「onPress={() => skipTo(index)}」のように
+  // 行ごと・レンダーごとに新しい関数を親から渡されると、React.memo の浅い
+  // 比較が毎回失敗し、このコンポーネントが memo 化されていないのと同じに
+  // なる（2026-09-11、表示中の十数行が毎秒まるごと再レンダーされる原因の
+  // 一つだった）。
+  onPress: (index: number) => void;
 }) {
   return (
-    <Pressable style={[styles.queueRow, active && styles.queueRowActive]} onPress={onPress}>
+    <Pressable
+      style={[styles.queueRow, active && styles.queueRowActive]}
+      onPress={() => onPress(index)}
+    >
       <Text style={[styles.queueIndex, active && styles.queueTextActive]}>
         {index + 1}
       </Text>
@@ -470,7 +538,7 @@ function QueueRow({
       <Text style={styles.queueDuration}>{formatDuration(track.durationMs)}</Text>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.background },

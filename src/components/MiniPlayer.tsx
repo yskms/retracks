@@ -1,7 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { usePlayback } from '../playback';
+import { usePlayback, usePlaybackStatus } from '../playback';
 import { colors } from '../theme';
 import { Artwork } from './Artwork';
 
@@ -11,7 +11,8 @@ import { Artwork } from './Artwork';
  */
 export function MiniPlayer() {
   const router = useRouter();
-  const { currentTrack, status, toggle, next } = usePlayback();
+  const { currentTrack, toggle, next } = usePlayback();
+  const status = usePlaybackStatus();
 
   if (!currentTrack) return null;
 
