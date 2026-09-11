@@ -45,11 +45,18 @@ export default function AlbumScreen() {
           </Text>
           {artist ? (
             <Pressable
+              hitSlop={10}
+              accessibilityRole="button"
               onPress={() =>
                 router.push({
                   pathname: '/artist/[id]',
                   params: {
-                    id: tracks[0]?.artistId || tracks[0]?.artist || artist,
+                    // ヘッダーに出している artist（deriveAlbums() がタイトル順で
+                    // 最初に見つけた曲の名前）と同じ曲から id を引く。tracks[0]
+                    // （ディスク・トラック番号順の先頭曲）だと、コンピレーション
+                    // アルバムのように曲ごとにアーティストが違う場合、表示している
+                    // 名前と遷移先のアーティストがずれてしまう。
+                    id: tracks.find((t) => t.artist === artist)?.artistId ?? artist,
                     name: artist,
                   },
                 })

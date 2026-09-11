@@ -267,6 +267,8 @@ export default function PlayerScreen() {
               </Text>
               <Pressable
                 disabled={!currentTrack?.artist}
+                hitSlop={10}
+                accessibilityRole="button"
                 onPress={() =>
                   router.push({
                     pathname: '/artist/[id]',
