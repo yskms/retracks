@@ -40,7 +40,7 @@ export type ResolvedSegment = {
 
 export const DEFAULT_SEGMENT: SegmentSetting = {
   startSec: 20,
-  lengthSec: 35,
+  lengthSec: 70,
   fadeSec: 2,
   fadeInSec: 1,
 };
