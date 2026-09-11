@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     height: 52,
   },
   brand: { color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 20 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
   headerActions: { flexDirection: 'row', gap: 8 },
   headerAction: {
