@@ -98,7 +98,6 @@ export default function PlayerScreen() {
   const insets = useSafeAreaInsets();
   const {
     currentTrack,
-    progress,
     queue,
     setting,
     setSetting,
@@ -210,8 +209,8 @@ export default function PlayerScreen() {
           <Ionicons name="chevron-down-outline" size={24} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>
-          {progress
-            ? t('player.roundProgress', { played: progress.played, total: progress.total })
+          {queue.length > 0 && currentIndex >= 0
+            ? t('player.queuePosition', { index: currentIndex + 1, total: queue.length })
             : t('player.nowPlayingHeader')}
         </Text>
         <View style={{ width: 20 }} />
