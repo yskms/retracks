@@ -334,7 +334,7 @@ export default function PlayerScreen() {
                 onPress={() => setRushOn(!rushOn)}
               >
                 <Text style={[styles.rushLabel, rushOn && styles.rushLabelOn]}>
-                  RUSH {rushOn ? 'ON' : 'OFF'}
+                  {rushOn ? t('player.rushOnLabel') : t('player.rushOffLabel')}
                 </Text>
                 <Text style={styles.rushHint}>
                   {rushOn ? t('player.rushHintOn') : t('player.rushHintOff')}
