@@ -51,6 +51,14 @@ declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
   previous(): void;
   skipTo(index: number): void;
   seekTo(positionMs: number): Promise<void>;
+  /**
+   * 現在の再生状態。ネイティブ側が保持しているスナップショットを返すだけで、
+   * 呼んだ時点でプレイヤーを読みに行かない（200ms間隔の更新＋状態が変わる
+   * イベント直後の同期更新で鮮度を保っている。→ RetracksPlayerModule.kt
+   * の refreshSnapshot()）。同期更新が無い箇所で「操作した直後に呼んで
+   * 最新値を得る」ような使い方をすると、最大200ms古い値を拾うことがある
+   * （2026-09-11、曲送り操作の反応が鈍く見えた不具合の原因 → 要件定義書13章）。
+   */
   getStatus(): PlayerStatus;
 }
 
