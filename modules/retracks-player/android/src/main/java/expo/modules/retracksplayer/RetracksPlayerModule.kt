@@ -205,37 +205,55 @@ class RetracksPlayerModule : Module() {
     if (Looper.myLooper() == Looper.getMainLooper()) block() else mainHandler.post(block)
   }
 
+  /**
+   * snapshot を現在値で更新する。メインスレッドから呼ぶこと。
+   *
+   * getStatus() はこの snapshot をそのまま返すだけで、呼ばれた時点で
+   * プレイヤーを読みに行かない。ポーリング（SNAPSHOT_INTERVAL_MS＝200ms
+   * 間隔）だけに更新を任せると、onMediaItemTransition 等のイベント直後に
+   * getStatus() を呼んでも最大200ms古い値（前の曲の index など）を
+   * 返すことがある（2026-09-11）。値が実際に変わった直後は、ポーリングを
+   * 待たずここを直接呼んで snapshot を最新化すること。
+   */
+  private fun refreshSnapshot() {
+    val c = controller
+    val service = PlaybackService.instance
+
+    // 接続が終わるまで controller は既定値を返す（リピートは OFF 扱いになり、
+    // 起動直後の数秒だけ設定が消えたように見える）。サービスは同じプロセスに
+    // いるので、その間はプレイヤーを直接読む。どちらも Player なので扱いは同じ。
+    val p: Player? = if (c != null && c.isConnected) c else service?.playerOrNull()
+
+    snapshot = if (p == null) {
+      emptySnapshot()
+    } else {
+      mapOf(
+        "connected" to true,
+        "isPlaying" to p.isPlaying,
+        "index" to p.currentMediaItemIndex,
+        "positionMs" to p.currentPosition.toDouble(),
+        "durationMs" to (p.duration.takeIf { it > 0 }?.toDouble() ?: 0.0),
+        "queueSize" to p.mediaItemCount,
+        "repeatMode" to p.repeatMode,
+        // これはコントローラではなくサービスしか知らない
+        "fullPlayback" to (service?.isFullPlayback() ?: false)
+      )
+    }
+  }
+
   private val snapshotRunnable = object : Runnable {
     override fun run() {
-      val c = controller
-      val service = PlaybackService.instance
-
-      // 接続が終わるまで controller は既定値を返す（リピートは OFF 扱いになり、
-      // 起動直後の数秒だけ設定が消えたように見える）。サービスは同じプロセスに
-      // いるので、その間はプレイヤーを直接読む。どちらも Player なので扱いは同じ。
-      val p: Player? = if (c != null && c.isConnected) c else service?.playerOrNull()
-
-      snapshot = if (p == null) {
-        emptySnapshot()
-      } else {
-        mapOf(
-          "connected" to true,
-          "isPlaying" to p.isPlaying,
-          "index" to p.currentMediaItemIndex,
-          "positionMs" to p.currentPosition.toDouble(),
-          "durationMs" to (p.duration.takeIf { it > 0 }?.toDouble() ?: 0.0),
-          "queueSize" to p.mediaItemCount,
-          "repeatMode" to p.repeatMode,
-          // これはコントローラではなくサービスしか知らない
-          "fullPlayback" to (service?.isFullPlayback() ?: false)
-        )
-      }
+      refreshSnapshot()
       if (polling) mainHandler.postDelayed(this, SNAPSHOT_INTERVAL_MS)
     }
   }
 
   private val playerListener = object : Player.Listener {
     override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+      // イベントを送る前に snapshot を最新化する（refreshSnapshot() の
+      // コメント参照）。これが無いと、JS 側が onTrackChange を受けて
+      // getStatus() を呼んでも前の曲の index を拾うことがある。
+      refreshSnapshot()
       sendEvent(
         "onTrackChange",
         mapOf(
@@ -405,6 +423,11 @@ class RetracksPlayerModule : Module() {
     Function("setRepeatMode") { mode: Int ->
       onMain {
         controller?.repeatMode = mode.coerceIn(0, 2)
+        // 直後に JS 側が getStatus() で repeatMode を読みに来る
+        // （cycleRepeat()）。ここで最新化しないと、200ms以内の連打で
+        // 2回目が古い repeatMode から次の値を計算し、同じ値に
+        // 戻ってしまう（2026-09-11）。
+        refreshSnapshot()
         // ウィジェットから起こしたときに同じ設定で始まるよう控える
         PlaybackService.instance?.saveState()
       }

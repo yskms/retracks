@@ -395,6 +395,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   // ---- 再生イベント ----------------------------------------------------
   useEffect(() => {
     const onTrack = RetracksPlayer.addListener('onTrackChange', (event) => {
+      // ポーリング（1秒間隔）だけに任せると、曲送り操作をしてからジャケット・
+      // 曲名・ヘッダーのキュー位置が変わるまで最大1秒の遅延に感じられる
+      // （2026-09-11）。イベントを受け取った時点で即座に反映させる。
+      // shuffle state の有無（playFrom か playTracks か）に関わらず、
+      // どの曲送りでも遅延なく反映したいので、下のガードより前で呼ぶ。
+      const latestStatus = RetracksPlayer.getStatus();
+      setStatus((prev) => (statusEquals(prev, latestStatus) ? prev : latestStatus));
+
       const state = shuffleRef.current;
       if (!state || event.index < 0) return;
 
