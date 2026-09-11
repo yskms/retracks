@@ -11,7 +11,7 @@ import * as Localization from 'expo-localization';
 import i18next from 'i18next';
 import { useTranslation } from 'react-i18next';
 
-import { usePlayback } from '../src/playback';
+import { usePlayback, usePlaybackStatus } from '../src/playback';
 import { RetracksPlayer } from '../modules/retracks-player/src';
 import { colors } from '../src/theme';
 
@@ -19,8 +19,8 @@ export default function DebugScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { tracks, queue, status, progress, log, rescan, clearStorage, playAll } =
-    usePlayback();
+  const { tracks, queue, progress, log, rescan, clearStorage, playAll } = usePlayback();
+  const status = usePlaybackStatus();
 
   // 再生が勝手に止まる症状の調査用。Android が記録している終了理由を読む。
   const [exits, setExits] = useState<
