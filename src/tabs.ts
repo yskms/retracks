@@ -27,3 +27,12 @@ export const TAB_LAYOUT_KEY: Partial<Record<TabId, LayoutKey>> = {
   artists: 'artists',
   albums: 'albums',
 };
+
+/**
+ * 並べ替えメニューを持つタブだけをここに載せる（考え方は TAB_LAYOUT_KEY と同じ）。
+ * アーティストタブは軸が「名前」の1つしか無いため対象外（v1、→ 要件定義書 10.4）。
+ */
+export const TAB_SORT_KEY: Partial<Record<TabId, 'songs' | 'albums'>> = {
+  songs: 'songs',
+  albums: 'albums',
+};
