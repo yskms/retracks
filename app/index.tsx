@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Modal,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -33,14 +34,29 @@ import {
 } from '../src/components/LibraryPages';
 import { useSelection } from '../src/useSelection';
 import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
-import { TAB_LABEL_KEY, TAB_LAYOUT_KEY, type TabId } from '../src/tabs';
+import { TAB_LABEL_KEY, TAB_LAYOUT_KEY, TAB_SORT_KEY, type TabId } from '../src/tabs';
 import { useSettings } from '../src/settings';
+import {
+  sortAlbums,
+  sortTracks,
+  useSortOrders,
+  type AlbumSortField,
+  type SongSortField,
+  type SortDirection,
+} from '../src/sortOrder';
 
 /**
  * 下線をネイティブ側で動かすためのラッパ。
  * JS スレッドで値を更新すると、イベントのたびに段付きの動きになる。
  */
 const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
+
+type SortFieldLabelKey =
+  | 'library.sortFieldTitle'
+  | 'library.sortFieldAlbum'
+  | 'library.sortFieldArtist'
+  | 'library.sortFieldDuration'
+  | 'library.sortFieldYear';
 
 const GRID_PADDING = 12;
 const GRID_GAP = 10;
@@ -50,7 +66,7 @@ export default function LibraryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { tabs: tabSettings, ready: settingsReady } = useSettings();
+  const { tabs: tabSettings, ready: settingsReady, articleOptions } = useSettings();
   // 非表示のタブはページャに載せない。順序はそのまま設定の並びを使う。
   const tabs: { id: TabId; label: string }[] = useMemo(
     () =>
@@ -131,6 +147,22 @@ export default function LibraryScreen() {
   const tileSizeFor = (layout: (typeof layouts)['artists']) =>
     tileSizeOf(width, layout, GRID_PADDING, GRID_GAP);
 
+  // 曲・アルバムタブの並べ替え（要件 10.4）。プロバイダの tracks/albums
+  // （タイトル順の正本）は触らず、タブごとの表示用に並べ替えた配列を
+  // ここで別に持つ。sortKeyForActiveTab の考え方は layoutKeyForActiveTab
+  // と同じ（＝「そのタブに並べ替えメニューがあるか」で出し分ける）。
+  const { sortOrders, setSongSort, setAlbumSort } = useSortOrders();
+  const sortKeyForActiveTab = tabs[page] ? TAB_SORT_KEY[tabs[page].id] : undefined;
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const sortedTracks = useMemo(
+    () => sortTracks(tracks, sortOrders.songs.field, sortOrders.songs.direction, articleOptions),
+    [tracks, sortOrders.songs, articleOptions]
+  );
+  const sortedAlbums = useMemo(
+    () => sortAlbums(albums, sortOrders.albums.field, sortOrders.albums.direction, articleOptions),
+    [albums, sortOrders.albums, articleOptions]
+  );
+
   const albumCounts = useMemo(() => countAlbumsByArtist(albums), [albums]);
   // アーティストの写真は持っていないので、そのアーティストのアルバムから流用する
   const artistArtwork = useMemo(() => artworkByArtist(albums), [albums]);
@@ -175,8 +207,8 @@ export default function LibraryScreen() {
     const { kind, ids } = selection;
 
     if (kind === 'songs' && !shuffled) {
-      // 一覧の並び順のまま先頭から
-      const picked = tracks.filter((t) => ids.includes(t.id));
+      // 一覧の並び順のまま先頭から（曲タブの並べ替えを反映した順）
+      const picked = sortedTracks.filter((t) => ids.includes(t.id));
       await playFrom(picked, 0);
     } else if (kind === 'songs') {
       const byId = new Map(tracks.map((t) => [t.id, t]));
@@ -197,7 +229,41 @@ export default function LibraryScreen() {
 
     clear();
     router.push('/player');
-  }, [selection, tracks, playTracks, playFrom, clear, router]);
+  }, [selection, tracks, sortedTracks, playTracks, playFrom, clear, router]);
+
+  // 並べ替えメニューの中身は、今表示しているタブ（sortKeyForActiveTab）で
+  // 出し分ける。軸の並びは Row の項目数がそこまで多くないため、useMemo に
+  // せず毎レンダー組み立てる（layoutKeyForActiveTab と同じ扱い）。
+  const activeSortOrder =
+    sortKeyForActiveTab === 'songs'
+      ? sortOrders.songs
+      : sortKeyForActiveTab === 'albums'
+        ? sortOrders.albums
+        : null;
+  const sortFieldOptions: { value: SongSortField | AlbumSortField; labelKey: SortFieldLabelKey }[] =
+    sortKeyForActiveTab === 'songs'
+      ? [
+          { value: 'title', labelKey: 'library.sortFieldTitle' },
+          { value: 'album', labelKey: 'library.sortFieldAlbum' },
+          { value: 'artist', labelKey: 'library.sortFieldArtist' },
+          { value: 'duration', labelKey: 'library.sortFieldDuration' },
+        ]
+      : sortKeyForActiveTab === 'albums'
+        ? [
+            { value: 'title', labelKey: 'library.sortFieldTitle' },
+            { value: 'artist', labelKey: 'library.sortFieldArtist' },
+            { value: 'year', labelKey: 'library.sortFieldYear' },
+          ]
+        : [];
+  const applySortField = (value: SongSortField | AlbumSortField) => {
+    if (sortKeyForActiveTab === 'songs') setSongSort(value as SongSortField, sortOrders.songs.direction);
+    else if (sortKeyForActiveTab === 'albums')
+      setAlbumSort(value as AlbumSortField, sortOrders.albums.direction);
+  };
+  const applySortDirection = (direction: SortDirection) => {
+    if (sortKeyForActiveTab === 'songs') setSongSort(sortOrders.songs.field, direction);
+    else if (sortKeyForActiveTab === 'albums') setAlbumSort(sortOrders.albums.field, direction);
+  };
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -226,6 +292,15 @@ export default function LibraryScreen() {
         <View style={styles.header}>
           <Text style={styles.brand}>RE:TR4CKS</Text>
           <View style={styles.headerRight}>
+            {sortKeyForActiveTab && (
+              <Pressable
+                hitSlop={10}
+                onPress={() => setSortMenuOpen(true)}
+                accessibilityLabel={t('library.sortA11y')}
+              >
+                <Ionicons name="swap-vertical-outline" size={20} color={colors.text} />
+              </Pressable>
+            )}
             {layoutKeyForActiveTab && (
               <Pressable hitSlop={10} onPress={() => cycle(layoutKeyForActiveTab)}>
                 <Ionicons
@@ -306,7 +381,7 @@ export default function LibraryScreen() {
           <View key={tab.id}>
             {tab.id === 'songs' && (
               <SongsPage
-                tracks={tracks}
+                tracks={sortedTracks}
                 currentTrack={currentTrack}
                 inSelection={inSelection}
                 isSelected={isSelected}
@@ -330,7 +405,7 @@ export default function LibraryScreen() {
             )}
             {tab.id === 'albums' && (
               <AlbumsPage
-                albums={albums}
+                albums={sortedAlbums}
                 layout={layouts.albums}
                 inSelection={inSelection}
                 isSelected={isSelected}
@@ -364,6 +439,62 @@ export default function LibraryScreen() {
           </Text>
         </Pressable>
       )}
+
+      <Modal
+        visible={sortMenuOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setSortMenuOpen(false)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setSortMenuOpen(false)}>
+          <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>{t('library.sortTitle')}</Text>
+            {activeSortOrder && (
+              <View style={styles.sortDirectionRow}>
+                {(['asc', 'desc'] as const).map((direction) => {
+                  const active = activeSortOrder.direction === direction;
+                  return (
+                    <Pressable
+                      key={direction}
+                      style={[styles.sortDirectionPill, active && styles.sortDirectionPillActive]}
+                      onPress={() => applySortDirection(direction)}
+                    >
+                      <Text
+                        style={[
+                          styles.sortDirectionText,
+                          active && styles.sortDirectionTextActive,
+                        ]}
+                      >
+                        {t(direction === 'asc' ? 'library.sortDirectionAsc' : 'library.sortDirectionDesc')}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+            {sortFieldOptions.map(({ value, labelKey }) => {
+              const checked = activeSortOrder?.field === value;
+              return (
+                <Pressable
+                  key={value}
+                  style={styles.pickerRow}
+                  onPress={() => {
+                    applySortField(value);
+                    setSortMenuOpen(false);
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked }}
+                >
+                  <View style={[styles.radio, checked && styles.radioChecked]}>
+                    {checked ? <View style={styles.radioDot} /> : null}
+                  </View>
+                  <Text style={styles.rowLabel}>{t(labelKey)}</Text>
+                </Pressable>
+              );
+            })}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -426,4 +557,49 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent,
   },
   fabLabel: { color: '#1a1206', fontSize: 13, fontWeight: '700' },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    width: '100%',
+    maxWidth: 360,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 16,
+    gap: 4,
+  },
+  modalTitle: { color: colors.text, fontSize: 15, fontWeight: '700', marginBottom: 8 },
+  sortDirectionRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+  sortDirectionPill: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: colors.surfaceHigh,
+  },
+  sortDirectionPillActive: { backgroundColor: colors.accent },
+  sortDirectionText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  sortDirectionTextActive: { color: '#1a1206' },
+  pickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+  },
+  radio: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  radioChecked: { borderColor: colors.accent },
+  radioDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.accent },
+  rowLabel: { color: colors.text, fontSize: 14 },
 });

@@ -172,18 +172,8 @@ function statusEquals(a: PlayerStatus | null, b: PlayerStatus | null): boolean {
 }
 
 export function PlaybackProvider({ children }: { children: ReactNode }) {
-  const {
-    excludeShortTracks,
-    shortTrackThresholdSec,
-    excludeNonMusic,
-    excludedFolderIds,
-    ignoreLeadingThe,
-    ignoreLeadingAAn,
-  } = useSettings();
-  const articleOptions = useMemo(
-    () => ({ ignoreLeadingThe, ignoreLeadingAAn }),
-    [ignoreLeadingThe, ignoreLeadingAAn]
-  );
+  const { excludeShortTracks, shortTrackThresholdSec, excludeNonMusic, excludedFolderIds, articleOptions } =
+    useSettings();
 
   const [ready, setReady] = useState(false);
   // 走査そのままの生データ。公開する tracks は、この下で設定（音楽以外・

@@ -33,6 +33,8 @@ export const StorageKeys = {
   settings: `${PREFIX}:settings:v1`,
   /** アーティスト／アルバムタブの表示形式（一覧かグリッドか）。 */
   layout: `${PREFIX}:layout:v1`,
+  /** 曲／アルバムタブの並べ替え軸と方向。→ sortOrder.ts */
+  sortOrder: `${PREFIX}:sort-order:v1`,
   /** 言語・並べ替え・絞り込みなど、アプリ全体の設定（要件 10.6）。 */
   appSettings: `${PREFIX}:app-settings:v1`,
   /** 順列を保存しているキューの一覧と最終利用時刻。古いものを捨てるために使う。 */
