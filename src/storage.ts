@@ -39,6 +39,8 @@ export const StorageKeys = {
   appSettings: `${PREFIX}:app-settings:v1`,
   /** 順列を保存しているキューの一覧と最終利用時刻。古いものを捨てるために使う。 */
   shuffleIndex: `${PREFIX}:shuffle-index:v1`,
+  /** JS側の未捕捉例外の履歴。→ src/crashLog.ts、src/components/ErrorBoundary.tsx */
+  crashLog: `${PREFIX}:crash-log:v1`,
 } as const;
 
 export async function readJson<T>(key: string): Promise<T | null> {

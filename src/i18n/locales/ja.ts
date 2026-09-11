@@ -138,7 +138,13 @@ export default {
     clearStorage: '保存を消去',
     exitHistoryCardTitle: 'プロセスの終了履歴',
     noRecords: '記録なし',
+    crashHistoryCardTitle: 'アプリ内エラーの履歴',
     logCardTitle: 'ログ',
     noLogsYet: 'まだありません',
+  },
+  errorBoundary: {
+    title: '問題が発生しました',
+    message: '予期しないエラーが起きました。再試行するか、アプリを再起動してください。',
+    retry: '再試行',
   },
 };

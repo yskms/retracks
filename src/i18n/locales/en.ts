@@ -130,7 +130,13 @@ export default {
     clearStorage: 'Clear storage',
     exitHistoryCardTitle: 'Process exit history',
     noRecords: 'No records',
+    crashHistoryCardTitle: 'In-app error history',
     logCardTitle: 'Log',
     noLogsYet: 'None yet',
+  },
+  errorBoundary: {
+    title: 'Something went wrong',
+    message: 'An unexpected error occurred. Try again, or restart the app.',
+    retry: 'Try again',
   },
 };
