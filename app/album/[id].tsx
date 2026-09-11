@@ -87,6 +87,7 @@ export default function AlbumScreen() {
             subtitle={item.artist}
             trailing={formatDuration(item.durationMs)}
             artworkUri={item.artworkUri}
+            trackNumber={item.trackNumber}
             playing={currentTrack?.id === item.id}
             // 曲を直接タップしたときは画面を移さない
             onPress={() => void playFrom(tracks, index)}
