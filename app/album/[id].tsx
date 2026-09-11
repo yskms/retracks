@@ -44,9 +44,21 @@ export default function AlbumScreen() {
             {title ?? t('album.fallbackTitle')}
           </Text>
           {artist ? (
-            <Text style={styles.headerSub} numberOfLines={1}>
-              {artist}
-            </Text>
+            <Pressable
+              onPress={() =>
+                router.push({
+                  pathname: '/artist/[id]',
+                  params: {
+                    id: tracks[0]?.artistId || tracks[0]?.artist || artist,
+                    name: artist,
+                  },
+                })
+              }
+            >
+              <Text style={styles.headerSub} numberOfLines={1}>
+                {artist}
+              </Text>
+            </Pressable>
           ) : null}
         </View>
       </View>
