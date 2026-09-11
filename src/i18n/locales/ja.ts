@@ -36,6 +36,10 @@ export default {
     sortFieldAlbum: 'アルバム名',
     sortFieldDuration: '長さ',
     sortFieldYear: '発売年',
+    permissionTitle: '音楽ライブラリへのアクセスが必要です',
+    permissionMessage: '曲を表示・再生するには、端末内の音楽へのアクセスを許可してください。',
+    permissionGrant: '許可する',
+    permissionOpenSettings: '設定を開く',
   },
   player: {
     segmentStart: '開始位置',

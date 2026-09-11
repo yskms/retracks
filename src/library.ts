@@ -130,9 +130,21 @@ function toTrack(
   };
 }
 
-export async function requestPermission(): Promise<boolean> {
+export type PermissionState = { granted: boolean; canAskAgain: boolean };
+
+/** 起動時・ユーザー操作時に使う。まだ聞いていなければ OS の許可ダイアログを出す。 */
+export async function requestPermission(): Promise<PermissionState> {
   const res = await MusicLibrary.requestPermissionsAsync();
-  return res.status === 'granted';
+  return { granted: res.status === 'granted', canAskAgain: res.canAskAgain };
+}
+
+/**
+ * 今の許可状態を、ダイアログを出さずに確認するだけ。設定アプリから許可して
+ * アプリに戻ってきたときなど、ユーザー操作を挟まずに静かに確認したい場面で使う。
+ */
+export async function checkPermission(): Promise<PermissionState> {
+  const res = await MusicLibrary.getPermissionsAsync();
+  return { granted: res.status === 'granted', canAskAgain: res.canAskAgain };
 }
 
 /** 端末を実際に走査する。 */

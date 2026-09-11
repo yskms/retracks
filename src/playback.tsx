@@ -26,6 +26,7 @@ import {
 } from '../modules/retracks-player/src';
 import { DEFAULT_SEGMENT, type SegmentSetting } from './rush';
 import {
+  checkPermission,
   deriveAlbums,
   deriveArtists,
   loadLibrary,
@@ -51,6 +52,17 @@ import { clearAll, readJson, StorageKeys, writeJson } from './storage';
 
 type PlaybackValue = {
   ready: boolean;
+  /**
+   * メディア権限が拒否された状態。null なら拒否されていない（許可済み、
+   * またはまだ確認していない）。canAskAgain が false のときは OS のダイアログを
+   * 二度と出せない（設定アプリから許可するしかない）状態を指す
+   * （2026-09-11、権限拒否のまま「ライブラリを読み込んでいます」が無限に
+   * 出続ける不具合を修正 → 要件定義書13章）。
+   */
+  permissionDenied: { canAskAgain: boolean } | null;
+  /** 権限を取り直す。canAskAgain なら OS ダイアログを、そうでなければ何もしない
+   * （呼び出し側で設定アプリを開く）。 */
+  retryPermission: () => Promise<void>;
   tracks: Track[];
   /**
    * アーティスト/アルバム一覧。ライブラリ画面のタブと検索画面の両方から
@@ -177,6 +189,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     useSettings();
 
   const [ready, setReady] = useState(false);
+  const [permissionDenied, setPermissionDenied] = useState<{ canAskAgain: boolean } | null>(
+    null
+  );
   // 走査そのままの生データ。公開する tracks は、この下で設定（音楽以外・
   // 短い曲・フォルダの除外）を適用した派生値にする。artists/albums は
   // さらにその tracks から導出する（MediaStore への別クエリを使わない。
@@ -260,6 +275,144 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setLog((prev) => [`${stamp}  ${line}`, ...prev].slice(0, 80));
   }, []);
 
+  /**
+   * ライブラリの読み込みと、生きているネイティブセッションへの接続。
+   * 起動時と、権限拒否からの再試行（retryPermission/AppState 復帰）の
+   * 両方から呼べるよう、起動 effect から切り出した。呼び出し時点で
+   * 権限が許可されている前提（呼び出し側で確認する）。
+   */
+  const loadLibraryAndSession = useCallback(async () => {
+    // アルバムの年は曲一覧の走査結果を待つ必要が無いので、loadLibrary() と
+    // 並行に投げる。artists/albums 自体は tracks から導出されるので
+    // 別途フェッチする必要がない（→ deriveArtists()/deriveAlbums()）。
+    void RetracksPlayer.getAlbumYears()
+      .then((years) => setAlbumYears(years))
+      .catch(() => {
+        // 年が引けなくてもアルバム一覧自体は組み立てられる（year: null に倒れる）
+      });
+
+    const result = await loadLibrary();
+    applyTracks(result.tracks);
+
+    // 再生していなくても FAB に「続きから」を出せるよう、保存済みの1巡を読む
+    const savedAll = await loadShuffle(ALL_KEY);
+    if (savedAll) setAllProgress(progressOf(savedAll));
+
+    // 走査は待たせず裏で行い、差分があったときだけ静かに反映する。
+    // 起動のたびに2〜4秒待たされるのを避けつつ、曲の増減には追従する。
+    // artists/albums は tracks から導出されるので、applyTracks() だけで
+    // 両方とも一緒に最新化される（曲一覧とズレる、という形のバグが
+    // 構造的に起きなくなった）。
+    if (Date.now() - result.scannedAt > RESCAN_AFTER_MS) {
+      void (async () => {
+        try {
+          const refreshed = await refreshLibrary(result.tracks);
+          if (refreshed.added.length === 0 && refreshed.removed.length === 0) return;
+          applyTracks(refreshed.tracks);
+          addLog(`裏で再走査（追加${refreshed.added.length} 削除${refreshed.removed.length}）`);
+        } catch {
+          // 走査に失敗してもキャッシュで動くので黙って諦める
+        }
+      })();
+    }
+    addLog(
+      `ライブラリ ${result.tracks.length}曲 / ${result.elapsedMs}ms` +
+        `（${result.source === 'cache' ? 'キャッシュ' : '走査'}）`
+    );
+
+    // サービスが生きていればそのセッションを引き継ぐ。ここで組み直すと
+    // 再生中の曲が区間の先頭へ戻ってしまう。
+    const current = await waitForConnection();
+    if (current && current.queueSize > 0) {
+      // 何を鳴らしているかを知っているのはネイティブ側だけ。JS の保存を
+      // 当てにすると、別のキュー（例：全曲シャッフル）の順列に番号だけを
+      // 当てはめてしまい、画面と音が食い違う。キューはネイティブから貰う。
+      const saved = await RetracksPlayer.getSavedQueue();
+      // QueueStore.kt が保存するのは id/uri/title/artist/album/durationMs/
+      // artworkUri の7つだけ（→ QueueStore.kt の saveTracks）。artistId/
+      // albumId/trackNumber/discNumber/isMusic/folderId/folderName は
+      // 持っていない。まず走査済みの library（result.tracks、直前の
+      // applyTracks() と同じ内容）を id で引き、そこにある曲は完全な
+      // Track で差し替える。走査後に削除・除外された曲（library 側から
+      // 消えている）だけ、安全側の値を埋めた不完全な Track にフォールバック
+      // する。
+      //
+      // getSavedQueue() は正直に TrackInput（7フィールドだけ）を返す。
+      // 以前はここを as Track[] でキャストしていたが、それは型が
+      // 「isMusic は boolean」「artistId は string | null」と主張する
+      // フィールドの実体を、埋めないまま undefined にできてしまうという
+      // ことでもあった。isMusic 等はそれで気づかれにくい形の不具合に
+      // なるだけで済んだが、artistId は影響が直接的だった。ウィジェットから
+      // 起動してすぐプレイヤー画面へ来た直後（＝この経路で currentTrack が
+      // 作られた直後）にアーティスト名を押すと、undefined の artistId から
+      // 名前へフォールバックした id で絞り込むことになり、実際は artistId
+      // を持つそのアーティストの曲とは一致せず、アーティスト詳細が空に
+      // なっていた（2026-09-11、実機で発覚）。
+      //
+      // fallback() を Track を返す関数として書くことで、Track に
+      // フィールドを足したとき（今後もありうる：追加日、アルバムアーティスト
+      // 等）ここが型エラーで止まるようにする。「復元経路も直さなきゃ」を
+      // 人間が思い出す前提にしない。
+      const fallback = (t: TrackInput): Track => ({
+        id: t.id,
+        uri: t.uri,
+        title: t.title,
+        artist: t.artist,
+        album: t.album ?? null,
+        durationMs: t.durationMs,
+        artworkUri: t.artworkUri ?? null,
+        isMusic: true,
+        folderId: null,
+        folderName: null,
+        albumId: null,
+        artistId: null,
+        trackNumber: null,
+        discNumber: null,
+      });
+      const tracksById = new Map(result.tracks.map((t) => [t.id, t]));
+      const nativeQueue: Track[] = saved.tracks.map((t) => tracksById.get(t.id) ?? fallback(t));
+
+      if (nativeQueue.length === current.queueSize) {
+        applyQueue(nativeQueue);
+        if (saved.key) queueKeyRef.current = saved.key;
+
+        // 1巡の進捗は、保存してある順列がいま鳴っているキューと
+        // 完全に同じ並びのときだけ引き継ぐ。長さだけを見ると、曲数が
+        // たまたま同じ別の順列を掴んでしまう。
+        // 識別子が無い場合（一覧からの再生、または識別子を保存する前の
+        // 古いデータ）は全曲の順列を当ててみて、一致すれば拾う。
+        const nativeIds = nativeQueue.map((t) => t.id);
+        const restored = await loadShuffle(saved.key || ALL_KEY);
+        const matches =
+          restored != null &&
+          restored.order.length === nativeIds.length &&
+          restored.order.every((id, i) => id === nativeIds[i]);
+
+        applyShuffle(matches ? { ...restored!, cursor: Math.max(0, current.index) } : null);
+        lastIndexRef.current = matches ? Math.max(0, current.index) : -1;
+        if (matches && !saved.key) queueKeyRef.current = ALL_KEY;
+      }
+      addLog(`再生中のセッションに接続（${current.index + 1}/${current.queueSize}）`);
+    }
+  }, [addLog, applyShuffle, applyQueue, applyTracks]);
+
+  /**
+   * 権限を取り直す。許可されれば permissionDenied を解除してライブラリを
+   * 読み込む。canAskAgain が false（「今後表示しない」を選んだ後）だと
+   * OS はダイアログを出さず即座に拒否を返すので、呼び出し側（設定画面への
+   * 誘導UI）は canAskAgain を見て「許可する」ではなく「設定を開く」を
+   * 出し分けること。
+   */
+  const retryPermission = useCallback(async () => {
+    const permission = await requestPermission();
+    if (permission.granted) {
+      setPermissionDenied(null);
+      await loadLibraryAndSession();
+    } else {
+      setPermissionDenied({ canAskAgain: permission.canAskAgain });
+    }
+  }, [loadLibraryAndSession]);
+
   // ---- 起動 ------------------------------------------------------------
   useEffect(() => {
     let cancelled = false;
@@ -288,131 +441,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           // 権限まわりで失敗しても再生自体は続けられる
         }
 
-        if (!(await requestPermission())) {
+        const permission = await requestPermission();
+        if (cancelled) return;
+        if (!permission.granted) {
           addLog('メディアの権限が許可されていません');
+          setPermissionDenied({ canAskAgain: permission.canAskAgain });
           return;
         }
-
-        // アルバムの年は曲一覧の走査結果を待つ必要が無いので、loadLibrary() と
-        // 並行に投げる。artists/albums 自体は tracks から導出されるので
-        // 別途フェッチする必要がない（→ deriveArtists()/deriveAlbums()）。
-        void RetracksPlayer.getAlbumYears()
-          .then((years) => {
-            if (!cancelled) setAlbumYears(years);
-          })
-          .catch(() => {
-            // 年が引けなくてもアルバム一覧自体は組み立てられる（year: null に倒れる）
-          });
-
-        const result = await loadLibrary();
-        if (cancelled) return;
-        applyTracks(result.tracks);
-
-        // 再生していなくても FAB に「続きから」を出せるよう、保存済みの1巡を読む
-        const savedAll = await loadShuffle(ALL_KEY);
-        if (!cancelled && savedAll) setAllProgress(progressOf(savedAll));
-
-        // 走査は待たせず裏で行い、差分があったときだけ静かに反映する。
-        // 起動のたびに2〜4秒待たされるのを避けつつ、曲の増減には追従する。
-        // artists/albums は tracks から導出されるので、applyTracks() だけで
-        // 両方とも一緒に最新化される（曲一覧とズレる、という形のバグが
-        // 構造的に起きなくなった）。
-        if (Date.now() - result.scannedAt > RESCAN_AFTER_MS) {
-          void (async () => {
-            try {
-              const refreshed = await refreshLibrary(result.tracks);
-              if (cancelled) return;
-              if (refreshed.added.length === 0 && refreshed.removed.length === 0) return;
-              applyTracks(refreshed.tracks);
-              addLog(
-                `裏で再走査（追加${refreshed.added.length} 削除${refreshed.removed.length}）`
-              );
-            } catch {
-              // 走査に失敗してもキャッシュで動くので黙って諦める
-            }
-          })();
-        }
-        addLog(
-          `ライブラリ ${result.tracks.length}曲 / ${result.elapsedMs}ms` +
-            `（${result.source === 'cache' ? 'キャッシュ' : '走査'}）`
-        );
-
-        // サービスが生きていればそのセッションを引き継ぐ。ここで組み直すと
-        // 再生中の曲が区間の先頭へ戻ってしまう。
-        const current = await waitForConnection();
-        if (!cancelled && current && current.queueSize > 0) {
-          // 何を鳴らしているかを知っているのはネイティブ側だけ。JS の保存を
-          // 当てにすると、別のキュー（例：全曲シャッフル）の順列に番号だけを
-          // 当てはめてしまい、画面と音が食い違う。キューはネイティブから貰う。
-          const saved = await RetracksPlayer.getSavedQueue();
-          // QueueStore.kt が保存するのは id/uri/title/artist/album/durationMs/
-          // artworkUri の7つだけ（→ QueueStore.kt の saveTracks）。artistId/
-          // albumId/trackNumber/discNumber/isMusic/folderId/folderName は
-          // 持っていない。まず走査済みの library（result.tracks、直前の
-          // applyTracks() と同じ内容）を id で引き、そこにある曲は完全な
-          // Track で差し替える。走査後に削除・除外された曲（library 側から
-          // 消えている）だけ、安全側の値を埋めた不完全な Track にフォールバック
-          // する。
-          //
-          // getSavedQueue() は正直に TrackInput（7フィールドだけ）を返す。
-          // 以前はここを as Track[] でキャストしていたが、それは型が
-          // 「isMusic は boolean」「artistId は string | null」と主張する
-          // フィールドの実体を、埋めないまま undefined にできてしまうという
-          // ことでもあった。isMusic 等はそれで気づかれにくい形の不具合に
-          // なるだけで済んだが、artistId は影響が直接的だった。ウィジェットから
-          // 起動してすぐプレイヤー画面へ来た直後（＝この経路で currentTrack が
-          // 作られた直後）にアーティスト名を押すと、undefined の artistId から
-          // 名前へフォールバックした id で絞り込むことになり、実際は artistId
-          // を持つそのアーティストの曲とは一致せず、アーティスト詳細が空に
-          // なっていた（2026-09-11、実機で発覚）。
-          //
-          // fallback() を Track を返す関数として書くことで、Track に
-          // フィールドを足したとき（今後もありうる：追加日、アルバムアーティスト
-          // 等）ここが型エラーで止まるようにする。「復元経路も直さなきゃ」を
-          // 人間が思い出す前提にしない。
-          const fallback = (t: TrackInput): Track => ({
-            id: t.id,
-            uri: t.uri,
-            title: t.title,
-            artist: t.artist,
-            album: t.album ?? null,
-            durationMs: t.durationMs,
-            artworkUri: t.artworkUri ?? null,
-            isMusic: true,
-            folderId: null,
-            folderName: null,
-            albumId: null,
-            artistId: null,
-            trackNumber: null,
-            discNumber: null,
-          });
-          const tracksById = new Map(result.tracks.map((t) => [t.id, t]));
-          const nativeQueue: Track[] = saved.tracks.map(
-            (t) => tracksById.get(t.id) ?? fallback(t)
-          );
-
-          if (nativeQueue.length === current.queueSize) {
-            applyQueue(nativeQueue);
-            if (saved.key) queueKeyRef.current = saved.key;
-
-            // 1巡の進捗は、保存してある順列がいま鳴っているキューと
-            // 完全に同じ並びのときだけ引き継ぐ。長さだけを見ると、曲数が
-            // たまたま同じ別の順列を掴んでしまう。
-            // 識別子が無い場合（一覧からの再生、または識別子を保存する前の
-            // 古いデータ）は全曲の順列を当ててみて、一致すれば拾う。
-            const nativeIds = nativeQueue.map((t) => t.id);
-            const restored = await loadShuffle(saved.key || ALL_KEY);
-            const matches =
-              restored != null &&
-              restored.order.length === nativeIds.length &&
-              restored.order.every((id, i) => id === nativeIds[i]);
-
-            applyShuffle(matches ? { ...restored!, cursor: Math.max(0, current.index) } : null);
-            lastIndexRef.current = matches ? Math.max(0, current.index) : -1;
-            if (matches && !saved.key) queueKeyRef.current = ALL_KEY;
-          }
-          addLog(`再生中のセッションに接続（${current.index + 1}/${current.queueSize}）`);
-        }
+        setPermissionDenied(null);
+        await loadLibraryAndSession();
       } catch (e) {
         addLog(`起動 ERROR: ${String(e)}`);
       }
@@ -421,7 +458,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [addLog, applyShuffle, applyQueue, applyTracks]);
+  }, [addLog, loadLibraryAndSession]);
 
   // ---- 再生イベント ----------------------------------------------------
   useEffect(() => {
@@ -522,10 +559,23 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (state === 'active') {
         const latest = RetracksPlayer.getStatus();
         setStatus((prev) => (statusEquals(prev, latest) ? prev : latest));
+
+        // 権限拒否の状態で設定アプリを開いて許可し、戻ってきたときに
+        // ユーザーが手動でアプリを再起動しなくても拾えるようにする。
+        // ダイアログを出さない確認（checkPermission）だけなので、
+        // 単にタブを切り替えて戻ってきただけのときも安全に呼べる。
+        if (permissionDenied) {
+          void checkPermission().then((permission) => {
+            if (permission.granted) {
+              setPermissionDenied(null);
+              void loadLibraryAndSession();
+            }
+          });
+        }
       }
     });
     return () => subscription.remove();
-  }, []);
+  }, [permissionDenied, loadLibraryAndSession]);
 
   // ---- 区間設定 --------------------------------------------------------
   useEffect(() => {
@@ -761,6 +811,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const value: PlaybackValue = useMemo(
     () => ({
       ready,
+      permissionDenied,
+      retryPermission,
       tracks,
       artists,
       albums,
@@ -794,6 +846,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }),
     [
       ready,
+      permissionDenied,
+      retryPermission,
       tracks,
       artists,
       albums,
