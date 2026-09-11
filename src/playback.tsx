@@ -413,7 +413,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           const ids = source.map((t) => t.id);
           const nextState = await startNextCycle(queueKeyRef.current, ids, lastPlayed);
           applyShuffle(nextState);
-          lastIndexRef.current = 0;
+          // ここも -1（未再生）にする。0 のままだと、1曲だけのキューでは
+          // この直後の setQueue() が出す onTrackChange（index 0）を
+          // 「previous(0) === order.length-1(0)」でまた1巡完了と誤検知し、
+          // 再構成→setQueue→誤検知……のループに入ってしまう（起点を
+          // -1 にした今回の修正は、この再構成パス自身には効いていなかった）。
+          lastIndexRef.current = -1;
 
           const byId = new Map(source.map((t) => [t.id, t]));
           const ordered = nextState.order
@@ -505,7 +510,13 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         source.map((t) => t.id)
       );
       applyShuffle(state);
-      lastIndexRef.current = state.cursor;
+      // -1（未再生）にしておく。state.cursor を入れると、1曲だけの
+      // キューでは cursor が「先頭かつ末尾」になり、再生開始直後の
+      // 最初の onTrackChange（previous=cursor=0, event.index=0）を
+      // 「1巡完了して先頭へ戻った」と誤検知し、キュー再構成が無限に
+      // 繰り返される不具合があった（1曲だけのアルバムをシャッフル
+      // 再生すると再生が始まらない）。
+      lastIndexRef.current = -1;
 
       const byId = new Map(source.map((t) => [t.id, t]));
       const ordered = state.order
