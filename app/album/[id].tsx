@@ -75,7 +75,8 @@ export default function AlbumScreen() {
                   router.push('/player');
                 }}
               >
-                <Text style={styles.actionPrimaryText}>{`⤮ ${t('common.shufflePlay')}`}</Text>
+                <Ionicons name="shuffle-outline" size={14} color="#1a1206" />
+                <Text style={styles.actionPrimaryText}>{t('common.shufflePlay')}</Text>
               </Pressable>
             </View>
           </View>
@@ -119,6 +120,9 @@ const styles = StyleSheet.create({
   summary: { color: colors.textDim, fontSize: 12 },
   actions: { flexDirection: 'row', gap: 8 },
   action: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: colors.surfaceHigh,
     paddingHorizontal: 14,
     paddingVertical: 8,

@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { colors } from '../theme';
 import { Artwork } from './Artwork';
@@ -43,7 +44,7 @@ export function Row({
           </Text>
         ) : null}
       </View>
-      {selected ? <Text style={styles.check}>✓</Text> : null}
+      {selected ? <Ionicons name="checkmark-circle" size={20} color={colors.accent} /> : null}
       {trailing ? <Text style={styles.rowTrailing}>{trailing}</Text> : null}
       {chevron && !selected ? <Text style={styles.chevron}>›</Text> : null}
     </Pressable>
@@ -65,5 +66,4 @@ const styles = StyleSheet.create({
   rowSubtitle: { color: colors.textDim, fontSize: 12, marginTop: 2 },
   rowTrailing: { color: colors.textDim, fontSize: 12 },
   chevron: { color: colors.textDim, fontSize: 20 },
-  check: { color: colors.accent, fontSize: 16, fontWeight: '700' },
 });

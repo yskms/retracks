@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { colors } from '../theme';
 import { Artwork } from './Artwork';
@@ -32,7 +33,7 @@ export function Tile({
         <Artwork uri={artworkUri} size={size} radius={8} />
         {selected ? (
           <View style={[styles.selectedOverlay, { width: size, height: size }]}>
-            <Text style={styles.check}>✓</Text>
+            <Ionicons name="checkmark-circle" size={28} color="#1a1206" />
           </View>
         ) : null}
       </View>
@@ -59,5 +60,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  check: { color: '#1a1206', fontSize: 28, fontWeight: '700' },
 });

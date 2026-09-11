@@ -217,7 +217,8 @@ export default function LibraryScreen() {
               style={[styles.headerAction, styles.headerActionPrimary]}
               onPress={() => void playSelection(true)}
             >
-              <Text style={styles.headerActionPrimaryText}>{`⤮ ${t('common.shufflePlay')}`}</Text>
+              <Ionicons name="shuffle-outline" size={14} color="#1a1206" />
+              <Text style={styles.headerActionPrimaryText}>{t('common.shufflePlay')}</Text>
             </Pressable>
           </View>
         </View>
@@ -352,7 +353,7 @@ export default function LibraryScreen() {
             router.push('/player');
           }}
         >
-          <Text style={styles.fabGlyph}>⤮</Text>
+          <Ionicons name="shuffle-outline" size={18} color="#1a1206" />
           <Text style={styles.fabLabel}>
             {allProgress && allProgress.played > 1
               ? t('library.continueFrom', {
@@ -381,6 +382,9 @@ const styles = StyleSheet.create({
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
   headerActions: { flexDirection: 'row', gap: 8 },
   headerAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: colors.surfaceHigh,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -409,7 +413,6 @@ const styles = StyleSheet.create({
   rowSubtitle: { color: colors.textDim, fontSize: 12, marginTop: 2 },
   rowTrailing: { color: colors.textDim, fontSize: 12 },
   chevron: { color: colors.textDim, fontSize: 20 },
-  check: { color: colors.accent, fontSize: 16, fontWeight: '700' },
   fab: {
     position: 'absolute',
     right: 16,
@@ -422,6 +425,5 @@ const styles = StyleSheet.create({
     borderRadius: FAB_HEIGHT / 2,
     backgroundColor: colors.accent,
   },
-  fabGlyph: { color: '#1a1206', fontSize: 18, fontWeight: '700' },
   fabLabel: { color: '#1a1206', fontSize: 13, fontWeight: '700' },
 });
