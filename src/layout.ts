@@ -4,6 +4,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import type { ComponentProps } from 'react';
+import type { Ionicons } from '@expo/vector-icons';
 
 import { readJson, StorageKeys, writeJson } from './storage';
 
@@ -12,14 +14,13 @@ export type Layout = 'grid3' | 'grid4' | 'list';
 /** 切り替えの順番。タップするたびにこの順で巡る。 */
 export const LAYOUT_ORDER: Layout[] = ['grid3', 'grid4', 'list'];
 
-/**
- * 現在の形式を表すアイコン。
- * ⊞ は粗い格子で3列、▦ は細かい格子で4列、☰ は一覧を表す。
- */
-export const LAYOUT_ICON: Record<Layout, string> = {
-  grid3: '⊞',
-  grid4: '▦',
-  list: '☰',
+type IoniconName = ComponentProps<typeof Ionicons>['name'];
+
+/** 現在の形式を表すアイコン（Ionicons）。3列・4列・一覧を表す。 */
+export const LAYOUT_ICON: Record<Layout, IoniconName> = {
+  grid3: 'grid-outline',
+  grid4: 'apps-outline',
+  list: 'list-outline',
 };
 
 /** 表示形式を持つ場所。 */

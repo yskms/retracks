@@ -16,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import PagerView from 'react-native-pager-view';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -203,7 +204,7 @@ export default function LibraryScreen() {
       {inSelection ? (
         <View style={styles.header}>
           <Pressable hitSlop={10} onPress={clear}>
-            <Text style={styles.headerIcon}>✕</Text>
+            <Ionicons name="close" size={24} color={colors.text} />
           </Pressable>
           <Text style={styles.headerTitle}>
             {t('library.selectedCount', { count: selection?.ids.length ?? 0 })}
@@ -226,9 +227,11 @@ export default function LibraryScreen() {
           <View style={styles.headerRight}>
             {layoutKeyForActiveTab && (
               <Pressable hitSlop={10} onPress={() => cycle(layoutKeyForActiveTab)}>
-                <Text style={styles.headerIcon}>
-                  {LAYOUT_ICON[layouts[layoutKeyForActiveTab]]}
-                </Text>
+                <Ionicons
+                  name={LAYOUT_ICON[layouts[layoutKeyForActiveTab]]}
+                  size={20}
+                  color={colors.text}
+                />
               </Pressable>
             )}
             <Pressable
@@ -236,14 +239,14 @@ export default function LibraryScreen() {
               onPress={() => router.push('/search')}
               accessibilityLabel={t('search.openA11y')}
             >
-              <Text style={styles.headerIcon}>⌕</Text>
+              <Ionicons name="search-outline" size={20} color={colors.text} />
             </Pressable>
             <Pressable
               hitSlop={10}
               onPress={() => router.push('/settings')}
               accessibilityLabel={t('settings.openA11y')}
             >
-              <Text style={styles.headerIcon}>⚙</Text>
+              <Ionicons name="settings-outline" size={20} color={colors.text} />
             </Pressable>
           </View>
         </View>
@@ -376,7 +379,6 @@ const styles = StyleSheet.create({
   brand: { color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  headerIcon: { color: colors.text, fontSize: 18 },
   headerActions: { flexDirection: 'row', gap: 8 },
   headerAction: {
     backgroundColor: colors.surfaceHigh,
