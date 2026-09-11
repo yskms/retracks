@@ -3,7 +3,7 @@
  * 画面ごと・タブごとに別々の形式を持ち、選んだ状態を保存する。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import type { Ionicons } from '@expo/vector-icons';
 
@@ -67,20 +67,51 @@ function normalize(value: unknown): Layouts {
 
 export function useLayouts() {
   const [layouts, setLayouts] = useState<Layouts>(DEFAULTS);
+  const [ready, setReady] = useState(false);
+  // cycle() から見るための ref。読み込み前に書き込みが走ると、prev が
+  // まだ DEFAULTS のままなので、保存済みの値を既定値で丸ごと上書きして
+  // しまう（→ SettingsProvider の readyRef と同じ理由）。
+  const readyRef = useRef(false);
+  // 読み込みが届いた最初のコミットだけ、保存 effect をスキップするための
+  // ref。→ 下の保存 effect のコメント参照。
+  const hasHydratedRef = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
-      setLayouts(normalize(await readJson(StorageKeys.layout)));
+      const saved = normalize(await readJson(StorageKeys.layout));
+      if (cancelled) return;
+      setLayouts(saved);
+      readyRef.current = true;
+      setReady(true);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
+  // 保存は setState の更新関数の外、コミット後の副作用としてだけ行う
+  // （SettingsProvider と同じ理由・同じ形。→ src/settings.tsx のコメント）。
+  // 以前は cycle() の中の setLayouts((prev) => { ...; writeJson(...); return next })
+  // という形で、更新関数（React が「純粋」を前提にする関数）の内側に
+  // 書き込みを置いていた。
+  useEffect(() => {
+    if (!ready) return;
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      return;
+    }
+    writeJson(StorageKeys.layout, layouts).catch((e) => {
+      console.warn('Failed to persist layouts', e);
+    });
+  }, [layouts, ready]);
+
   const cycle = useCallback((key: LayoutKey) => {
+    if (!readyRef.current) return;
     setLayouts((prev) => {
       const index = LAYOUT_ORDER.indexOf(prev[key]);
       const next = LAYOUT_ORDER[(index + 1) % LAYOUT_ORDER.length];
-      const updated = { ...prev, [key]: next };
-      void writeJson(StorageKeys.layout, updated);
-      return updated;
+      return { ...prev, [key]: next };
     });
   }, []);
 

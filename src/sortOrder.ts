@@ -15,7 +15,7 @@
  * 一覧（ディスク/トラック番号順が前提）も対象外（→ 要件定義書 10.4）。
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { compareByTrackOrder, type Album, type Track } from './library';
 import { sortKeyOf, type ArticleOptions } from './sorting';
@@ -62,27 +62,53 @@ function normalize(value: unknown): SortOrders {
 
 export function useSortOrders() {
   const [sortOrders, setSortOrders] = useState<SortOrders>(DEFAULTS);
+  const [ready, setReady] = useState(false);
+  // setSongSort/setAlbumSort から見るための ref。読み込み前に書き込みが
+  // 走ると、prev がまだ DEFAULTS のままなので、保存済みの値を既定値で
+  // 丸ごと上書きしてしまう（→ SettingsProvider の readyRef と同じ理由）。
+  const readyRef = useRef(false);
+  // 読み込みが届いた最初のコミットだけ、保存 effect をスキップするための
+  // ref。→ 下の保存 effect のコメント参照。
+  const hasHydratedRef = useRef(false);
 
   useEffect(() => {
+    let cancelled = false;
     void (async () => {
-      setSortOrders(normalize(await readJson(StorageKeys.sortOrder)));
+      const saved = normalize(await readJson(StorageKeys.sortOrder));
+      if (cancelled) return;
+      setSortOrders(saved);
+      readyRef.current = true;
+      setReady(true);
     })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const setSongSort = useCallback((field: SongSortField, direction: SortDirection) => {
-    setSortOrders((prev) => {
-      const updated: SortOrders = { ...prev, songs: { field, direction } };
-      void writeJson(StorageKeys.sortOrder, updated);
-      return updated;
+  // 保存は setState の更新関数の外、コミット後の副作用としてだけ行う
+  // （SettingsProvider と同じ理由・同じ形。→ src/settings.tsx のコメント）。
+  // 以前は setSongSort/setAlbumSort の中の
+  // setSortOrders((prev) => { ...; writeJson(...); return next }) という形で、
+  // 更新関数（React が「純粋」を前提にする関数）の内側に書き込みを置いていた。
+  useEffect(() => {
+    if (!ready) return;
+    if (!hasHydratedRef.current) {
+      hasHydratedRef.current = true;
+      return;
+    }
+    writeJson(StorageKeys.sortOrder, sortOrders).catch((e) => {
+      console.warn('Failed to persist sort orders', e);
     });
+  }, [sortOrders, ready]);
+
+  const setSongSort = useCallback((field: SongSortField, direction: SortDirection) => {
+    if (!readyRef.current) return;
+    setSortOrders((prev) => ({ ...prev, songs: { field, direction } }));
   }, []);
 
   const setAlbumSort = useCallback((field: AlbumSortField, direction: SortDirection) => {
-    setSortOrders((prev) => {
-      const updated: SortOrders = { ...prev, albums: { field, direction } };
-      void writeJson(StorageKeys.sortOrder, updated);
-      return updated;
-    });
+    if (!readyRef.current) return;
+    setSortOrders((prev) => ({ ...prev, albums: { field, direction } }));
   }, []);
 
   return { sortOrders, setSongSort, setAlbumSort };

@@ -11,12 +11,14 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 
 import i18next, { detectLanguage, SUPPORTED_LANGUAGES, type SupportedLanguage } from './i18n';
+import type { ArticleOptions } from './sorting';
 import { readJson, StorageKeys, writeJson } from './storage';
 import { TAB_IDS, type TabId } from './tabs';
 
@@ -84,6 +86,12 @@ const THRESHOLD_STEP_SEC = 5;
 
 type SettingsValue = Settings & {
   ready: boolean;
+  /**
+   * ignoreLeadingThe/ignoreLeadingAAn をまとめた形。sortByField() 等の
+   * 呼び出し側（PlaybackProvider・LibraryScreen）でそれぞれ同じ内容の
+   * useMemo を作らずに済むよう、ここで1つだけメモ化して公開する。
+   */
+  articleOptions: ArticleOptions;
   setLanguage: (language: LanguagePreference) => void;
   setExcludeShortTracks: (value: boolean) => void;
   setShortTrackThresholdSec: (value: number) => void;
@@ -321,9 +329,18 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     [patch]
   );
 
+  const articleOptions = useMemo(
+    () => ({
+      ignoreLeadingThe: settings.ignoreLeadingThe,
+      ignoreLeadingAAn: settings.ignoreLeadingAAn,
+    }),
+    [settings.ignoreLeadingThe, settings.ignoreLeadingAAn]
+  );
+
   const value: SettingsValue = {
     ...settings,
     ready,
+    articleOptions,
     setLanguage,
     setExcludeShortTracks,
     setShortTrackThresholdSec,

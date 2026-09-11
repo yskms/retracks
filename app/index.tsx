@@ -66,16 +66,7 @@ export default function LibraryScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const {
-    tabs: tabSettings,
-    ready: settingsReady,
-    ignoreLeadingThe,
-    ignoreLeadingAAn,
-  } = useSettings();
-  const articleOptions = useMemo(
-    () => ({ ignoreLeadingThe, ignoreLeadingAAn }),
-    [ignoreLeadingThe, ignoreLeadingAAn]
-  );
+  const { tabs: tabSettings, ready: settingsReady, articleOptions } = useSettings();
   // 非表示のタブはページャに載せない。順序はそのまま設定の並びを使う。
   const tabs: { id: TabId; label: string }[] = useMemo(
     () =>
