@@ -265,9 +265,22 @@ export default function PlayerScreen() {
               <Text style={styles.title} numberOfLines={2}>
                 {currentTrack?.title ?? t('player.noTrack')}
               </Text>
-              <Text style={styles.artist} numberOfLines={1}>
-                {currentTrack?.artist ?? ''}
-              </Text>
+              <Pressable
+                disabled={!currentTrack?.artist}
+                onPress={() =>
+                  router.push({
+                    pathname: '/artist/[id]',
+                    params: {
+                      id: currentTrack?.artistId || currentTrack?.artist || '',
+                      name: currentTrack?.artist ?? '',
+                    },
+                  })
+                }
+              >
+                <Text style={styles.artist} numberOfLines={1}>
+                  {currentTrack?.artist ?? ''}
+                </Text>
+              </Pressable>
               {currentTrack?.album ? (
                 <Text style={styles.album} numberOfLines={1}>
                   {currentTrack.album}
