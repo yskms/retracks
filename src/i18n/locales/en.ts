@@ -39,7 +39,6 @@ export default {
     oneShotHintActive: 'Reverts from the next track',
     oneShotHint: 'Full track, start to finish. RUSH stays on',
     segmentCardTitle: 'Segment',
-    previewText: 'Effective segment for this track: {{start}}–{{end}}s\nfadeIn {{fadeIn}}s / fadeOut {{fade}}s',
     segmentNote: 'Changes to start and length apply from the next track',
     queueTitle_one: 'Queue · {{count}} track',
     queueTitle_other: 'Queue · {{count}} tracks',

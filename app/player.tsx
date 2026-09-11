@@ -22,7 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { usePlayback, usePlaybackStatus } from '../src/playback';
 import { RepeatMode } from '../modules/retracks-player/src';
 import type { Track } from '../src/library';
-import { resolveSegment, type SegmentSetting } from '../src/rush';
+import type { SegmentSetting } from '../src/rush';
 import { colors, formatDuration } from '../src/theme';
 import { Artwork } from '../src/components/Artwork';
 
@@ -118,6 +118,10 @@ export default function PlayerScreen() {
   const listRef = useRef<FlatList<Track>>(null);
   const { width } = useWindowDimensions();
 
+  // 区間設定は折りたたみ可能にする。RUSHのON/OFFと違って常に見る必要は
+  // 無い微調整用のスライダーなので、開いた状態を保存はせず毎回閉じておく。
+  const [segmentExpanded, setSegmentExpanded] = useState(false);
+
   // scrollToIndex は getItemLayout の offset をそのまま使う。ヘッダー
   // （プレイヤーUI）の高さを足しておかないと、まだ描画されていない行では
   // ヘッダー分まるごと手前で止まる。実測して足す。
@@ -167,7 +171,6 @@ export default function PlayerScreen() {
   // いる」ように見えても消さないこと。
   const positionMs = seeking ?? (status ? Math.floor(status.positionMs / 1000) * 1000 : 0);
   const durationMs = status?.durationMs ?? 0;
-  const preview = durationMs > 0 ? resolveSegment(durationMs / 1000, setting) : null;
 
   const handleSeekComplete = useCallback(
     (value: number) => {
@@ -378,65 +381,70 @@ export default function PlayerScreen() {
 
             {rushOn && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>{t('player.segmentCardTitle')}</Text>
-                {SEGMENT_ROWS.map((row) => (
-                  <View key={row.key} style={styles.segmentRow}>
-                    <View style={styles.segmentHead}>
-                      <Text style={styles.segmentLabel}>{t(row.labelKey)}</Text>
-                      <View style={styles.steppers}>
-                        <Pressable
-                          style={styles.stepper}
-                          hitSlop={6}
-                          onPress={() => bump(row.key, -row.step)}
-                        >
-                          <Text style={styles.stepperText}>−</Text>
-                        </Pressable>
-                        <Text style={styles.segmentValue}>
-                          {(dragging[row.key] ?? setting[row.key]).toFixed(1)}s
-                        </Text>
-                        <Pressable
-                          style={styles.stepper}
-                          hitSlop={6}
-                          onPress={() => bump(row.key, row.step)}
-                        >
-                          <Text style={styles.stepperText}>＋</Text>
-                        </Pressable>
+                <Pressable
+                  style={styles.cardTitleRow}
+                  hitSlop={8}
+                  onPress={() => setSegmentExpanded((prev) => !prev)}
+                >
+                  <Text style={styles.cardTitle}>{t('player.segmentCardTitle')}</Text>
+                  <Ionicons
+                    name={segmentExpanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+                    size={18}
+                    color={colors.accent}
+                  />
+                </Pressable>
+                {segmentExpanded && (
+                  <>
+                    {SEGMENT_ROWS.map((row) => (
+                      <View key={row.key} style={styles.segmentRow}>
+                        <View style={styles.segmentHead}>
+                          <Text style={styles.segmentLabel}>{t(row.labelKey)}</Text>
+                          <View style={styles.steppers}>
+                            <Pressable
+                              style={styles.stepper}
+                              hitSlop={6}
+                              onPress={() => bump(row.key, -row.step)}
+                            >
+                              <Text style={styles.stepperText}>−</Text>
+                            </Pressable>
+                            <Text style={styles.segmentValue}>
+                              {(dragging[row.key] ?? setting[row.key]).toFixed(1)}s
+                            </Text>
+                            <Pressable
+                              style={styles.stepper}
+                              hitSlop={6}
+                              onPress={() => bump(row.key, row.step)}
+                            >
+                              <Text style={styles.stepperText}>＋</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                        <Slider
+                          style={styles.segmentSlider}
+                          minimumValue={row.min}
+                          maximumValue={row.max}
+                          step={row.step}
+                          value={setting[row.key]}
+                          minimumTrackTintColor={colors.accent}
+                          maximumTrackTintColor={colors.border}
+                          thumbTintColor={colors.accent}
+                          onValueChange={(value) =>
+                            setDragging((prev) => ({ ...prev, [row.key]: value }))
+                          }
+                          onSlidingComplete={(value) => {
+                            setSetting((prev) => ({ ...prev, [row.key]: value }));
+                            setDragging((prev) => {
+                              const rest = { ...prev };
+                              delete rest[row.key];
+                              return rest;
+                            });
+                          }}
+                        />
                       </View>
-                    </View>
-                    <Slider
-                      style={styles.segmentSlider}
-                      minimumValue={row.min}
-                      maximumValue={row.max}
-                      step={row.step}
-                      value={setting[row.key]}
-                      minimumTrackTintColor={colors.accent}
-                      maximumTrackTintColor={colors.border}
-                      thumbTintColor={colors.accent}
-                      onValueChange={(value) =>
-                        setDragging((prev) => ({ ...prev, [row.key]: value }))
-                      }
-                      onSlidingComplete={(value) => {
-                        setSetting((prev) => ({ ...prev, [row.key]: value }));
-                        setDragging((prev) => {
-                          const rest = { ...prev };
-                          delete rest[row.key];
-                          return rest;
-                        });
-                      }}
-                    />
-                  </View>
-                ))}
-                {preview && (
-                  <Text style={styles.previewText}>
-                    {t('player.previewText', {
-                      start: preview.start.toFixed(1),
-                      end: preview.end.toFixed(1),
-                      fadeIn: preview.fadeIn.toFixed(1),
-                      fade: preview.fade.toFixed(1),
-                    })}
-                  </Text>
+                    ))}
+                    <Text style={styles.note}>{t('player.segmentNote')}</Text>
+                  </>
                 )}
-                <Text style={styles.note}>{t('player.segmentNote')}</Text>
               </View>
             )}
 
@@ -626,13 +634,13 @@ const styles = StyleSheet.create({
   rushLabelOn: { color: colors.text },
   rushHint: { color: colors.textDim, fontSize: 11 },
   card: { backgroundColor: colors.surface, borderRadius: 12, padding: 14, gap: 12 },
+  cardTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   cardTitle: { color: colors.accent, fontSize: 12, fontWeight: '700' },
   segmentRow: { gap: 2 },
   segmentHead: { flexDirection: 'row', justifyContent: 'space-between' },
   segmentLabel: { color: colors.textDim, fontSize: 12 },
   segmentValue: { color: colors.text, fontSize: 12, width: 44, textAlign: 'center' },
   segmentSlider: { width: '100%', height: 32 },
-  previewText: { color: colors.textDim, fontSize: 11, lineHeight: 17 },
   note: { color: colors.textDim, fontSize: 10 },
   queueHeader: {
     flexDirection: 'row',

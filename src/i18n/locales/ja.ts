@@ -47,7 +47,6 @@ export default {
     oneShotHintActive: '次の曲から元に戻ります',
     oneShotHint: '頭から最後まで。RUSH はそのまま',
     segmentCardTitle: '区間設定',
-    previewText: 'この曲での実効区間 {{start}}〜{{end}}s\nfadeIn {{fadeIn}}s / fadeOut {{fade}}s',
     segmentNote: '開始位置と再生時間の変更は次の曲から反映されます',
     queueTitle_one: '再生キュー {{count}}曲',
     queueTitle_other: '再生キュー {{count}}曲',
