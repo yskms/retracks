@@ -54,8 +54,17 @@ class RetracksWidgetProvider : AppWidgetProvider() {
         ComponentName(context, RetracksWidgetProvider::class.java)
       )
       if (ids.isEmpty()) return
+      // ジャケットの読み込みはウィジェットの個数に関わらず一度だけ。
+      // ID ごとにデコードし直すと、非表示の孤児IDの分まで無駄にデコードが
+      // 走り、曲の切り替わりごとにネイティブメモリを消費する
+      // （2026-09-12、実機のソークテストで確認：ID数に比例した増加、
+      // `dumpsys meminfo --unreachable` で到達不能なBitmapを確認）
+      val artwork = loadArtwork(
+        context,
+        PlaybackService.instance?.currentPlayerSnapshot()?.artworkUri
+      )
       for (id in ids) {
-        manager.updateAppWidget(id, buildViews(context))
+        manager.updateAppWidget(id, buildViews(context, artwork))
       }
     }
 
@@ -63,14 +72,7 @@ class RetracksWidgetProvider : AppWidgetProvider() {
      * 大きさに応じてレイアウトを出し分ける。
      * 小さいときは横並び、大きいときはジャケットを上に置いた縦並びにする。
      */
-    private fun buildViews(context: Context): RemoteViews {
-      // ジャケットの読み込みは一度だけ。レイアウトごとに読み直すと
-      // 同じ絵を二度デコードすることになり、転送量も無駄に増える。
-      val artwork = loadArtwork(
-        context,
-        PlaybackService.instance?.currentPlayerSnapshot()?.artworkUri
-      )
-
+    private fun buildViews(context: Context, artwork: Bitmap?): RemoteViews {
       val compact = fill(
         context,
         RemoteViews(context.packageName, R.layout.retracks_widget),
@@ -278,8 +280,12 @@ class RetracksWidgetProvider : AppWidgetProvider() {
     appWidgetManager: AppWidgetManager,
     appWidgetIds: IntArray
   ) {
+    val artwork = loadArtwork(
+      context,
+      PlaybackService.instance?.currentPlayerSnapshot()?.artworkUri
+    )
     for (id in appWidgetIds) {
-      appWidgetManager.updateAppWidget(id, buildViews(context))
+      appWidgetManager.updateAppWidget(id, buildViews(context, artwork))
     }
   }
 
