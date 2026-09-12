@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -24,6 +24,7 @@ const LANGUAGE_LABEL_KEY = {
 } as const satisfies Record<LanguagePreference, string>;
 
 const LANGUAGE_OPTIONS: LanguagePreference[] = ['auto', ...SUPPORTED_LANGUAGES];
+const PRIVACY_POLICY_URL = 'https://yskms.github.io/retracks/privacy-policy.html';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -290,6 +291,21 @@ export default function SettingsScreen() {
               />
             </View>
           ))}
+        </View>
+
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t('settings.aboutSectionTitle')}</Text>
+          <Pressable
+            style={styles.linkRow}
+            onPress={() => void Linking.openURL(PRIVACY_POLICY_URL)}
+            accessibilityRole="link"
+          >
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>{t('settings.privacyPolicy')}</Text>
+              <Text style={styles.rowHint}>{t('settings.privacyPolicyHint')}</Text>
+            </View>
+            <Ionicons name="open-outline" size={18} color={colors.textDim} />
+          </Pressable>
         </View>
 
         <View style={styles.card}>

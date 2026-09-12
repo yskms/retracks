@@ -33,11 +33,11 @@ reached yet, so they surface without waiting for a full cycle.
 
 ## Status
 
-**In development. Not released yet.**
+**Preparing the Android 1.0.0 release candidate.**
 
-The playback engine and the data layer work; the screens are what remain.
 Design decisions and the reasoning behind them live in the
 [requirements document](docs/requirements.md) (Japanese).
+See the [privacy policy](docs/privacy-policy.md) for privacy details.
 
 ## Technical notes
 
