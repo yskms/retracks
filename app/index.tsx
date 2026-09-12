@@ -105,6 +105,7 @@ export default function LibraryScreen() {
   );
   const {
     tracks,
+    libraryLoaded,
     artists,
     albums,
     playFrom,
@@ -419,6 +420,7 @@ export default function LibraryScreen() {
             {tab.id === 'songs' && (
               <SongsPage
                 tracks={sortedTracks}
+                loaded={libraryLoaded}
                 currentTrack={currentTrack}
                 inSelection={inSelection}
                 isSelected={isSelected}
@@ -430,6 +432,7 @@ export default function LibraryScreen() {
             {tab.id === 'artists' && (
               <ArtistsPage
                 artists={artists}
+                loaded={libraryLoaded}
                 layout={layouts.artists}
                 albumCounts={albumCounts}
                 artistArtwork={artistArtwork}
@@ -443,6 +446,7 @@ export default function LibraryScreen() {
             {tab.id === 'albums' && (
               <AlbumsPage
                 albums={sortedAlbums}
+                loaded={libraryLoaded}
                 layout={layouts.albums}
                 inSelection={inSelection}
                 isSelected={isSelected}

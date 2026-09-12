@@ -19,6 +19,7 @@ export default {
     continueFrom: 'Shuffle all · {{played}}/{{total}}',
     shuffleAll: 'Shuffle all',
     loading: 'Loading library',
+    empty: 'No music found on this device',
     sortA11y: 'Sort',
     sortTitle: 'Sort by',
     sortDirectionAsc: 'Ascending',

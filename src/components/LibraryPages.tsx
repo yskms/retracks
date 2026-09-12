@@ -52,6 +52,7 @@ type SelectionHelpers<K extends string> = {
 
 export function SongsPage({
   tracks,
+  loaded,
   currentTrack,
   inSelection,
   isSelected,
@@ -60,6 +61,7 @@ export function SongsPage({
   refreshControl,
 }: SelectionHelpers<'songs'> & {
   tracks: Track[];
+  loaded: boolean;
   currentTrack: { id: string } | null;
   playFrom: (tracks: Track[], index: number) => Promise<void>;
   refreshControl: ReactElement<RefreshControlProps>;
@@ -67,7 +69,7 @@ export function SongsPage({
   return (
     <View style={styles.page}>
       {tracks.length === 0 ? (
-        <Loading />
+        loaded ? <Empty /> : <Loading />
       ) : (
         <FlatList
           data={tracks}
@@ -109,6 +111,7 @@ export function SongsPage({
 
 export function ArtistsPage({
   artists,
+  loaded,
   layout,
   albumCounts,
   artistArtwork,
@@ -119,6 +122,7 @@ export function ArtistsPage({
   refreshControl,
 }: SelectionHelpers<'artists'> & {
   artists: Artist[];
+  loaded: boolean;
   layout: Layout;
   albumCounts: Map<string, number>;
   artistArtwork: Map<string, string>;
@@ -130,7 +134,7 @@ export function ArtistsPage({
 
   return (
     <View style={styles.page}>
-      <FlatList
+      {artists.length === 0 && loaded ? <Empty /> : <FlatList
         // numColumns は途中で変えられないので、key を変えて作り直す
         key={layout}
         data={artists}
@@ -177,13 +181,14 @@ export function ArtistsPage({
             />
           )
         }
-      />
+      />}
     </View>
   );
 }
 
 export function AlbumsPage({
   albums,
+  loaded,
   layout,
   inSelection,
   isSelected,
@@ -192,6 +197,7 @@ export function AlbumsPage({
   refreshControl,
 }: SelectionHelpers<'albums'> & {
   albums: Album[];
+  loaded: boolean;
   layout: Layout;
   tileSizeFor: (layout: Layout) => number;
   refreshControl: ReactElement<RefreshControlProps>;
@@ -201,7 +207,7 @@ export function AlbumsPage({
 
   return (
     <View style={styles.page}>
-      <FlatList
+      {albums.length === 0 && loaded ? <Empty /> : <FlatList
         key={layout}
         data={albums}
         keyExtractor={(item) => item.id}
@@ -245,7 +251,7 @@ export function AlbumsPage({
             />
           );
         }}
-      />
+      />}
     </View>
   );
 }
@@ -270,6 +276,15 @@ function Loading() {
   );
 }
 
+function Empty() {
+  const { t } = useTranslation();
+  return (
+    <View style={styles.loading}>
+      <Text style={styles.emptyText}>{t('library.empty')}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   page: { flex: 1 },
   listContent: { paddingBottom: FAB_CLEARANCE },
@@ -277,4 +292,5 @@ const styles = StyleSheet.create({
   gridRow: { gap: GRID_GAP },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: colors.textDim, fontSize: 13 },
+  emptyText: { color: colors.textDim, fontSize: 14 },
 });

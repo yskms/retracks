@@ -102,7 +102,7 @@ export default function ArtistScreen() {
     [tracks, albumYears]
   );
 
-  // 曲一覧の並べ替え（要件 10.4）。既定はアルバム順（→ useSortOrders() の
+  // 曲一覧の並べ替え（要件 10.4）。既定は発売年降順（→ useSortOrders() の
   // artistTracks のコメント）。tracks（アルバム導出・複数選択の元）は
   // タイトル順のまま触らず、表示・「順番に再生」用にこちらを別に持つ。
   const sortedTracks = useMemo(

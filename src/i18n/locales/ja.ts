@@ -27,6 +27,7 @@ export default {
     continueFrom: '全曲シャッフル再開 {{played}}/{{total}}',
     shuffleAll: '全曲シャッフル',
     loading: 'ライブラリを読み込んでいます',
+    empty: '端末内に音楽がありません',
     sortA11y: '並べ替え',
     sortTitle: '並べ替え',
     sortDirectionAsc: '昇順',

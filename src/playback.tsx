@@ -52,6 +52,8 @@ import { clearAll, readJson, StorageKeys, writeJson } from './storage';
 
 type PlaybackValue = {
   ready: boolean;
+  /** 初回のライブラリ走査（0曲という結果を含む）が完了したか。 */
+  libraryLoaded: boolean;
   /**
    * メディア権限が拒否された状態。null なら拒否されていない（許可済み、
    * またはまだ確認していない）。canAskAgain が false のときは OS のダイアログを
@@ -189,6 +191,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     useSettings();
 
   const [ready, setReady] = useState(false);
+  const [libraryLoaded, setLibraryLoaded] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState<{ canAskAgain: boolean } | null>(
     null
   );
@@ -293,6 +296,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
     const result = await loadLibrary();
     applyTracks(result.tracks);
+    setLibraryLoaded(true);
 
     // 再生していなくても FAB に「続きから」を出せるよう、保存済みの1巡を読む
     const savedAll = await loadShuffle(ALL_KEY);
@@ -811,6 +815,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const value: PlaybackValue = useMemo(
     () => ({
       ready,
+      libraryLoaded,
       permissionDenied,
       retryPermission,
       tracks,
@@ -846,6 +851,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     }),
     [
       ready,
+      libraryLoaded,
       permissionDenied,
       retryPermission,
       tracks,

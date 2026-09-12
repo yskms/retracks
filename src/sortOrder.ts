@@ -43,10 +43,8 @@ export type SortOrders = {
   songs: { field: SongSortField; direction: SortDirection };
   albums: { field: AlbumSortField; direction: SortDirection };
   /**
-   * アーティスト詳細の曲一覧。既定をアルバム順にしている（曲タブの既定は
-   * タイトル順のまま）ため、曲タブとは別のキーで持つ。アーティストページは
-   * 本来ディスコグラフィで、1枚のアルバムの曲がタイトル順でバラバラに並ぶより
-   * アルバム→ディスク→トラック番号の方が読みやすい（2026-09-11 決定）。
+   * アーティスト詳細の曲一覧。既定は発売年降順（同一年内はアルバム名→
+   * ディスク→トラック番号順）。曲タブとは既定が異なるため別のキーで持つ。
    */
   artistTracks: { field: ArtistTrackSortField; direction: SortDirection };
 };
@@ -58,7 +56,7 @@ const ARTIST_TRACK_FIELDS: ArtistTrackSortField[] = ['title', 'album', 'duration
 const DEFAULTS: SortOrders = {
   songs: { field: 'title', direction: 'asc' },
   albums: { field: 'title', direction: 'asc' },
-  artistTracks: { field: 'album', direction: 'asc' },
+  artistTracks: { field: 'year', direction: 'desc' },
 };
 
 function normalize(value: unknown): SortOrders {
@@ -67,25 +65,26 @@ function normalize(value: unknown): SortOrders {
     albums: Partial<SortOrders['albums']>;
     artistTracks: Partial<SortOrders['artistTracks']>;
   }>;
-  const direction = (d: unknown): SortDirection => (d === 'desc' ? 'desc' : 'asc');
+  const direction = (d: unknown, fallback: SortDirection): SortDirection =>
+    d === 'asc' || d === 'desc' ? d : fallback;
   return {
     songs: {
       field: SONG_FIELDS.includes(saved.songs?.field as SongSortField)
         ? (saved.songs!.field as SongSortField)
         : DEFAULTS.songs.field,
-      direction: direction(saved.songs?.direction),
+      direction: direction(saved.songs?.direction, DEFAULTS.songs.direction),
     },
     albums: {
       field: ALBUM_FIELDS.includes(saved.albums?.field as AlbumSortField)
         ? (saved.albums!.field as AlbumSortField)
         : DEFAULTS.albums.field,
-      direction: direction(saved.albums?.direction),
+      direction: direction(saved.albums?.direction, DEFAULTS.albums.direction),
     },
     artistTracks: {
       field: ARTIST_TRACK_FIELDS.includes(saved.artistTracks?.field as ArtistTrackSortField)
         ? (saved.artistTracks!.field as ArtistTrackSortField)
         : DEFAULTS.artistTracks.field,
-      direction: direction(saved.artistTracks?.direction),
+      direction: direction(saved.artistTracks?.direction, DEFAULTS.artistTracks.direction),
     },
   };
 }
