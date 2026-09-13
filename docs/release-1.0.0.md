@@ -26,3 +26,10 @@
 - 必要権限: `READ_MEDIA_AUDIO`、`POST_NOTIFICATIONS`、`FOREGROUND_SERVICE`、`FOREGROUND_SERVICE_MEDIA_PLAYBACK`
 - Pixel 11 / Android 17: 署名済みrelease APKのインストール、Metroなしの起動、ライブラリ走査、再生、設定画面のプライバシーポリシー導線を確認
 - TypeScript・i18nキー整合・Gradle lintVital: 合格
+
+## Google Play
+
+- 内部テスト版をPlayストアからPixel 11へダウンロードできることを確認
+- GitHub Pagesのプライバシーポリシーを公開し、HTTP 200応答を確認
+- 製品版 `1 (1.0.0)` を2026-09-13にGoogle Playの審査へ提出
+- 管理対象の公開はオフのため、審査承認後に自動公開される

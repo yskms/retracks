@@ -52,3 +52,6 @@ modules/*/android/build/
 
 # Zenn等への投稿下書き。リポジトリでは公開しない私的メモ置き場
 docs/private/
+
+# Google Play用の実機スクリーンショット。楽曲名やアートワークを含むためローカル保管
+docs/google-play-assets/screenshots/
