@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Linking, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -204,20 +204,22 @@ export default function SettingsScreen() {
               </Pressable>
             </View>
           )}
-          <Pressable
-            style={styles.linkRow}
-            onPress={() => router.push('/excluded-folders')}
-          >
-            <View style={styles.rowText}>
-              <Text style={styles.rowLabel}>{t('settings.excludedFoldersTitle')}</Text>
-              <Text style={styles.rowHint}>
-                {excludedFolderIds.length > 0
-                  ? t('settings.excludedFoldersCount', { count: excludedFolderIds.length })
-                  : t('settings.excludedFoldersHint')}
-              </Text>
-            </View>
-            <Text style={styles.chevron}>›</Text>
-          </Pressable>
+          {Platform.OS === 'android' && (
+            <Pressable
+              style={styles.linkRow}
+              onPress={() => router.push('/excluded-folders')}
+            >
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>{t('settings.excludedFoldersTitle')}</Text>
+                <Text style={styles.rowHint}>
+                  {excludedFolderIds.length > 0
+                    ? t('settings.excludedFoldersCount', { count: excludedFolderIds.length })
+                    : t('settings.excludedFoldersHint')}
+                </Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.card}>
@@ -308,12 +310,14 @@ export default function SettingsScreen() {
           </Pressable>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t('settings.developerSectionTitle')}</Text>
-          <Pressable style={styles.button} onPress={() => router.push('/debug')}>
-            <Text style={styles.buttonText}>{t('settings.openDebug')}</Text>
-          </Pressable>
-        </View>
+        {__DEV__ && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>{t('settings.developerSectionTitle')}</Text>
+            <Pressable style={styles.button} onPress={() => router.push('/debug')}>
+              <Text style={styles.buttonText}>{t('settings.openDebug')}</Text>
+            </Pressable>
+          </View>
+        )}
       </ScrollView>
     </View>
   );

@@ -6,6 +6,7 @@
  */
 
 import * as MusicLibrary from 'expo-music-library';
+import { Platform } from 'react-native';
 
 import { RetracksPlayer, type TrackFolders } from '../modules/retracks-player/src';
 
@@ -88,7 +89,11 @@ function artworkUriOf(asset: {
   artworkUri?: string | null;
   artwork?: string | null;
 }): string | null {
-  if (asset.albumId) return `${ALBUM_ART_URI}/${asset.albumId}`;
+  // content:// は Android の MediaStore 専用。iOS の music-artwork:// URIを
+  // 上書きするとジャケットが一切表示できなくなる。
+  if (Platform.OS === 'android' && asset.albumId) {
+    return `${ALBUM_ART_URI}/${asset.albumId}`;
+  }
   return asset.artworkUri || asset.artwork || null;
 }
 
@@ -165,6 +170,9 @@ export async function scanLibrary(): Promise<Track[]> {
       first: PAGE_SIZE,
       after,
       artwork: ARTWORK_MODE,
+      // iOSではクラウドのみ・DRM付き・URLなしの曲もメタデータ検索には現れる。
+      // AVPlayerで実際に再生できる曲だけをライブラリへ入れる。
+      availability: Platform.OS === 'ios' ? 'avFoundationAccessible' : 'all',
     });
 
     assets.push(...page.assets);

@@ -56,7 +56,7 @@ GitHub Pagesを`main`ブランチの`/docs`から公開し、プライバシー�
 
 - パッケージ名: `com.yskms.retracks`
 - バージョン: `1.0.0`
-- versionCode: `1`
+- versionCode: `2`（開発者向け画面を製品ビルドから遮断した差し替え版）
 - AAB: `android/app/build/outputs/bundle/release/app-release.aab`
 - 署名: 自前アップロード鍵 `CN=RE:TR4CKS`（鍵とパスワードはリポジトリ外で保管）
 - まず内部テストへAABを登録し、Play配信版を実機インストールして起動・権限・走査・再生・通知を確認
@@ -78,7 +78,7 @@ GitHub Pagesを`main`ブランチの`/docs`から公開し、プライバシー�
 ## Google Play提出状況
 
 - 内部テスト: Playストアからのダウンロードを確認済み
-- 製品版: `1 (1.0.0)`
+- 製品版: `2 (1.0.0)` を審査提出済み（versionCode `1`から差し替え）
 - 配信地域: 176か国・地域およびその他の国
 - 管理対象の公開: オフ（審査承認後に自動公開）
 - 審査提出日: 2026-09-13

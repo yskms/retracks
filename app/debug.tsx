@@ -6,7 +6,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Localization from 'expo-localization';
 import i18next from 'i18next';
@@ -17,7 +17,14 @@ import { RetracksPlayer } from '../modules/retracks-player/src';
 import { colors } from '../src/theme';
 import { loadCrashLog, type CrashEntry } from '../src/crashLog';
 
-export default function DebugScreen() {
+export default function DebugRoute() {
+  // ファイルベースルーティングでは画面ファイルが存在するだけでURLから到達
+  // できる。製品ビルドでは開発用フックも実行せず、入り口で遮断する。
+  if (!__DEV__) return <Redirect href="/" />;
+  return <DebugScreen />;
+}
+
+function DebugScreen() {
   const { t } = useTranslation();
   const router = useRouter();
   const insets = useSafeAreaInsets();

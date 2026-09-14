@@ -1,5 +1,8 @@
 {
-  "platforms": ["android"],
+  "platforms": ["android", "ios"],
+  "ios": {
+    "modules": ["RetracksPlayerModule"]
+  },
   "android": {
     "modules": ["expo.modules.retracksplayer.RetracksPlayerModule"]
   }

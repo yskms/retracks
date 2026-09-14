@@ -31,6 +31,8 @@ declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
    * 公開していないため、こちらで直接読む。
    */
   getAlbumYears(): Promise<Record<string, number>>;
+  /** iOS Musicライブラリのジャケットを、表示に必要な大きさで遅延取得する。 */
+  getArtworkDataUri(trackId: string, size: number): Promise<string | null>;
   /**
    * 曲ごとの「音楽かどうか」とフォルダ。expo-music-library がどちらも
    * 公開していないため、こちらで直接読む（→ RetracksPlayerModule.kt）。

@@ -8,7 +8,7 @@
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.yskms.retracks",
-      "versionCode": 1,
+      "versionCode": 2,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW"
       ],
@@ -20,7 +20,21 @@
       },
       "predictiveBackGestureEnabled": false
     },
+    "ios": {
+      "bundleIdentifier": "com.yskms.retracks",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSAppleMusicUsageDescription": "端末内の音楽を表示・再生するために、メディアライブラリへのアクセスを使用します。",
+        "NSPhotoLibraryUsageDescription": "端末内の音楽に関連するアートワークを表示するために、写真ライブラリへのアクセスを使用します。",
+        "UIBackgroundModes": [
+          "audio"
+        ]
+      }
+    },
     "plugins": [
+      "./plugins/with-ios-app-delegate-fix",
       "expo-music-library",
       [
         "expo-splash-screen",
@@ -28,16 +42,19 @@
           "image": "./assets/splash-icon.png",
           "imageWidth": 100,
           "resizeMode": "contain",
-          "backgroundColor": "#FFFFFF",
-          "dark": {
-            "backgroundColor": "#050505"
-          }
+          "backgroundColor": "#FFFFFF"
         }
       ],
       "expo-router",
       "expo-image",
       "expo-localization"
     ],
-    "scheme": "retracks"
+    "scheme": "retracks",
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "59342ca5-7e2a-4f59-ba6b-d70810756568"
+      }
+    }
   }
 }

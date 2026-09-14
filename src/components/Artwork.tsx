@@ -1,8 +1,39 @@
-import { Image } from 'expo-image';
+import { Image as ExpoImage } from 'expo-image';
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { PixelRatio, Platform, StyleSheet, Text, View } from 'react-native';
 
+import { RetracksPlayer } from '../../modules/retracks-player/src';
 import { colors } from '../theme';
+
+const artworkCache = new Map<string, string | null>();
+const artworkRequests = new Map<string, Promise<string | null>>();
+const MAX_CACHE_ENTRIES = 160;
+
+function loadIosArtwork(uri: string, size: number): Promise<string | null> {
+  const trackId = uri.slice('music-artwork://'.length);
+  // MPMediaItemArtworkへはピクセル相当の大きさを要求する。等倍だとRetina端末で
+  // 特にプレイヤーの大きな画像がぼやけるため、端末のscaleを反映する。
+  const requestedSize = Math.min(600, Math.max(32, Math.ceil(size * PixelRatio.get())));
+  const key = `${trackId}:${requestedSize}`;
+  if (artworkCache.has(key)) return Promise.resolve(artworkCache.get(key) ?? null);
+
+  const pending = artworkRequests.get(key);
+  if (pending) return pending;
+
+  const request = RetracksPlayer.getArtworkDataUri(trackId, requestedSize)
+    .then((result) => {
+      if (artworkCache.size >= MAX_CACHE_ENTRIES) {
+        const oldest = artworkCache.keys().next().value;
+        if (oldest !== undefined) artworkCache.delete(oldest);
+      }
+      artworkCache.set(key, result);
+      return result;
+    })
+    .catch(() => null)
+    .finally(() => artworkRequests.delete(key));
+  artworkRequests.set(key, request);
+  return request;
+}
 
 /**
  * アルバムジャケット。音楽ファイルに埋め込まれているものだけを表示し、
@@ -28,9 +59,27 @@ export function Artwork({
   // 限らない（src/library.ts の artworkUriOf）。読めなかったものは
   // プレースホルダに戻す。URI が変われば作り直す。
   const [failed, setFailed] = useState(false);
+  const isIosMusicArtwork =
+    Platform.OS === 'ios' && Boolean(uri?.startsWith('music-artwork://'));
+  const [iosSource, setIosSource] = useState<string | null>(null);
   useEffect(() => setFailed(false), [uri]);
+  useEffect(() => {
+    let active = true;
+    setIosSource(null);
+    if (isIosMusicArtwork && uri) {
+      loadIosArtwork(uri, size).then((result) => {
+        if (active) {
+          setIosSource(result);
+          if (!result) setFailed(true);
+        }
+      });
+    }
+    return () => {
+      active = false;
+    };
+  }, [isIosMusicArtwork, size, uri]);
 
-  if (!uri || failed) {
+  if (!uri || failed || (isIosMusicArtwork && !iosSource)) {
     return (
       <View style={[styles.placeholder, box]}>
         <Text style={[styles.glyph, { fontSize: size * 0.42 }]}>♪</Text>
@@ -38,8 +87,25 @@ export function Artwork({
     );
   }
 
+  // iOSの独自URIローダーは実機の新アーキテクチャで動作しなかったため、
+  // 自前モジュールで必要な表示サイズだけ取得する。data URIならexpo-imageで
+  // 読めるので、一覧表示時のキャッシュ・メモリ対策も維持できる。
+  if (isIosMusicArtwork && iosSource) {
+    return (
+      <ExpoImage
+        source={{ uri: iosSource }}
+        style={[styles.image, box]}
+        contentFit="cover"
+        cachePolicy="memory"
+        recyclingKey={uri}
+        transition={0}
+        onError={() => setFailed(true)}
+      />
+    );
+  }
+
   return (
-    <Image
+    <ExpoImage
       source={{ uri }}
       style={[styles.image, box]}
       contentFit="cover"
