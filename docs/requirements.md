@@ -1,6 +1,6 @@
-# RE:TR4CKS 要件定義書（Android版）
+# RE:TR4CKS 要件定義書
 
-- バージョン: v2.25
+- バージョン: v2.26
 - 更新日: 2026-09-15
 - ステータス: Android版 1.0.0 は Google Play 審査提出済み（2026-09-13）。iOS版 1.0.0（ビルド7）も
   App Store 審査提出済み（2026-09-15）。両OSとも審査待ち
@@ -41,15 +41,29 @@
 
 ## 3. 対応プラットフォーム・制約
 
-- Android のみ
+- Android（2026-09初版）／iOS（2026-09-14追加、`feature/ios-support`）
 - ローカルファイルのみ対応（ストリーミング非対応）
 - ネットワーク接続不要
 
-### 3.1 メディアアクセス権限（決定：2026-09-02）
+### 3.1 メディアアクセス権限
+
+**Android（決定：2026-09-02）**
 
 - Android 13 以降は `READ_MEDIA_AUDIO`、それ以前は `READ_EXTERNAL_STORAGE` を使用する
 - 初回起動時に権限をリクエストする
 - 拒否された場合は説明画面を表示し、設定アプリへの導線を用意する
+
+**iOS（2026-09-14追加）**
+
+- `NSAppleMusicUsageDescription`（Info.plist）を宣言し、`MPMediaLibrary`（Apple
+  Musicライブラリ）へのアクセスをリクエストする。アートワーク処理に使う画像
+  ライブラリが内部で`NSPhotoLibraryUsageDescription`のAPIを参照するため、
+  こちらも宣言している（写真ライブラリへのアクセス自体は行わない。App Review
+  向けの説明は`docs/ios-app-store-listing.md`参照）
+- JS側（`src/library.ts`の`requestPermission()`/`checkPermission()`、
+  `PermissionGate`）は`expo-music-library`の抽象化により、Android/iOSどちらの
+  OS権限APIかを意識せず共通コードで動く。両OSとも権限拒否時の復旧フロー
+  （→ 13.5、権限拒否からの復旧）は同一のJSコードパス
 
 ---
 
@@ -857,7 +871,7 @@ Pulsar を参考にした構成。MVPで必須のものと、あれば嬉しい�
 |---|---|---|
 | フレームワーク | Expo (SDK 57) / React Native 0.86 | New Architecture のみ（RN 0.82 で旧アーキ廃止、0.85 で互換層も削除） |
 | ビルド | **ローカルビルド**（Android Studio） | Kotlin を書くため反復コンパイルが前提。Expo Go は不可 |
-| **再生層** | **自前の Expo モジュール（Kotlin + Media3）** | 既製ライブラリでは要件を満たせないため（→ 13.2） |
+| **再生層** | **自前の Expo モジュール**（Android: Kotlin + Media3／iOS: Swift + `AVPlayer`/`MPMediaLibrary`、2026-09-14追加） | 既製ライブラリでは要件を満たせないため（→ 13.2） |
 | ライブラリ走査 | expo-music-library | 曲/アルバム/アーティスト/ジャンル/アートワークを取得 |
 | キュー・シャッフル管理 | 自前実装（JS側） | 独自の順列＋永続化（→ 6章） |
 
@@ -880,7 +894,11 @@ Android でこれを実現するには、MediaSession が `COMMAND_SEEK_TO_NEXT_
 **自前実装を選ぶ判断根拠**
 
 1. 差別化要素（区間再生・フェード・RUSH・1巡シャッフル）がすべて再生層にある。既製プレイヤーの「曲を頭から最後まで流す」前提と根本的に噛み合わない
-2. **Android専用**のため iOS 実装が不要で、コストが概ね半分で済む
+2. ~~**Android専用**のため iOS 実装が不要で、コストが概ね半分で済む~~ →
+   **前提が変わった（2026-09-14）**：iOS版も追加することになり、この判断根拠は
+   成立しなくなった。ただし既製ライブラリで要件を満たせないという1の理由は
+   iOSでも同様に当てはまるため、自前実装という結論自体は変わらず、Swift版
+   （`RetracksPlayerModule.swift`）を追加する形で対応した（→ 13.3の追記）
 3. MediaSessionService を自分で持てば、通知/イヤホン/Android Auto が素直に手に入り、フェードもネイティブ側で滑らかに実装できる
 
 ### 13.3 自前モジュールの責務
@@ -902,6 +920,21 @@ Android でこれを実現するには、MediaSession が `COMMAND_SEEK_TO_NEXT_
 - キュー生成・シャッフル順列・1巡状態の永続化（→ 6章）
 - UI 全般
 - 区間設定の解決（`src/rush.ts`。秒/％の吸収もここ）
+
+**モジュール側（Swift / AVFoundation、2026-09-14追加）**
+
+- `AVPlayer`によるローカルファイル再生、`MPMediaLibrary`（`MPMediaQuery`）で
+  ライブラリを走査・アートワークを取得
+- MPNowPlayingInfoCenter・MPRemoteCommandCenter（ロック画面・イヤホン操作）
+- **区間の切り出しとフェード**：AndroidのClippingConfigurationとは異なり、
+  `AVPlayer.addPeriodicTimeObserver`（時刻監視のコールバック）で再生位置を
+  監視し、区間の終端で次の曲へ進め、区間の前後で音量を直接操作してフェード
+  させる方式（`RetracksPlayerModule.swift`）。Androidで「ポーリング方式は
+  精度が出ない」と判断した経緯（上記）とは異なる実装になっているが、iOS実機
+  でのフェード精度・区間切り替わりの厳密な計測はまだ未実施
+  （`docs/ios-release-checklist.md`の未消化項目）
+- JS側の責務はAndroidと共通（`RetracksPlayerModule.ts`のインターフェースを
+  両OSで共有し、JS側は呼び出し先の違いを意識しない）
 
 ### 13.4 技術検証の結果（2026-09-03 / Pixel 9a / Android 17)
 
@@ -1447,3 +1480,4 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
 | v2.23 | 2026-09-14 | iOS版の再生対応を追加（`feature/ios-support`）。`modules/retracks-player/ios/RetracksPlayerModule.swift`をExpoローカルモジュールとして新設し、キュー・曲送り・シーク・リピート・RUSH区間再生・バックグラウンド音声・ロック画面操作・アートワーク表示をAndroid版と同等に実装。iPhone 8実機で権限・通常再生・RUSH再生・画面ロック・再起動後の復元を確認。App Store Connect側の設定（Bundle ID作成・Apple ID登録・写真ライブラリ利用目的文・プライバシーポリシー/サポートURL）も準備。フェード精度・イヤホン操作・電話やSiriによる中断復帰・Bluetooth/AirPlayの確認は未実施のまま残（`docs/ios-release-checklist.md`） |
 | v2.24 | 2026-09-14 | GitHub Pages上にアプリのサポートランディングページ（`docs/index.html`）を追加。App Store／Google Play双方が要求するサポートURLとして使用 |
 | v2.25 | 2026-09-15 | iOS版1.0.0（ビルド7）をApp Storeの審査へ提出。日英の掲載文・プロモーション文・キーワード・審査用メモ・実機操作の画面収録を`docs/ios-app-store-listing.md`にまとめ、App Privacy（収集データなし）・スクリーンショット・Android限定機能（通知操作／指定フォルダ除外／ホーム画面ウィジェット）を掲載文へ含めない旨を確認。TestFlightビルド7で実機確認済み（ビルド4はITMS-90683でリジェクト、ビルド5・6は修正確認用）。`docs/ios-release-checklist.md`のApp Store Connect関連項目をすべて完了に更新。オンデバイスQA（フェード精度・電話/Siri割り込み・Bluetooth/AirPlay）は審査待ちの間の残タスクとして未消化のまま |
+| v2.26 | 2026-09-15 | タイトルを「RE:TR4CKS 要件定義書（Android版）」から「RE:TR4CKS 要件定義書」へ改題し、iOS対応を本編に反映。3章の対応プラットフォームをAndroid/iOS両方に更新し、3.1にiOSのメディアアクセス権限（`NSAppleMusicUsageDescription`/`MPMediaLibrary`）を追記。13.1の再生層をAndroid（Kotlin+Media3）／iOS（Swift+AVPlayer/MPMediaLibrary）の両方が入る形に更新し、13.2の「Android専用のため実装コストが半分」という判断根拠を取り消し線で無効化（前提が変わったことを明記、ただし自前実装という結論自体は維持）。13.3にiOSモジュールの責務（AVPlayerの`addPeriodicTimeObserver`による区間切り出し・フェード。Androidの ClippingConfiguration 方式とは異なる実装で、実機での精度計測はまだ未実施）を追記 |
