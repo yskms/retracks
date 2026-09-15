@@ -155,4 +155,7 @@ export default {
     message: '予期しないエラーが起きました。再試行するか、アプリを再起動してください。',
     retry: '再試行',
   },
+  widget: {
+    idleArtist: 'タップしてアプリを開く',
+  },
 };

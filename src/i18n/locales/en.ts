@@ -147,4 +147,7 @@ export default {
     message: 'An unexpected error occurred. Try again, or restart the app.',
     retry: 'Try again',
   },
+  widget: {
+    idleArtist: 'Tap to open the app',
+  },
 };

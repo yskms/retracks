@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@expo/ui": "~57.0.18",
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "@react-native-community/slider": "5.2.0",
@@ -10,6 +11,7 @@
     "expo": "~57.0.19",
     "expo-constants": "~57.0.17",
     "expo-dev-client": "~57.0.18",
+    "expo-file-system": "~57.0.7",
     "expo-image": "~57.0.4",
     "expo-linking": "~57.0.9",
     "expo-localization": "~57.0.1",
@@ -17,6 +19,7 @@
     "expo-router": "~57.0.18",
     "expo-splash-screen": "~57.0.8",
     "expo-status-bar": "~57.0.1",
+    "expo-widgets": "~57.0.19",
     "i18next": "^26.4.2",
     "react": "19.2.3",
     "react-i18next": "^17.0.13",

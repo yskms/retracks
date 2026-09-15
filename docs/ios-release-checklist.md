@@ -20,6 +20,16 @@
 - [ ] 電話・Siri・他アプリ音声による中断と復帰を確認
 - [ ] BluetoothとAirPlayを確認
 
+## ホーム画面ウィジェット（表示専用・v1、`feat/ios-widget`）
+
+- [x] `expo-widgets`（公式SDKモジュール）＋`@expo/ui`を導入し、Configプラグインを設定
+- [x] `widgets/NowPlayingWidget.tsx`を実装（アートワーク・曲名・アーティスト名、systemSmall/systemMedium対応、タップでアプリを開く）
+- [x] `src/widgetSync.ios.ts`で曲の切り替わりごとにアートワークをApp Group共有ディレクトリへ書き出し`updateSnapshot()`
+- [x] Android向け空実装（`src/widgetSync.ts`）を用意し、`playback.tsx`からOSを問わず同じ関数を呼べるようにした
+- [x] `npx tsc --noEmit`・i18nキー検査
+- [ ] EASビルド→実機（iPhone 8 または他の確認済み実機）でホーム画面に追加し表示・タップ・idle状態を確認
+- [ ] App Store掲載文・スクリーンショットからホーム画面ウィジェット除外の記載を外す（次回アップデート申請時）
+
 ## ビルド環境
 
 - [x] Expo prebuildでXcodeプロジェクトを生成

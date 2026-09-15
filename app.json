@@ -47,7 +47,20 @@
       ],
       "expo-router",
       "expo-image",
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-widgets",
+        {
+          "widgets": [
+            {
+              "name": "NowPlayingWidget",
+              "displayName": "RE:TR4CKS",
+              "description": "今再生中の曲を表示します",
+              "supportedFamilies": ["systemSmall", "systemMedium"]
+            }
+          ]
+        }
+      ]
     ],
     "scheme": "retracks",
     "extra": {

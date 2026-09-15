@@ -1,6 +1,6 @@
 # RE:TR4CKS 要件定義書
 
-- バージョン: v2.26
+- バージョン: v2.27
 - 更新日: 2026-09-15
 - ステータス: Android版 1.0.0 は Google Play 審査提出済み（2026-09-13）。iOS版 1.0.0（ビルド7）も
   App Store 審査提出済み（2026-09-15）。両OSとも審査待ち
@@ -459,6 +459,39 @@ Pulsar のメディアカードが代わりに表示される。アプリを一�
 実際に投稿されている通知の中身（`dumpsys notification` の `channel=` /
 `actions=` / `category=` / `vis=`）を、正常に動いている他アプリ（今回は Pulsar）
 と見比べて初めて「仮通知のまま固定されている」ことが分かった。
+
+### ホーム画面ウィジェット
+
+**Android**：`RetracksWidgetProvider.kt`（→ 13.3）。アートワーク・曲名・
+アーティスト名に加え、リピート・前の曲・再生/一時停止・次の曲・「この曲を
+最初から」の5操作を持つ。`PlaybackService`のイベントで即座に更新され、
+プロセスが完全に終了していてもタップから`startForegroundService`で復元
+できる（→ 8章冒頭、13.3）。
+
+**iOS**（2026-09-15追加、`feat/ios-widget`）：`widgets/NowPlayingWidget.tsx`。
+**表示専用**（アートワーク・曲名・アーティスト名のみ、操作ボタンなし。
+タップでアプリを開く）。以下の理由でAndroidと意図的にスコープを変えている：
+
+- 再生操作自体はLock Screen / Control Center（`MPRemoteCommandCenter`。
+  `RetracksPlayerModule.swift`の`installRemoteCommands()`）で既に提供済み
+- iOSのWidgetKitには、Androidの`startForegroundService`のような
+  「完全に終了したプロセスをウィジェットのタップから蘇生させる」手段が無い
+- インタラクティブなウィジェットボタン（iOS 17+限定）は「アプリがバック
+  グラウンドで生きている間だけ確実に動く」という、Androidと異なる制約が
+  あり実機検証にも工数がかかるため、v1では見送った（次期フォローアップ）
+
+実装は公式`expo-widgets`パッケージ（`expo: ~57.0.19`と同一バージョン、
+SDK公式）のConfigプラグインでXcodeウィジェット拡張ターゲットと
+App Group entitlementを自動生成する方式。ウィジェットUIはSwiftUIではなく
+TSX（`@expo/ui/swift-ui`のコンポーネント、`'widget'`ディレクティブ）で書く。
+データはprops経由（`Widget.updateSnapshot()`）、アートワークは
+`RetracksPlayer.getArtworkDataUri()`で取得しApp Group共有ディレクトリ
+（`expo-widgets`の`widgetsDirectory`）へJPEGとして書き出す（`src/widgetSync.ios.ts`。
+同じ曲では書き込みをスキップし、Android版ウィジェットの教訓
+「切り替わるたびにデコードし直すとネイティブメモリを消費する」→ 13.5
+を踏まえた設計）。Android向けには同名の空実装（`src/widgetSync.ts`）を
+置き、`src/playback.tsx`の`onTrackChange`ハンドラからOSを問わず同じ
+関数を呼べるようにしている。
 
 ---
 
@@ -1481,3 +1514,4 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
 | v2.24 | 2026-09-14 | GitHub Pages上にアプリのサポートランディングページ（`docs/index.html`）を追加。App Store／Google Play双方が要求するサポートURLとして使用 |
 | v2.25 | 2026-09-15 | iOS版1.0.0（ビルド7）をApp Storeの審査へ提出。日英の掲載文・プロモーション文・キーワード・審査用メモ・実機操作の画面収録を`docs/ios-app-store-listing.md`にまとめ、App Privacy（収集データなし）・スクリーンショット・Android限定機能（通知操作／指定フォルダ除外／ホーム画面ウィジェット）を掲載文へ含めない旨を確認。TestFlightビルド7で実機確認済み（ビルド4はITMS-90683でリジェクト、ビルド5・6は修正確認用）。`docs/ios-release-checklist.md`のApp Store Connect関連項目をすべて完了に更新。オンデバイスQA（フェード精度・電話/Siri割り込み・Bluetooth/AirPlay）は審査待ちの間の残タスクとして未消化のまま |
 | v2.26 | 2026-09-15 | タイトルを「RE:TR4CKS 要件定義書（Android版）」から「RE:TR4CKS 要件定義書」へ改題し、iOS対応を本編に反映。3章の対応プラットフォームをAndroid/iOS両方に更新し、3.1にiOSのメディアアクセス権限（`NSAppleMusicUsageDescription`/`MPMediaLibrary`）を追記。13.1の再生層をAndroid（Kotlin+Media3）／iOS（Swift+AVPlayer/MPMediaLibrary）の両方が入る形に更新し、13.2の「Android専用のため実装コストが半分」という判断根拠を取り消し線で無効化（前提が変わったことを明記、ただし自前実装という結論自体は維持）。13.3にiOSモジュールの責務（AVPlayerの`addPeriodicTimeObserver`による区間切り出し・フェード。Androidの ClippingConfiguration 方式とは異なる実装で、実機での精度計測はまだ未実施）を追記 |
+| v2.27 | 2026-09-15 | iOSホーム画面ウィジェット（表示専用・v1）を追加（`feat/ios-widget`）。公式`expo-widgets`パッケージ（Configプラグインが自動でXcodeウィジェット拡張ターゲット＋App Group entitlementを生成）を採用し、UIはSwiftUIではなくTSX（`@expo/ui/swift-ui`、`'widget'`ディレクティブ）で`widgets/NowPlayingWidget.tsx`として実装。アートワーク・曲名・アーティスト名のみを表示しタップでアプリを開く（再生操作ボタンは無し。理由はLock Screen/Control Centerで既に提供済み、iOSにはAndroidの`startForegroundService`に相当するプロセス蘇生手段が無い、インタラクティブボタンはiOS17+限定かつ実機検証が別途必要、の3点で8章に記録）。曲の切り替わり（`onTrackChange`）ごとに`src/widgetSync.ios.ts`がアートワークをApp Group共有ディレクトリへJPEGで書き出し`updateSnapshot()`を呼ぶ（同じ曲では書き込みをスキップ。Android版ウィジェットの重複デコード教訓を踏まえた設計）。Android向けには空実装の`src/widgetSync.ts`を用意し、`playback.tsx`側はOSを問わず同じ関数を呼ぶ。`npx tsc --noEmit`・i18nキー検査は通過。実機（EASビルド）での確認は未実施 |

@@ -25,6 +25,7 @@ import {
   type TrackInput,
 } from '../modules/retracks-player/src';
 import { DEFAULT_SEGMENT, type SegmentSetting } from './rush';
+import { syncNowPlayingWidget } from './widgetSync';
 import {
   checkPermission,
   deriveAlbums,
@@ -397,6 +398,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         if (matches && !saved.key) queueKeyRef.current = ALL_KEY;
       }
       addLog(`再生中のセッションに接続（${current.index + 1}/${current.queueSize}）`);
+      void syncNowPlayingWidget(nativeQueue[current.index] ?? null);
+    } else {
+      void syncNowPlayingWidget(null);
     }
   }, [addLog, applyShuffle, applyQueue, applyTracks]);
 
@@ -474,6 +478,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       // どの曲送りでも遅延なく反映したいので、下のガードより前で呼ぶ。
       const latestStatus = RetracksPlayer.getStatus();
       setStatus((prev) => (statusEquals(prev, latestStatus) ? prev : latestStatus));
+
+      void syncNowPlayingWidget(
+        event.index >= 0 ? (queueRef.current[event.index] ?? null) : null
+      );
 
       const state = shuffleRef.current;
       if (!state || event.index < 0) return;
