@@ -1,8 +1,9 @@
 # RE:TR4CKS 要件定義書（Android版）
 
-- バージョン: v2.21
-- 更新日: 2026-09-12
-- ステータス: 初回リリース候補 1.0.0 を生成・実機確認済み
+- バージョン: v2.25
+- 更新日: 2026-09-15
+- ステータス: Android版 1.0.0 は Google Play 審査提出済み（2026-09-13）。iOS版 1.0.0（ビルド7）も
+  App Store 審査提出済み（2026-09-15）。両OSとも審査待ち
 
 > Remember. Replay. Rediscover. Revisit.
 
@@ -1442,3 +1443,7 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
 | v2.19 | 2026-09-12 | ウィジェットからのプロセス／キュー復元をPixel 11で実機確認。バックグラウンドのアプリプロセスだけを終了した後、ウィジェット操作でプロセスとPlaybackServiceが起動し、932曲キュー・現在曲・再生通知を復元。「次の曲」の表示更新と、アプリを開いた後のJS側セッション再接続（2/932）も合格。`force-stop`はパッケージ停止によりウィジェット自体が無効化されるため試験条件と区別する旨を記録 |
 | v2.20 | 2026-09-12 | 実機テストを完了扱いとし、初回リリース候補を生成。公開バージョンを`1.0.0`（versionCode 1）へ統一し、`android.blockedPermissions`でリリース版に不要な開発用`SYSTEM_ALERT_WINDOW`権限を除去。`assembleRelease`と`bundleRelease`が成功し、APK/AABの署名、APKのバージョン・権限を検証。署名済みAPKをPixel 11へインストールし、Metroなしの起動・932曲の読込・エラーなしを確認 |
 | v2.21 | 2026-09-12 | Google Play公開準備として日英プライバシーポリシー、日英ストア掲載文・初回リリースノート、Data safety／App content回答案、公開チェックリストを追加。設定画面からGitHub Pages上のポリシーを開ける導線を日英で実装し、リリースAPK実機表示を確認。公開素材を含むAPK/AABを再生成・署名検証した |
+| v2.22 | 2026-09-13 | Android版1.0.0（versionCode 2。開発者向け画面を製品ビルドから遮断した差し替え版）をGoogle Playの審査へ提出。配信地域176か国・地域、管理対象の公開はオフ（承認後に自動公開）。詳細は`docs/google-play-checklist.md`・`docs/release-1.0.0.md` |
+| v2.23 | 2026-09-14 | iOS版の再生対応を追加（`feature/ios-support`）。`modules/retracks-player/ios/RetracksPlayerModule.swift`をExpoローカルモジュールとして新設し、キュー・曲送り・シーク・リピート・RUSH区間再生・バックグラウンド音声・ロック画面操作・アートワーク表示をAndroid版と同等に実装。iPhone 8実機で権限・通常再生・RUSH再生・画面ロック・再起動後の復元を確認。App Store Connect側の設定（Bundle ID作成・Apple ID登録・写真ライブラリ利用目的文・プライバシーポリシー/サポートURL）も準備。フェード精度・イヤホン操作・電話やSiriによる中断復帰・Bluetooth/AirPlayの確認は未実施のまま残（`docs/ios-release-checklist.md`） |
+| v2.24 | 2026-09-14 | GitHub Pages上にアプリのサポートランディングページ（`docs/index.html`）を追加。App Store／Google Play双方が要求するサポートURLとして使用 |
+| v2.25 | 2026-09-15 | iOS版1.0.0（ビルド7）をApp Storeの審査へ提出。日英の掲載文・プロモーション文・キーワード・審査用メモ・実機操作の画面収録を`docs/ios-app-store-listing.md`にまとめ、App Privacy（収集データなし）・スクリーンショット・Android限定機能（通知操作／指定フォルダ除外／ホーム画面ウィジェット）を掲載文へ含めない旨を確認。TestFlightビルド7で実機確認済み（ビルド4はITMS-90683でリジェクト、ビルド5・6は修正確認用）。`docs/ios-release-checklist.md`のApp Store Connect関連項目をすべて完了に更新。オンデバイスQA（フェード精度・電話/Siri割り込み・Bluetooth/AirPlay）は審査待ちの間の残タスクとして未消化のまま |
