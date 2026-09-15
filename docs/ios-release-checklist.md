@@ -38,9 +38,9 @@ Swift tools 6.2を要求するため、アプリのコンパイル前にツー�
 - [x] App Store Connect Apple ID `6811712770` をEAS提出設定へ登録
 - [x] Appleの静的解析で要求された写真ライブラリ利用目的文を追加
 - [x] プライバシーポリシーとサポートURLを準備
-- [ ] App Privacy（収集データなし）を回答
-- [ ] iPhone用スクリーンショットと説明文を準備（初回リリースでは未実装のiOSウィジェットを記載しない）
-- [ ] App Store掲載文ではAndroid限定の「通知」「指定フォルダ除外」「ホーム画面ウィジェット」を記載しない
+- [x] App Privacy（収集データなし）を回答
+- [x] iPhone用スクリーンショットと説明文を準備（初回リリースでは未実装のiOSウィジェットを記載しない。`docs/ios-app-store-listing.md`）
+- [x] App Store掲載文ではAndroid限定の「通知」「指定フォルダ除外」「ホーム画面ウィジェット」を記載しない（`docs/ios-app-store-listing.md`で確認済み）
 - [x] ビルド7をTestFlightで実機確認（ビルド4はITMS-90683、ビルド5・6は実機修正確認用）
 - [x] 一覧・プレイヤー・ロック画面のアートワーク表示を確認
-- [ ] 実機テスト完了後に審査へ提出
+- [x] 実機テスト完了後に審査へ提出（2026-09-15、ビルド7・App Version 1.0.0。詳細は`docs/ios-app-store-listing.md`）
