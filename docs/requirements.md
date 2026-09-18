@@ -1,6 +1,6 @@
 # RE:TR4CKS 要件定義書
 
-- バージョン: v2.27
+- バージョン: v2.28
 - 更新日: 2026-09-15
 - ステータス: Android版 1.0.0 は Google Play 審査提出済み（2026-09-13）。iOS版 1.0.0（ビルド7）も
   App Store 審査提出済み（2026-09-15）。両OSとも審査待ち
@@ -1125,6 +1125,50 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
   - 教訓：このモジュールで「JS側に対処を入れたのに体感が変わらない」ときは、
     まず `getStatus()` がネイティブ側のポーリング間隔ぶん古い値を返している
     可能性を疑う
+- **iOSのローカルビルドがXcode 26.3で失敗する（`expo-modules-jsi`側のバグ、
+  この端末では26.6へ上げられない）**（2026-09-15〜18、`feat/ios-widget`
+  ブランチの実機確認中に発覚）
+  - 症状：`npx expo run:ios`が`node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h`
+    の53・61行目で失敗する。「`'RuntimeScheduler' cannot be annotated with
+    either SWIFT_RETURNS_RETAINED or SWIFT_RETURNS_UNRETAINED because it is
+    not returning a SWIFT_SHARED_REFERENCE type」。クラス自体は
+    `SWIFT_SHARED_REFERENCE(retainRuntimeScheduler, releaseRuntimeScheduler)`
+    で正しく注釈されている（マクロがクラス本体の閉じ括弧の後ろに付いている
+    形）
+  - 切り分け：`feat/ios-widget`だけでなく`main`ブランチでも同一箇所で再現
+    することを実機ビルドで確認済み。`expo-widgets`（ウィジェット用の新しい
+    Xcodeターゲットを生成するConfigプラグイン）を追加したことが原因という
+    仮説は誤りだった。`expo-modules-jsi`はCocoaPodsのビルドフェーズ内で
+    SPMパッケージとして独立ビルドされる（`apple/scripts/build-xcframework.sh`）
+    ため、ウィジェットの有無に関わらず常にこの経路を通る
+  - 試して効かなかったこと：`SWIFT_SHARED_REFERENCE`マクロを`class`宣言の
+    直後（`class SWIFT_SHARED_REFERENCE(...) RuntimeScheduler {`）に移動する
+    パッチ。ビルドスクリプトのハッシュキャッシュ（ソース内容＋Swiftツール
+    チェーンのバージョン文字列で決まる）が実際に変化を検知して再ビルド
+    したことをログで確認した上で、それでも同じ場所で同じエラーが再現した
+  - 真因の特定：`node_modules`内で`swift-tools-version`を要求する
+    `Package.swift`を持つ依存は`expo-modules-jsi`ただ1つ（`expo-widgets`や
+    `@expo/ui`は持たない）で、`6.2`を要求している。2026-09-14に
+    App Store提出（ビルド7）で使われたEASのビルドログ
+    （`eas build:view <id> --json`の`artifacts.xcodeBuildLogsUrl`、GCSの
+    署名付きURLでbrotli圧縮。`pip install brotli`で解凍して閲覧）を確認した
+    ところ、**Xcode 26.6（Build 17F113、VMテンプレート
+    "macos-tahoe-26.5-xcode-26.6"）でパッチなしの同じヘッダーのまま成功**
+    していた。つまりXcode 26.3固有のコンパイラ不具合で、26.6ではAppleが
+    直している
+  - **この端末では解決できない**：Xcode 26.6はmacOS Tahoe 26.2以降を要求する
+    （Apple公式のシステム要件）。この端末はmacOS Sequoia 15.8で運用する
+    方針（M1 Air 8GBを軽量に保つため）のため、Tahoeへは意図的に上げない。
+    Xcode 16.2（旧）は`<swift/bridging>`に`SWIFT_RETURNS_RETAINED`マクロ
+    自体が存在せず別のエラーになる上、`expo-modules-jsi`が要求する
+    `swift-tools-version: 6.2`も満たせないため後戻りの選択肢にもならない
+  - **方針**：普段のローカルiOS開発（ビルドが通る範囲）はXcode 26.3のまま
+    継続。この不具合に当たるビルド（少なくとも`expo-modules-jsi`を含む
+    ネイティブ再ビルドが必要なとき）はEAS（Xcode 26.6環境）を使う。
+    Expoへのバグ報告はまだ未実施
+  - **iOSホーム画面ウィジェット（`feat/ios-widget`）の開発は、Android・iOS
+    両方のストア審査が終わるまで一時停止**。実機確認にはEASビルドが要るが、
+    審査待ち中に新しいビルド・提出操作を挟むのは避ける判断とした
 
 ### 13.5 リリース準備（安定性向上）
 
@@ -1515,3 +1559,4 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
 | v2.25 | 2026-09-15 | iOS版1.0.0（ビルド7）をApp Storeの審査へ提出。日英の掲載文・プロモーション文・キーワード・審査用メモ・実機操作の画面収録を`docs/ios-app-store-listing.md`にまとめ、App Privacy（収集データなし）・スクリーンショット・Android限定機能（通知操作／指定フォルダ除外／ホーム画面ウィジェット）を掲載文へ含めない旨を確認。TestFlightビルド7で実機確認済み（ビルド4はITMS-90683でリジェクト、ビルド5・6は修正確認用）。`docs/ios-release-checklist.md`のApp Store Connect関連項目をすべて完了に更新。オンデバイスQA（フェード精度・電話/Siri割り込み・Bluetooth/AirPlay）は審査待ちの間の残タスクとして未消化のまま |
 | v2.26 | 2026-09-15 | タイトルを「RE:TR4CKS 要件定義書（Android版）」から「RE:TR4CKS 要件定義書」へ改題し、iOS対応を本編に反映。3章の対応プラットフォームをAndroid/iOS両方に更新し、3.1にiOSのメディアアクセス権限（`NSAppleMusicUsageDescription`/`MPMediaLibrary`）を追記。13.1の再生層をAndroid（Kotlin+Media3）／iOS（Swift+AVPlayer/MPMediaLibrary）の両方が入る形に更新し、13.2の「Android専用のため実装コストが半分」という判断根拠を取り消し線で無効化（前提が変わったことを明記、ただし自前実装という結論自体は維持）。13.3にiOSモジュールの責務（AVPlayerの`addPeriodicTimeObserver`による区間切り出し・フェード。Androidの ClippingConfiguration 方式とは異なる実装で、実機での精度計測はまだ未実施）を追記 |
 | v2.27 | 2026-09-15 | iOSホーム画面ウィジェット（表示専用・v1）を追加（`feat/ios-widget`）。公式`expo-widgets`パッケージ（Configプラグインが自動でXcodeウィジェット拡張ターゲット＋App Group entitlementを生成）を採用し、UIはSwiftUIではなくTSX（`@expo/ui/swift-ui`、`'widget'`ディレクティブ）で`widgets/NowPlayingWidget.tsx`として実装。アートワーク・曲名・アーティスト名のみを表示しタップでアプリを開く（再生操作ボタンは無し。理由はLock Screen/Control Centerで既に提供済み、iOSにはAndroidの`startForegroundService`に相当するプロセス蘇生手段が無い、インタラクティブボタンはiOS17+限定かつ実機検証が別途必要、の3点で8章に記録）。曲の切り替わり（`onTrackChange`）ごとに`src/widgetSync.ios.ts`がアートワークをApp Group共有ディレクトリへJPEGで書き出し`updateSnapshot()`を呼ぶ（同じ曲では書き込みをスキップ。Android版ウィジェットの重複デコード教訓を踏まえた設計）。Android向けには空実装の`src/widgetSync.ts`を用意し、`playback.tsx`側はOSを問わず同じ関数を呼ぶ。`npx tsc --noEmit`・i18nキー検査は通過。実機（EASビルド）での確認は未実施 |
+| v2.28 | 2026-09-18 | iOSローカルビルドがXcode 26.3で失敗する不具合を調査し13.4に記録。`expo-modules-jsi`のRuntimeSchedulerヘッダーがSwiftのC++連携チェックに引っかかる問題で、`feat/ios-widget`・`main`両方で再現（ウィジェット追加が原因という仮説は誤りと判明）。ヘッダーへの修正パッチは効果なしと実機ビルドで確認済み。EASの実際のビルドログ（2026-09-14提出のビルド7）を解析し、Xcode 26.6ではパッチ無しで成功することを確認、原因はXcode 26.3固有のコンパイラ不具合と特定。Xcode 26.6はmacOS Tahoe 26.2以降が必要でこの端末（Sequoia 15.8、意図的に維持）にはインストール不可と判明したため、ローカル開発はXcode 26.3を継続しつつ、この不具合に当たるiOSビルドはEAS（Xcode 26.6）を使う方針を確定。あわせて、iOSウィジェット開発（`feat/ios-widget`）はAndroid・iOS両ストアの審査が終わるまで一時停止することを決定 |
