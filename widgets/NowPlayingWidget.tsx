@@ -91,6 +91,19 @@ function NowPlayingWidget(props: NowPlayingWidgetProps, environment: WidgetEnvir
       modifiers={[
         padding({ all: 12 }),
         frame({ maxWidth: Infinity, maxHeight: Infinity }),
+        // containerBackgroundは@expo/uiの現行実装ではiOS 17未満で何もせず、iOS 16実機
+        // （iPhone 8）でウィジェットが背景無し＝黒塗りになった（2026-09-24確認）。
+        // background()を併用してiOS 17未満でも背景を効かせる。
+        // 注意: この2つは常に同じ色でセットにすること。containerBackgroundは
+        // frame(Infinity)の外側（iOS 17+の既定content margins分）まで塗るが、
+        // background()はframeの内側までしか塗らないため、片方だけ外したり違う色に
+        // すると iOS 17+ で縁だけ違う色になる。
+        // 未確認: iOS 18のTinted/StandBy表示でbackground()の不透明な塗りが
+        // どう見えるか（containerBackgroundが本来担うはずの背景差し替えができない）。
+        // 検証できるiOS 18実機/シミュレータが無いため未確認のまま。
+        // このbackground()自体はiOS 17未満のための回避なので、将来
+        // deployment targetをiOS 17以上に上げたら削除してよい。
+        background(colors.background),
         containerBackground(colors.background, 'widget'),
         widgetURL('retracks://player'),
       ]}
