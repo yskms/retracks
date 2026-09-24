@@ -14,8 +14,6 @@ import {
 } from '@expo/ui/swift-ui/modifiers';
 import { createWidget, type WidgetEnvironment } from 'expo-widgets';
 
-import { colors } from '../src/theme';
-
 /**
  * iOSホーム画面ウィジェット（表示専用・v1）。
  *
@@ -34,6 +32,20 @@ export type NowPlayingWidgetProps = {
 
 function NowPlayingWidget(props: NowPlayingWidgetProps, environment: WidgetEnvironment) {
   'widget';
+
+  // 'widget'ディレクティブ付き関数は、babel-preset-expoのwidgets-pluginによって
+  // 関数本体だけがソース文字列化され（クロージャ捕捉もスコープ巻き上げも無し）、
+  // ネイティブ側でJSContextに単独evaluateされる。importやモジュールスコープの
+  // 定数はこの文字列に含まれず参照できない（2026-09-24、実機で
+  // ReferenceError（Can't find variable: colors）を確認。関数の外に定義していた
+  // ことが、ウィジェットが常に真っ黒だった本当の原因だった）。そのため
+  // colorsは関数の中だけで完結させる必要がある。値はsrc/theme.tsのcolorsと揃えること。
+  const colors = {
+    background: '#121216',
+    text: '#f2f2f5',
+    textDim: '#9a9aa8',
+    surfaceHigh: '#26262e',
+  } as const;
 
   const isMedium = environment.widgetFamily === 'systemMedium';
   // systemSmall（2x2）は正方形に近いのでアートワークを大きめの正方形に、
