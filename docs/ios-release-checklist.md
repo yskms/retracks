@@ -30,11 +30,33 @@
 - [ ] EASビルド→実機（iPhone 8 または他の確認済み実機）でホーム画面に追加し表示・タップ・idle状態を確認
 - [ ] App Store掲載文・スクリーンショットからホーム画面ウィジェット除外の記載を外す（次回アップデート申請時）
 
-**一時停止中（2026-09-18）**：ローカルのiOSビルドがXcode 26.3の不具合で失敗するため
-（原因はウィジェットではなく`expo-modules-jsi`本体。詳細は要件定義書13.4）、
-実機確認にはEASビルドが必要な状態。Android・iOS両方のストア審査が完了するまで、
-このブランチでの作業（EASビルドの実行含む）を一時停止する。審査完了後、
-EASのXcode 26.6環境でビルドして実機確認を再開する
+**実機確認の経緯（2026-09-23〜24、両ストア審査完了後に再開）**：ホーム画面に追加した
+ウィジェットが常に真っ黒になる不具合の調査でビルドを複数回消費した。
+
+- ビルド11：`version`を上げずに提出し`ITMS-90186`/`ITMS-90062`でリジェクト
+  （CLAUDE.mdに再発防止を記録）。1.1.0に上げてビルド12で再提出、TestFlight配信は成功
+- ビルド12時点：ウィジェットは真っ黒。`containerBackground`が`@expo/ui`の現行実装では
+  iOS 17未満で何もしない（`background()`を併用する形で修正）ことを確認したが、
+  これを直しても真っ黒のまま変化なし（ビルド12→修正して次のビルドでも再現）
+  → node_modulesの`expo-widgets`パッケージ自体のビルドスクリプトを疑い調査したが、
+  実際にビルド済み`.ipa`を展開して確認したところJSバンドルはappex内の正しい位置に
+  存在しており、この仮説は誤りと判明（対応した変更はrevert済み）
+- 原因特定のため、`expo-widgets`の`WidgetsDynamicView.render()`
+  （props/modifierのデコード失敗時に例外を握りつぶしてEmptyView()を返す。
+  RELEASEビルドではこの失敗が一切ログに残らない）を一時的にパッチし、
+  実際のエラー内容をウィジェット上に表示する診断ビルドを作成（`eas.json`の
+  `productionWidgetDiag`プロファイル、診断後は削除済み）
+- 診断ビルドで`ReferenceError: Can't find variable: colors`と判明。
+  `'widget'`ディレクティブ付き関数は関数本体だけがソース文字列化されクロージャを
+  捕捉しないため、`widgets/NowPlayingWidget.tsx`のモジュールスコープに置いていた
+  `colors`定数が実行時に解決できていなかった。制約の一般形はCLAUDE.mdに記録
+- 対処：`colors`を`NowPlayingWidget`関数の中（`'widget';`の直後）へ移動。
+  babel-preset-expoのwidgets-pluginで実際に変換し、生成される関数文字列に
+  `colors`の定義が含まれることを確認済み。`containerBackground`＋`background()`の
+  修正（iOS 17未満対応）は、このReferenceErrorとは独立した別の不具合として
+  そのまま維持
+- 次のビルド（本番プロファイル）で、このReferenceError修正後に実機で正しく
+  表示されるかが最終確認事項
 
 ## ビルド環境
 
