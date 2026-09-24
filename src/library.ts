@@ -172,6 +172,21 @@ export async function scanLibrary(): Promise<Track[]> {
       artwork: ARTWORK_MODE,
       // iOSではクラウドのみ・DRM付き・URLなしの曲もメタデータ検索には現れる。
       // AVPlayerで実際に再生できる曲だけをライブラリへ入れる。
+      //
+      // 既知の抜け（2026-09-24確認、対応しない方針）：この判定
+      // （expo-music-library内ではassetURL非nil && !hasProtectedAsset）は
+      // isCloudItemを見ていないため、iCloudでダウンロードしていない曲が
+      // 紛れて「再生可能」と誤判定されることがある（実機で無音再生として発生）。
+      // isCloudItemで追加フィルタする案は一度試したが、iTunes
+      // Match/iCloudミュージックライブラリ経由で同期済み・ダウンロード済みの
+      // 曲でもisCloudItemがtrueになるケースがあるため却下（実際に持っている
+      // 曲がライブラリから消える方が実害が大きい）。正しく直すには
+      // AVURLAssetでの実再生可否チェックが要る（この失敗はAVFoundationが
+      // エラー通知を出さない「成功したように見えて無音」なので、
+      // RetracksPlayerModule.swiftのfailureObserver
+      // ＝.AVPlayerItemFailedToPlayToEndTimeでは捕まえられない）。
+      // expo-music-libraryが更新されたら（package.jsonで^指定）、
+      // itemMatchesAvailability()の実装がこの抜けを直していないか確認する。
       availability: Platform.OS === 'ios' ? 'avFoundationAccessible' : 'all',
     });
 
