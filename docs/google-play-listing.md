@@ -55,6 +55,11 @@ RE:TR4CKS 1.0.0 初回リリース
 ・楽曲／アーティスト／アルバム表示と検索
 ・バックグラウンド、通知、イヤホン、ウィジェット操作
 
+### 1.1.0 リリースノート
+
+・無料版にバナー広告を追加しました
+・Pro（月額購読）で広告を非表示にできるようになりました
+
 ## English (default, en-US)
 
 ### App name
@@ -109,3 +114,8 @@ Initial release of RE:TR4CKS 1.0.0.
 • Non-repeating shuffle with preserved progress
 • Song, artist, and album browsing and search
 • Background, notification, headset, and widget controls
+
+### 1.1.0 release notes
+
+• Added a banner ad in the free tier
+• Pro (monthly subscription) now removes ads
