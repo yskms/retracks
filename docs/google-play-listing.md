@@ -37,9 +37,11 @@ RE:TR4CKSは、新しい音楽を探すためではなく、すでに持って�
 ・ホーム画面ウィジェット
 ・日本語／英語表示
 
-すべて端末内で完結
+音楽ライブラリは端末内で完結
 
-音楽ファイルや再生履歴を外部へ送信することはありません。広告、アカウント登録、アクセス解析、トラッキング、クラウド同期はなく、すべて端末内で動作します。
+音楽ファイルや再生履歴を外部へ送信することはありません。アカウント登録、クラウド同期は不要です。
+
+Android版は無料でご利用いただけます（バナー広告表示）。Pro（月額購読）で広告を非表示にできます。
 
 本アプリに音楽は含まれません。ユーザー自身が端末に保存し、再生する権利を持つ音楽ファイルが必要です。
 
@@ -90,9 +92,11 @@ Key features
 • Home-screen widget
 • Japanese and English interface
 
-Everything stays on your device
+Your music library stays on your device
 
-Your music files and listening activity are never sent off your device. RE:TR4CKS has no ads, account registration, analytics, tracking, or cloud synchronization. Everything runs locally on your device.
+Your music files and listening activity are never sent off your device. No account registration or cloud sync required.
+
+The Android app is free to use, with a banner ad shown in the free tier. Pro (monthly subscription) removes ads.
 
 Music is not included. You need music files stored on your device that you have the right to play.
 
