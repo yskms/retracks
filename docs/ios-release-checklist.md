@@ -27,7 +27,7 @@
 - [x] `src/widgetSync.ios.ts`で曲の切り替わりごとにアートワークをApp Group共有ディレクトリへ書き出し`updateSnapshot()`
 - [x] Android向け空実装（`src/widgetSync.ts`）を用意し、`playback.tsx`からOSを問わず同じ関数を呼べるようにした
 - [x] `npx tsc --noEmit`・i18nキー検査
-- [ ] EASビルド→実機（iPhone 8 または他の確認済み実機）でホーム画面に追加し表示・タップ・idle状態を確認
+- [x] EASビルド→実機（iPhone 8）でホーム画面に追加し表示・タップ・idle状態を確認（2026-09-30）
 - [ ] App Store掲載文・スクリーンショットからホーム画面ウィジェット除外の記載を外す（次回アップデート申請時）
 
 **実機確認の経緯（2026-09-23〜24、両ストア審査完了後に再開）**：ホーム画面に追加した
@@ -58,6 +58,14 @@
 - 次のビルド（本番プロファイル）で、このReferenceError修正後に実機で正しく
   表示されるかが最終確認事項
 
+**実機確認完了（2026-09-30）**：`eas build --local --profile production`でローカル署名
+ビルドを作成し、`eas submit -p ios --path <ipa> --profile production`でTestFlightへ
+アップロード。iPhone 8はこのMac（M4 MacBook Air）とXcode経由で直接ペアリングできない
+既知の制約（詳細は`~/.claude/CLAUDE.md`「ローカル開発環境」参照）があるため、ad-hoc配布や
+ローカルインストールは行わず、TestFlightアプリ経由でのインストールに最初から切り替えた。
+iPhone 8で表示・タップ（アプリが開く）・idle状態（時間経過後もアートワーク・曲名が
+正しいまま）をすべて確認済み。
+
 ## ビルド環境
 
 - [x] Expo prebuildでXcodeプロジェクトを生成
@@ -67,13 +75,13 @@
 - [x] EASのXcode 26環境でネイティブビルド
 - [x] Apple Developerの署名とProvisioning Profileを設定
 - [x] Xcode 27（M4 MacBook Air、ローカル環境）でのSimulatorビルド・起動を確認（2026-09-30）
-- [ ] Xcode 27でのEASローカルビルド（`eas build --local`）・実機確認
+- [x] Xcode 27でのEASローカルビルド（`eas build --local --profile production`）・実機確認（2026-09-30、TestFlight経由でiPhone 8にて確認）
 
 現在のローカル環境はXcode 27（M4 MacBook Airへ2026-09に移行）。Xcode 27 / iOS 27 SDK
 特有の問題として、UISceneライフサイクル未対応による起動直後のクラッシュを実際に確認し、
 `plugins/withIosSceneDelegate.js`で対応済み（詳細は`CLAUDE.md`「iOSビルド」参照）。
-Simulatorでのdev-client起動・JSバンドル読み込み・アプリ本体表示まで確認済みだが、
-署名付きのローカルビルド（`eas build --local`）・実機での確認はまだ行っていない。
+Simulatorでのdev-client起動・JSバンドル読み込み・アプリ本体表示、および署名付き
+ローカルビルド（`eas build --local`）でのビルド・署名・エクスポートまで確認済み。
 
 （旧Mac・Xcode 26.3時点の記録）当時はXcode 26.3の`expo-modules-jsi`ヘッダー
 コンパイル不具合により、ローカルの`npx expo run:ios`が通らず、EAS

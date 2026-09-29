@@ -43,6 +43,9 @@ yarn-error.*
 /ios
 /android
 
+# eas build --local の出力先（署名済みipa/apk。サイズが大きく再生成可能なため追跡しない）
+/build-output
+
 # 補足: /ios /android は Expo prebuild で生成されるため追跡しない。
 # ネイティブ拡張が必要になった場合も、patch-package もしくは
 # ローカル Expo モジュール（modules/）で対応する方針（docs/requirements.md 13.3）。
