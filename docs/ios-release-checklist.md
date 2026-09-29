@@ -29,8 +29,15 @@
 - [x] EASのXcode 26環境でネイティブビルド
 - [x] Apple Developerの署名とProvisioning Profileを設定
 
-現在のローカル環境はXcode 16.2（Swift 6.0）。依存するExpoModulesJSIが
-Swift tools 6.2を要求するため、アプリのコンパイル前にツールチェーン更新が必要。
+現在のローカル環境はXcode 27（M4 MacBook Airへ2026-09に移行、旧環境のXcode 16.2時点の
+記述は陳腐化のため更新）。retracks自体はこのXcode 27でのローカルビルドをまだ試していない。
+姉妹プロジェクトfilto-appでは、Xcode 27 / iOS 27 SDK特有の問題として
+（1）UISceneライフサイクル未対応による起動直後のクラッシュ、
+（2）`IPHONEOS_DEPLOYMENT_TARGET`が15.0未満のPodのビルド拒否
+を確認済み（環境不備ではなくAppleの仕様変更。対応例は
+`~/Developer/filto-app/filto/plugins/withIosSceneDelegate.js`・
+`withIosPodsDeploymentTargetFix.js`）。retracksで初めてローカルビルドする際は、
+同じ症状が出るか確認すること。
 
 ## App Store Connect
 
