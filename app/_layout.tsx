@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -9,12 +9,29 @@ import '../src/i18n';
 import { SettingsProvider } from '../src/settings';
 import { PlaybackProvider } from '../src/playback';
 import { MiniPlayer } from '../src/components/MiniPlayer';
+import { AdBanner } from '../src/components/AdBanner';
 import { SplashFade } from '../src/components/SplashFade';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { colors } from '../src/theme';
+import { initAds } from '../src/adInit';
+import { initPurchases } from '../src/purchases';
 
 export default function RootLayout() {
   const [showSplash, setShowSplash] = useState(true);
+
+  // 広告SDKの初期化。EEA/UKユーザーへの同意フォーム表示を含むため、なるべく早い
+  // タイミングで開始する（圏外のユーザーには何も表示されない）。内部で失敗を
+  // 握って false を返すので、ここでの reject はない。iOS版はadInit.ios.tsの
+  // no-opフォールバックが解決される
+  useEffect(() => {
+    initAds();
+  }, []);
+
+  // 課金SDK(RevenueCat)の初期化。iOS版はpurchases.ios.tsのno-opフォールバックが解決される
+  useEffect(() => {
+    initPurchases();
+  }, []);
+
   // インラインの () => setShowSplash(false) だと毎レンダーで新しい関数になり、
   // SplashFade 側の effect（フェード開始）が依存に持っている。RootLayout が
   // 再レンダーされないうちは実害が無いが、将来ここに state が増えたときに
@@ -42,9 +59,11 @@ export default function RootLayout() {
                   <Stack.Screen name="settings" />
                   <Stack.Screen name="excluded-folders" />
                   <Stack.Screen name="debug" />
+                  <Stack.Screen name="pro" />
                   <Stack.Screen name="artist/[id]" />
                   <Stack.Screen name="album/[id]" />
                 </Stack>
+                <AdBannerSlot />
                 <MiniPlayerSlot />
               </View>
               {showSplash && <SplashFade onDone={hideSplash} />}
@@ -61,6 +80,20 @@ function MiniPlayerSlot() {
   const pathname = usePathname();
   if (pathname === '/player') return null;
   return <MiniPlayer />;
+}
+
+// バナー広告を隠す画面。プレイヤー画面はミニプレイヤーと同じ理由、
+// pro画面は購入導線に広告を出す必然性が無いため
+const HIDE_AD_BANNER_PATHS = ['/player', '/pro'];
+
+/**
+ * バナー広告はミニプレイヤーの上（頻繁にタップする再生/次への操作の
+ * すぐ下に置くと誤タップを誘発するため）に、全画面共通で出す。
+ */
+function AdBannerSlot() {
+  const pathname = usePathname();
+  if (HIDE_AD_BANNER_PATHS.includes(pathname)) return null;
+  return <AdBanner />;
 }
 
 const styles = StyleSheet.create({

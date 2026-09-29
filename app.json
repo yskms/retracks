@@ -2,15 +2,16 @@
   "expo": {
     "name": "RE:TR4CKS",
     "slug": "retracks",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.yskms.retracks",
-      "versionCode": 2,
+      "versionCode": 3,
       "blockedPermissions": [
-        "android.permission.SYSTEM_ALERT_WINDOW"
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "com.google.android.gms.permission.AD_ID"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#050505",
@@ -47,7 +48,15 @@
       ],
       "expo-router",
       "expo-image",
-      "expo-localization"
+      "expo-localization",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-7366086915275961~6357812712",
+          "delayAppMeasurementInit": true,
+          "androidSdk": "classic"
+        }
+      ]
     ],
     "scheme": "retracks",
     "extra": {

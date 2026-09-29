@@ -822,8 +822,11 @@ Pulsar を参考にした構成。MVPで必須のものと、あれば嬉しい�
     曲間が連続するよう作られたアルバムやライブ音源を聴く場面で欲しくなったら
     再検討する
 - 課金モードの案内（広告を消す想定）
-  - 広告SDK・IAPライブラリともに未導入。「広告を消す」ためには先に広告自体の
-    実装が要るため、設定画面の1項目というより別プロジェクトの規模
+  - （2026-09-26）Android版に実装済み。無料版はライブラリ画面等にAdMobのバナー
+    広告を表示し、RevenueCatによるPro（月額課金）で広告を非表示にする
+    （`app/pro.tsx`、`src/purchases.ts`、`src/adInit.ts`）。iOS版は未導入
+    （`purchases.ios.ts`等はno-opのまま）。実際のAPIキー・広告ユニットID等の
+    ダッシュボード側セットアップ手順は`docs/revenuecat-admob-setup.md`参照
 
 このアプリは日本語ユーザー向けに閉じず、海外にも展開する前提で作る
 （決定：2026-09-10）。言語・並べ替えなど各機能の既定値はこの前提で選ぶこと。
@@ -1106,6 +1109,15 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
   手で触り続ける運用（ウィジェットのdrawable等、本章の随所を参照）なので、
   同じ扱いとして直接編集した。config plugin化はしていない（次に`android/`を
   作り直す必要が生じたときは、この節を読んでから作業すること）
+- （2026-09-29追記）実際に`expo prebuild`（`--clean`無し）を再実行したところ、
+  `android/app/build.gradle`への手書き配線が失われるだけでなく、
+  **`android/app/release.jks`と`android/keystore.properties`自体が物理的に
+  削除される**ことを確認した（`- Clearing android`のログの通り、`android/`の
+  中身を丸ごと消してから再生成しているため）。事前に両ファイルをリポジトリ外へ
+  バックアップしていたため復旧できたが、していなければこの端末上の署名鍵が
+  失われるところだった。以後`prebuild`を実行する前は必ず両ファイルを退避し、
+  実行後に元の場所へ戻してから`build.gradle`の署名設定を再配線する
+  （`CLAUDE.md`にも同内容を記録）
 - `keytool`で`android/app/release.jks`を生成。DN（証明書の識別情報）は
   実運用上ほぼ意味を持たないため`CN=RE:TR4CKS`等の一般的な値にした
 - パスワードは`openssl rand`で生成し、`android/keystore.properties`
@@ -1481,3 +1493,6 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
 | v2.24 | 2026-09-14 | GitHub Pages上にアプリのサポートランディングページ（`docs/index.html`）を追加。App Store／Google Play双方が要求するサポートURLとして使用 |
 | v2.25 | 2026-09-15 | iOS版1.0.0（ビルド7）をApp Storeの審査へ提出。日英の掲載文・プロモーション文・キーワード・審査用メモ・実機操作の画面収録を`docs/ios-app-store-listing.md`にまとめ、App Privacy（収集データなし）・スクリーンショット・Android限定機能（通知操作／指定フォルダ除外／ホーム画面ウィジェット）を掲載文へ含めない旨を確認。TestFlightビルド7で実機確認済み（ビルド4はITMS-90683でリジェクト、ビルド5・6は修正確認用）。`docs/ios-release-checklist.md`のApp Store Connect関連項目をすべて完了に更新。オンデバイスQA（フェード精度・電話/Siri割り込み・Bluetooth/AirPlay）は審査待ちの間の残タスクとして未消化のまま |
 | v2.26 | 2026-09-15 | タイトルを「RE:TR4CKS 要件定義書（Android版）」から「RE:TR4CKS 要件定義書」へ改題し、iOS対応を本編に反映。3章の対応プラットフォームをAndroid/iOS両方に更新し、3.1にiOSのメディアアクセス権限（`NSAppleMusicUsageDescription`/`MPMediaLibrary`）を追記。13.1の再生層をAndroid（Kotlin+Media3）／iOS（Swift+AVPlayer/MPMediaLibrary）の両方が入る形に更新し、13.2の「Android専用のため実装コストが半分」という判断根拠を取り消し線で無効化（前提が変わったことを明記、ただし自前実装という結論自体は維持）。13.3にiOSモジュールの責務（AVPlayerの`addPeriodicTimeObserver`による区間切り出し・フェード。Androidの ClippingConfiguration 方式とは異なる実装で、実機での精度計測はまだ未実施）を追記 |
+| v2.27 | 2026-09-26 | Android版にRevenueCat（定期購入）とAdMob（バナー広告）を導入（`feat/revenuecat-admob-android`）。無料版に広告を表示し、Pro月額購読で非表示にする方針。iOS版は`react-native-purchases`/`react-native-google-mobile-ads`を`expo.autolinking.ios.exclude`でネイティブリンクから除外（未使用の`GADDelayAppMeasurementInit`キーがInfo.plistに残る点を除き実害なし。詳細は`CLAUDE.md`）。iOS対応は将来実施予定。10.6の課金モード案内を実装済みに更新。日英プライバシーポリシー・Google Playストア掲載文・App content/Data safety回答案に広告・アプリ内購入の開示を追記（`docs/privacy-policy.md`等）。APIキー・広告ユニットID等の実際のダッシュボード設定は未実施で、`docs/revenuecat-admob-setup.md`にセットアップ手順を記録 |
+| v2.28 | 2026-09-29 | RevenueCat/AdMobの実アカウント設定を完了。AdMobアプリ登録時の「app-ads.txt確認失敗」の原因が、ストア掲載情報の「ウェブサイト」欄が自分の管理外ドメイン（`github.com/...`）だったことと判明し、`yskms.github.io/retracks/`へ変更して解決（詳細は`~/.claude/CLAUDE.md`共通ナレッジ）。AdMobアプリID・バナー広告ユニットID、RevenueCatの公開APIキーを取得しコードへ反映。Google Playの定期購入商品（アイテムID`pro`・基本プランID`monthly`、価格は米国USD 0.99を基準に自動生成、日本のみJPY 100へ手動調整）を作成しようとしたところ、Billing権限を含むビルドが1つも無いため作成自体がブロックされることが判明し、`versionCode`を3・`version`を1.1.0へ上げてローカルで`bundleRelease`を実行、内部テストへアップロードして解消。ビルド過程で2つの技術的問題を発見・解消: (1) `react-native-google-mobile-ads`v17系がExpoの`app.json`を独自形式と誤認識しビルドが落ちる不具合を、config pluginの`androidSdk: "classic"`指定で回避（`CLAUDE.md`に記録）。(2) `expo prebuild`が`--clean`なしでも`android/`の中身を丸ごと削除し、`release.jks`・`keystore.properties`自体が物理的に消えることを実地で確認（事前バックアップにより復旧、13.5節・`CLAUDE.md`に教訓を追記）。RevenueCat側のProducts（`pro:monthly`）・Entitlement（`pro`）・Offering（`current`、Package識別子は独自の`monthly`ではなくRevenueCat予約識別子`$rc_monthly`が必須と判明）を設定 |
+| v2.29 | 2026-09-29 | Pixel 11の内部テストビルド（1.1.0/versionCode 3）でRevenueCat/AdMobの実機動作確認が完了。バナー広告が表示されない不具合を`adb logcat`（UserMessagingPlatformタグ）で調査し、「プライバシーとメッセージ」でGDPR同意メッセージにRE:TR4CKSを対象アプリとして追加していなかったことが原因と判明（`no form(s) configured for the input app ID`で`AdsConsent.gatherConsent()`が失敗し、対象地域を問わず広告が一切初期化されない）。既存メッセージへ追加・公開し、反映まで10〜30分ほど待って解消。バナー表示・月額購入・購入後の広告非表示までPixel 11実機で確認済み（ライセンステスター未登録のまま購入したため、実決済が発生している可能性があり要確認）。教訓は`~/.claude/CLAUDE.md`共通ナレッジと`docs/revenuecat-admob-setup.md`に記録 |
