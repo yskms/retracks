@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import { Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,6 +16,9 @@ import { SUPPORTED_LANGUAGES } from '../src/i18n';
 import { THRESHOLD_BOUNDS, useSettings, type LanguagePreference, type TabEntry } from '../src/settings';
 import { TAB_LABEL_KEY } from '../src/tabs';
 import { colors } from '../src/theme';
+import { PRIVACY_POLICY_URL } from '../src/legalUrls';
+import { isAdPrivacyOptionsRequired, showAdPrivacyOptions } from '../src/adInit';
+import { getIsPro, onProStatusChange } from '../src/purchases';
 
 const LANGUAGE_LABEL_KEY = {
   auto: 'settings.languageAuto',
@@ -24,7 +27,6 @@ const LANGUAGE_LABEL_KEY = {
 } as const satisfies Record<LanguagePreference, string>;
 
 const LANGUAGE_OPTIONS: LanguagePreference[] = ['auto', ...SUPPORTED_LANGUAGES];
-const PRIVACY_POLICY_URL = 'https://yskms.github.io/retracks/privacy-policy.html';
 
 export default function SettingsScreen() {
   const { t } = useTranslation();
@@ -49,6 +51,31 @@ export default function SettingsScreen() {
   } = useSettings();
 
   const visibleTabCount = tabs.filter((tab) => tab.visible).length;
+
+  // 同意設定（撤回・変更）の導線は、EEA/UK/スイス等の対象地域のユーザーにのみ出す
+  const [adPrivacyOptionsRequired, setAdPrivacyOptionsRequired] = useState(false);
+  useEffect(() => {
+    isAdPrivacyOptionsRequired().then(setAdPrivacyOptionsRequired);
+  }, []);
+
+  // Pro行のヒント表示切り替え用（購読中は「広告を非表示にする」ではなく利用中である旨を出す）
+  const [isPro, setIsPro] = useState(false);
+  useEffect(() => {
+    getIsPro().then(setIsPro);
+    return onProStatusChange(setIsPro);
+  }, []);
+
+  const handleAdPrivacyOptions = async () => {
+    try {
+      await showAdPrivacyOptions();
+      // フォームを閉じた後に同意状況が変わりうる（例: 同意を撤回して
+      // privacyOptionsRequirementStatusがNOT_REQUIREDへ変わる）ため、この画面の
+      // 「同意設定」行の表示要否も併せて更新する
+      setAdPrivacyOptionsRequired(await isAdPrivacyOptionsRequired());
+    } catch {
+      Alert.alert(t('common.error'), t('settings.adPrivacyOptionsError'));
+    }
+  };
 
   // id をもとに更新関数で書き込む。▲▼は連打される種類のボタンなので、
   // 素の配列を作ってから setTabs に渡すと、レンダーが追いつかない間の
@@ -125,6 +152,22 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
+        {/* Pro（RevenueCatの定期購入）はAndroid専用。iOSはまだ購入手段が無く、
+            開いても価格取得・復元のすべてが失敗する画面になるため導線ごと隠す */}
+        {Platform.OS === 'android' && (
+          <View style={styles.card}>
+            <Pressable style={styles.linkRow} onPress={() => router.push('/pro')}>
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>{t('settings.proTitle')}</Text>
+                <Text style={styles.rowHint}>
+                  {isPro ? t('settings.proActiveHint') : t('settings.proHint')}
+                </Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          </View>
+        )}
+
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t('settings.languageSectionTitle')}</Text>
           <View style={styles.segmented}>
@@ -308,6 +351,15 @@ export default function SettingsScreen() {
             </View>
             <Ionicons name="open-outline" size={18} color={colors.textDim} />
           </Pressable>
+          {adPrivacyOptionsRequired && (
+            <Pressable style={styles.linkRow} onPress={() => void handleAdPrivacyOptions()}>
+              <View style={styles.rowText}>
+                <Text style={styles.rowLabel}>{t('settings.adPrivacyOptions')}</Text>
+                <Text style={styles.rowHint}>{t('settings.adPrivacyOptionsHint')}</Text>
+              </View>
+              <Text style={styles.chevron}>›</Text>
+            </Pressable>
+          )}
         </View>
 
         {__DEV__ && (
