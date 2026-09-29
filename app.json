@@ -36,6 +36,7 @@
     },
     "plugins": [
       "./plugins/with-ios-app-delegate-fix",
+      "./plugins/withIosSceneDelegate",
       "expo-music-library",
       [
         "expo-splash-screen",
