@@ -56,8 +56,22 @@ async function ensureSdkInitialized(): Promise<void> {
 }
 
 async function setupAds(): Promise<boolean> {
-  // 同意情報の更新＋必要なら同意フォーム表示（圏外なら何も出ない）
-  const consentInfo = await AdsConsent.gatherConsent();
+  let consentInfo: {
+    canRequestAds: boolean;
+    privacyOptionsRequirementStatus: AdsConsentPrivacyOptionsRequirementStatus;
+  };
+  try {
+    // 同意情報の更新＋必要なら同意フォーム表示（圏外なら何も出ない）
+    consentInfo = await AdsConsent.gatherConsent();
+  } catch (error) {
+    // gatherConsent()（内部のrequestConsentInfoUpdate）が失敗しても、即座に
+    // 広告不可と決めつけない。UMPは前回セッションの同意ステータスを保持しているため、
+    // Google公式ガイド推奨の通りgetConsentInfo()でそれを読み、まだ有効な同意が
+    // 残っていれば広告をリクエストする（自前でキャッシュを持つのではなく、UMP自身が
+    // 保持している状態を読むだけ）。これも失敗したら呼び出し元のcatchに委ねる。
+    console.warn('[AdInit] gatherConsent() failed, falling back to getConsentInfo():', error);
+    consentInfo = await AdsConsent.getConsentInfo();
+  }
   const canRequestAds = applyConsentInfo(consentInfo);
 
   // 同意が得られていない場合は広告をリクエストしない
