@@ -4,8 +4,8 @@
   現時点でAndroidにのみ導入している。iOS版はまだ課金・広告を提供しない。
 - そのため `package.json` の `expo.autolinking.ios.exclude` で、この2パッケージを
   **iOSのオートリンクから明示的に除外している**。これを外すと、iOSのXcodeビルドに
-  GoogleMobileAds/PurchasesのPodが混ざり、`Xcode 26.3`の既知の問題やビルド時間に
-  悪影響が出るおそれがある。iOS対応を追加する際は、この除外設定を消すのではなく、
+  GoogleMobileAds/PurchasesのPodが混ざり、ビルド時間や依存関係に悪影響が出るおそれがある。
+  iOS対応を追加する際は、この除外設定を消すのではなく、
   `purchases.ios.ts` / `adInit.ios.ts` / `AdBanner.ios.tsx` の中身を実装に差し替えること。
 - `app.json` の `react-native-google-mobile-ads` プラグインには `androidAppId` のみを
   設定し、`iosAppId` は意図的に渡していない（プラグイン側は未指定なら黙ってiOSの
@@ -38,7 +38,7 @@
 
 ## iOSビルド
 
-- 現在のローカル環境はXcode 27（M4 MacBook Air）。
+- 現在のローカル環境はXcode 27（M4 MacBook Air、2026-09下旬に移行）。
 - **Xcode 27 / iOS 27 SDKでビルドしたアプリは、UISceneライフサイクルに対応していないと
   起動直後にクラッシュする**（`___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`）。
   Appleが2025年のWWDC25で予告済みの正式な仕様変更で、環境不備ではない。Expo 57 /
@@ -57,6 +57,18 @@
     2026-09-30時点のローカルビルドでは再現しなかった。Pod追加時に再発する可能性はある。
   - 2026-09-30、`expo prebuild` → `expo run:ios`（Xcode 27、iOS Simulator）で
     ビルド成功・crash無し・dev-clientからのJSバンドル読み込みとアプリ本体の表示まで確認済み。
+    署名付きローカルビルド（`eas build --local`）・実機確認はまだ（ウィジェットの実機確認と
+    まとめて行う予定）。
+- （旧Mac・Xcode 26.3時点の既知問題）Xcode 26.3には`expo-modules-jsi`のヘッダーで
+  コンパイルが失敗する既知のビルド問題があった（2026-09-14のEAS Build、Xcode 26.6
+  ＋パッチなしのオリジナルヘッダーでビルド成功を確認済み）。新Mac（Xcode 27）への
+  移行によりこの具体的な問題自体の再現環境は無くなったが、「Apple SDKのヘッダーへ
+  パッチを当てて回避しない」という方針は今後も維持すること。
+- 既にストア審査を通過したバージョン（例: 1.0.0）に対して新しいビルドをTestFlight/審査へ
+  提出する場合は、`app.json`の`version`（マーケティングバージョン）を必ず引き上げること。
+  `eas.json`が`appVersionSource: "remote"`でbuildNumberを自動採番していても、
+  versionが同じままだとApple側で`ITMS-90186`/`ITMS-90062`によりリジェクトされる
+  （2026-09-24、1回分のビルド・提出を無駄にして判明）。
 - `react-native-google-mobile-ads`をv17系で使う場合、config pluginに
   `"androidSdk": "classic"`を明示指定すること。指定しないと、ライブラリ側の
   `android/app-json.gradle`がExpoの`app.json`（`{"expo": {...}}`構造）を、この
@@ -78,3 +90,39 @@
   `android/app/build.gradle`の署名設定（`keystorePropertiesFile`の読み込みと
   `signingConfigs.release`/`buildTypes.release.signingConfig`）を手動で
   再配線すること（詳細は`docs/requirements.md` 13.5節）。
+
+## iOSウィジェット（`'widget'`ディレクティブの制約）
+
+- `expo-widgets`の`createWidget()`に渡す、関数本体先頭に`'widget';`と書く関数は、
+  `babel-preset-expo`のwidgets-pluginによって**関数本体だけがソース文字列化**される
+  （クロージャ捕捉もスコープ巻き上げも無い）。この文字列がネイティブ側で
+  `JSContext`に単独evaluateされて実行される（`WidgetsJSRuntime.swift`）。
+- そのため、**関数の外にあるものは一切参照できない**。import・モジュールスコープの
+  定数やヘルパー関数を参照すると、実機で`ReferenceError`になる。使えるのは
+  `props`/`environment`と、ウィジェットランタイムが`globalThis`へ載せる
+  `@expo/ui/swift-ui`のコンポーネント・modifiers・React・react-nativeスタブだけ。
+  色などの定数は関数の中で完結させて定義すること（例: `widgets/NowPlayingWidget.tsx`）。
+- この失敗はRELEASEビルドでは無言で`EmptyView()`になり（`expo-widgets`の
+  `DynamicView.swift`）、ホーム画面のウィジェットが真っ黒になる以外の手がかりが
+  一切出ない。`tsc`はこの種の失敗を検出できない（型としては正しいimportのため）。
+- 事前チェック方法：変換後の関数文字列に、使っている変数の定義が実際に含まれているかを
+  babelで直接確認できる（正規表現でその場所だけ抜き出そうとすると、コメントや文字列に
+  バッククォートが含まれた時に途中で切れて誤判定するので、変換結果全体をそのまま出力する）。
+  ```
+  node -e "
+  const babel = require('@babel/core');
+  const { widgetsPlugin } = require('babel-preset-expo/build/plugins/widgets-plugin');
+  const src = require('fs').readFileSync('widgets/NowPlayingWidget.tsx', 'utf8');
+  const out = babel.transformSync(src, {
+    filename: 'w.tsx',
+    presets: [['@babel/preset-typescript', { isTSX: true, allExtensions: true }]],
+    plugins: [widgetsPlugin], babelrc: false, configFile: false,
+  }).code;
+  console.log(out);
+  "
+  ```
+  出力全体を目視し、参照している変数がすべて`props`/`environment`／この中で定義した
+  もの／ランタイム提供のAPIであることを確認する。
+- 2026-09-24、この制約に気づかずEASビルドを3回消費して原因特定した
+  （`containerBackground`のiOS 17未満での挙動という別の実在する問題と重なっていたため
+  特定が長引いた。詳細はdocs/ios-release-checklist.md「実機確認の経緯」参照）。

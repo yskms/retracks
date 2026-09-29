@@ -1,9 +1,11 @@
 # RE:TR4CKS 要件定義書
 
-- バージョン: v2.26
-- 更新日: 2026-09-15
-- ステータス: Android版 1.0.0 は Google Play 審査提出済み（2026-09-13）。iOS版 1.0.0（ビルド7）も
-  App Store 審査提出済み（2026-09-15）。両OSとも審査待ち
+- バージョン: v2.34
+- 更新日: 2026-09-30
+- ステータス: Android版は1.1.0（RevenueCat定期購入＋AdMobバナー広告を導入）が審査通過・
+  公開済み（2026-09-29）。iOS版は1.0.0（ビルド7、2026-09-15審査提出）が公開中の最新版で、
+  ホーム画面ウィジェット（表示専用v1）・RevenueCat/AdMob（iOS版は将来対応）は`main`へ
+  統合済みだが未リリース。開発機をM4 MacBook Air（Xcode 27）へ移行済み
 
 > Remember. Replay. Rediscover. Revisit.
 
@@ -459,6 +461,39 @@ Pulsar のメディアカードが代わりに表示される。アプリを一�
 実際に投稿されている通知の中身（`dumpsys notification` の `channel=` /
 `actions=` / `category=` / `vis=`）を、正常に動いている他アプリ（今回は Pulsar）
 と見比べて初めて「仮通知のまま固定されている」ことが分かった。
+
+### ホーム画面ウィジェット
+
+**Android**：`RetracksWidgetProvider.kt`（→ 13.3）。アートワーク・曲名・
+アーティスト名に加え、リピート・前の曲・再生/一時停止・次の曲・「この曲を
+最初から」の5操作を持つ。`PlaybackService`のイベントで即座に更新され、
+プロセスが完全に終了していてもタップから`startForegroundService`で復元
+できる（→ 8章冒頭、13.3）。
+
+**iOS**（2026-09-15追加、`feat/ios-widget`）：`widgets/NowPlayingWidget.tsx`。
+**表示専用**（アートワーク・曲名・アーティスト名のみ、操作ボタンなし。
+タップでアプリを開く）。以下の理由でAndroidと意図的にスコープを変えている：
+
+- 再生操作自体はLock Screen / Control Center（`MPRemoteCommandCenter`。
+  `RetracksPlayerModule.swift`の`installRemoteCommands()`）で既に提供済み
+- iOSのWidgetKitには、Androidの`startForegroundService`のような
+  「完全に終了したプロセスをウィジェットのタップから蘇生させる」手段が無い
+- インタラクティブなウィジェットボタン（iOS 17+限定）は「アプリがバック
+  グラウンドで生きている間だけ確実に動く」という、Androidと異なる制約が
+  あり実機検証にも工数がかかるため、v1では見送った（次期フォローアップ）
+
+実装は公式`expo-widgets`パッケージ（`expo: ~57.0.19`と同一バージョン、
+SDK公式）のConfigプラグインでXcodeウィジェット拡張ターゲットと
+App Group entitlementを自動生成する方式。ウィジェットUIはSwiftUIではなく
+TSX（`@expo/ui/swift-ui`のコンポーネント、`'widget'`ディレクティブ）で書く。
+データはprops経由（`Widget.updateSnapshot()`）、アートワークは
+`RetracksPlayer.getArtworkDataUri()`で取得しApp Group共有ディレクトリ
+（`expo-widgets`の`widgetsDirectory`）へJPEGとして書き出す（`src/widgetSync.ios.ts`。
+同じ曲では書き込みをスキップし、Android版ウィジェットの教訓
+「切り替わるたびにデコードし直すとネイティブメモリを消費する」→ 13.5
+を踏まえた設計）。Android向けには同名の空実装（`src/widgetSync.ts`）を
+置き、`src/playback.tsx`の`onTrackChange`ハンドラからOSを問わず同じ
+関数を呼べるようにしている。
 
 ---
 
@@ -1095,6 +1130,82 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
   - 教訓：このモジュールで「JS側に対処を入れたのに体感が変わらない」ときは、
     まず `getStatus()` がネイティブ側のポーリング間隔ぶん古い値を返している
     可能性を疑う
+- **iOSのローカルビルドがXcode 26.3で失敗する（`expo-modules-jsi`側のバグ、
+  この端末では26.6へ上げられない）**（2026-09-15〜18、`feat/ios-widget`
+  ブランチの実機確認中に発覚）
+  - 症状：`npx expo run:ios`が`node_modules/expo-modules-jsi/apple/Sources/ExpoModulesJSI-Cxx/include/RuntimeScheduler.h`
+    の53・61行目で失敗する。「`'RuntimeScheduler' cannot be annotated with
+    either SWIFT_RETURNS_RETAINED or SWIFT_RETURNS_UNRETAINED because it is
+    not returning a SWIFT_SHARED_REFERENCE type」。クラス自体は
+    `SWIFT_SHARED_REFERENCE(retainRuntimeScheduler, releaseRuntimeScheduler)`
+    で正しく注釈されている（マクロがクラス本体の閉じ括弧の後ろに付いている
+    形）
+  - 切り分け：`feat/ios-widget`だけでなく`main`ブランチでも同一箇所で再現
+    することを実機ビルドで確認済み。`expo-widgets`（ウィジェット用の新しい
+    Xcodeターゲットを生成するConfigプラグイン）を追加したことが原因という
+    仮説は誤りだった。`expo-modules-jsi`はCocoaPodsのビルドフェーズ内で
+    SPMパッケージとして独立ビルドされる（`apple/scripts/build-xcframework.sh`）
+    ため、ウィジェットの有無に関わらず常にこの経路を通る
+  - 試して効かなかったこと：`SWIFT_SHARED_REFERENCE`マクロを`class`宣言の
+    直後（`class SWIFT_SHARED_REFERENCE(...) RuntimeScheduler {`）に移動する
+    パッチ。ビルドスクリプトのハッシュキャッシュ（ソース内容＋Swiftツール
+    チェーンのバージョン文字列で決まる）が実際に変化を検知して再ビルド
+    したことをログで確認した上で、それでも同じ場所で同じエラーが再現した
+  - 真因の特定：`node_modules`内で`swift-tools-version`を要求する
+    `Package.swift`を持つ依存は`expo-modules-jsi`ただ1つ（`expo-widgets`や
+    `@expo/ui`は持たない）で、`6.2`を要求している。2026-09-14に
+    App Store提出（ビルド7）で使われたEASのビルドログ
+    （`eas build:view <id> --json`の`artifacts.xcodeBuildLogsUrl`、GCSの
+    署名付きURLでbrotli圧縮。`pip install brotli`で解凍して閲覧）を確認した
+    ところ、**Xcode 26.6（Build 17F113、VMテンプレート
+    "macos-tahoe-26.5-xcode-26.6"）でパッチなしの同じヘッダーのまま成功**
+    していた。つまりXcode 26.3固有のコンパイラ不具合で、26.6ではAppleが
+    直している
+  - **この端末では解決できない**：Xcode 26.6はmacOS Tahoe 26.2以降を要求する
+    （Apple公式のシステム要件）。この端末はmacOS Sequoia 15.8で運用する
+    方針（M1 Air 8GBを軽量に保つため）のため、Tahoeへは意図的に上げない。
+    Xcode 16.2（旧）は`<swift/bridging>`に`SWIFT_RETURNS_RETAINED`マクロ
+    自体が存在せず別のエラーになる上、`expo-modules-jsi`が要求する
+    `swift-tools-version: 6.2`も満たせないため後戻りの選択肢にもならない
+  - **方針**：普段のローカルiOS開発（ビルドが通る範囲）はXcode 26.3のまま
+    継続。この不具合に当たるビルド（少なくとも`expo-modules-jsi`を含む
+    ネイティブ再ビルドが必要なとき）はEAS（Xcode 26.6環境）を使う。
+    Expoへのバグ報告はまだ未実施
+  - **iOSホーム画面ウィジェット（`feat/ios-widget`）の開発は、Android・iOS
+    両方のストア審査が終わるまで一時停止**。実機確認にはEASビルドが要るが、
+    審査待ち中に新しいビルド・提出操作を挟むのは避ける判断とした
+  - **（2026-09-30追記、超過履歴）**：M1 Air 8GBから新Mac（M4 MacBook Air、
+    Xcode 27）へ移行し、上記の制約（Xcode 26.3固有のコンパイラ不具合、
+    Tahoeへ上げられない事情）自体が解消。ただしXcode 27では別の既知問題
+    （UISceneライフサイクル必須化）があり、`plugins/withIosSceneDelegate.js`
+    で対応済み（→ 13.4後半に追記、`CLAUDE.md`「iOSビルド」参照）
+
+### 13.4 続き：Xcode 27移行後のiOSローカルビルド（2026-09-30、新Mac）
+
+新Mac（M4 MacBook Air、Xcode 27）でのiOSローカルビルドを検証したところ、
+上記のXcode 26.3固有問題は再現しなかった（Xcode本体が置き換わったため）。
+一方、Xcode 27 / iOS 27 SDK特有の別の問題として、UISceneライフサイクル
+未対応による起動直後のクラッシュ（`___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`。
+Appleが2025年のWWDC25で予告済みの正式な仕様変更）を実機（Simulator）で確認した。
+Expo 57 / React Native 0.86.3時点ではExpo・RN本体ともに公式のシーン対応が
+未実装のため、姉妹プロジェクトfilto-appで先に確立されていた対応方法
+（`plugins/withIosSceneDelegate.js`によるAppDelegate/SceneDelegateへの
+シーン対応の注入）を移植して解消した。retracksのAppDelegate.swiftが
+`internal import Expo`で生成される点がfiltoと異なり、移植したSceneDelegate.swift
+側のimportも同じアクセスレベルに揃える必要があった（揃えないとSwiftが
+"ambiguous implicit access level"でビルドエラーにする）。
+
+filto-appが合わせて踏んでいた、Xcode 27が`IPHONEOS_DEPLOYMENT_TARGET`
+15.0未満のPodのビルドを拒否する問題は、retracksでは再現しなかった
+（RevenueCat/AdMobをiOS autolinkingから除外済みのためと見られる。
+将来iOSにもこの2パッケージを導入する際は再発の可能性がある）。
+
+修正後、`expo prebuild` → `expo run:ios`（iOS Simulator）でビルド成功・
+crash無し、dev-client経由でMetroからJSバンドルを読み込みアプリ本体
+（楽曲一覧・Apple Music権限ダイアログ）が表示されるところまで確認済み。
+署名付きのローカルビルド（`eas build --local`）・実機での確認はまだ
+行っておらず、iOSウィジェット（`feat/ios-widget`）の実機確認と合わせて
+実施する予定。
 
 ### 13.5 リリース準備（安定性向上）
 
@@ -1493,7 +1604,11 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
 | v2.24 | 2026-09-14 | GitHub Pages上にアプリのサポートランディングページ（`docs/index.html`）を追加。App Store／Google Play双方が要求するサポートURLとして使用 |
 | v2.25 | 2026-09-15 | iOS版1.0.0（ビルド7）をApp Storeの審査へ提出。日英の掲載文・プロモーション文・キーワード・審査用メモ・実機操作の画面収録を`docs/ios-app-store-listing.md`にまとめ、App Privacy（収集データなし）・スクリーンショット・Android限定機能（通知操作／指定フォルダ除外／ホーム画面ウィジェット）を掲載文へ含めない旨を確認。TestFlightビルド7で実機確認済み（ビルド4はITMS-90683でリジェクト、ビルド5・6は修正確認用）。`docs/ios-release-checklist.md`のApp Store Connect関連項目をすべて完了に更新。オンデバイスQA（フェード精度・電話/Siri割り込み・Bluetooth/AirPlay）は審査待ちの間の残タスクとして未消化のまま |
 | v2.26 | 2026-09-15 | タイトルを「RE:TR4CKS 要件定義書（Android版）」から「RE:TR4CKS 要件定義書」へ改題し、iOS対応を本編に反映。3章の対応プラットフォームをAndroid/iOS両方に更新し、3.1にiOSのメディアアクセス権限（`NSAppleMusicUsageDescription`/`MPMediaLibrary`）を追記。13.1の再生層をAndroid（Kotlin+Media3）／iOS（Swift+AVPlayer/MPMediaLibrary）の両方が入る形に更新し、13.2の「Android専用のため実装コストが半分」という判断根拠を取り消し線で無効化（前提が変わったことを明記、ただし自前実装という結論自体は維持）。13.3にiOSモジュールの責務（AVPlayerの`addPeriodicTimeObserver`による区間切り出し・フェード。Androidの ClippingConfiguration 方式とは異なる実装で、実機での精度計測はまだ未実施）を追記 |
-| v2.27 | 2026-09-26 | Android版にRevenueCat（定期購入）とAdMob（バナー広告）を導入（`feat/revenuecat-admob-android`）。無料版に広告を表示し、Pro月額購読で非表示にする方針。iOS版は`react-native-purchases`/`react-native-google-mobile-ads`を`expo.autolinking.ios.exclude`でネイティブリンクから除外（未使用の`GADDelayAppMeasurementInit`キーがInfo.plistに残る点を除き実害なし。詳細は`CLAUDE.md`）。iOS対応は将来実施予定。10.6の課金モード案内を実装済みに更新。日英プライバシーポリシー・Google Playストア掲載文・App content/Data safety回答案に広告・アプリ内購入の開示を追記（`docs/privacy-policy.md`等）。APIキー・広告ユニットID等の実際のダッシュボード設定は未実施で、`docs/revenuecat-admob-setup.md`にセットアップ手順を記録 |
-| v2.28 | 2026-09-29 | RevenueCat/AdMobの実アカウント設定を完了。AdMobアプリ登録時の「app-ads.txt確認失敗」の原因が、ストア掲載情報の「ウェブサイト」欄が自分の管理外ドメイン（`github.com/...`）だったことと判明し、`yskms.github.io/retracks/`へ変更して解決（詳細は`~/.claude/CLAUDE.md`共通ナレッジ）。AdMobアプリID・バナー広告ユニットID、RevenueCatの公開APIキーを取得しコードへ反映。Google Playの定期購入商品（アイテムID`pro`・基本プランID`monthly`、価格は米国USD 0.99を基準に自動生成、日本のみJPY 100へ手動調整）を作成しようとしたところ、Billing権限を含むビルドが1つも無いため作成自体がブロックされることが判明し、`versionCode`を3・`version`を1.1.0へ上げてローカルで`bundleRelease`を実行、内部テストへアップロードして解消。ビルド過程で2つの技術的問題を発見・解消: (1) `react-native-google-mobile-ads`v17系がExpoの`app.json`を独自形式と誤認識しビルドが落ちる不具合を、config pluginの`androidSdk: "classic"`指定で回避（`CLAUDE.md`に記録）。(2) `expo prebuild`が`--clean`なしでも`android/`の中身を丸ごと削除し、`release.jks`・`keystore.properties`自体が物理的に消えることを実地で確認（事前バックアップにより復旧、13.5節・`CLAUDE.md`に教訓を追記）。RevenueCat側のProducts（`pro:monthly`）・Entitlement（`pro`）・Offering（`current`、Package識別子は独自の`monthly`ではなくRevenueCat予約識別子`$rc_monthly`が必須と判明）を設定 |
-| v2.29 | 2026-09-29 | Pixel 11の内部テストビルド（1.1.0/versionCode 3）でRevenueCat/AdMobの実機動作確認が完了。バナー広告が表示されない不具合を`adb logcat`（UserMessagingPlatformタグ）で調査し、「プライバシーとメッセージ」でGDPR同意メッセージにRE:TR4CKSを対象アプリとして追加していなかったことが原因と判明（`no form(s) configured for the input app ID`で`AdsConsent.gatherConsent()`が失敗し、対象地域を問わず広告が一切初期化されない）。既存メッセージへ追加・公開し、反映まで10〜30分ほど待って解消。バナー表示・月額購入・購入後の広告非表示までPixel 11実機で確認済み（ライセンステスター未登録のまま購入したため、実決済が発生している可能性があり要確認）。教訓は`~/.claude/CLAUDE.md`共通ナレッジと`docs/revenuecat-admob-setup.md`に記録 |
-| v2.30 | 2026-09-29 | Android版1.1.0（versionCode 3）を製品版として審査提出・公開。App content（広告・データセーフティ）の申告更新、`docs/privacy-policy.md`の施行日更新、`docs/google-play-listing.md`への1.1.0リリースノート追加を経て`feat/revenuecat-admob-android`を`main`へマージ・push。審査は短時間で通過し公開完了。RevenueCat/AdMob導入（v2.27〜）が本番環境で稼働開始 |
+| v2.27 | 2026-09-15 | iOSホーム画面ウィジェット（表示専用・v1）を追加（`feat/ios-widget`）。公式`expo-widgets`パッケージ（Configプラグインが自動でXcodeウィジェット拡張ターゲット＋App Group entitlementを生成）を採用し、UIはSwiftUIではなくTSX（`@expo/ui/swift-ui`、`'widget'`ディレクティブ）で`widgets/NowPlayingWidget.tsx`として実装。アートワーク・曲名・アーティスト名のみを表示しタップでアプリを開く（再生操作ボタンは無し。理由はLock Screen/Control Centerで既に提供済み、iOSにはAndroidの`startForegroundService`に相当するプロセス蘇生手段が無い、インタラクティブボタンはiOS17+限定かつ実機検証が別途必要、の3点で8章に記録）。曲の切り替わり（`onTrackChange`）ごとに`src/widgetSync.ios.ts`がアートワークをApp Group共有ディレクトリへJPEGで書き出し`updateSnapshot()`を呼ぶ（同じ曲では書き込みをスキップ。Android版ウィジェットの重複デコード教訓を踏まえた設計）。Android向けには空実装の`src/widgetSync.ts`を用意し、`playback.tsx`側はOSを問わず同じ関数を呼ぶ。`npx tsc --noEmit`・i18nキー検査は通過。実機（EASビルド）での確認は未実施 |
+| v2.28 | 2026-09-18 | iOSローカルビルドがXcode 26.3で失敗する不具合を調査し13.4に記録。`expo-modules-jsi`のRuntimeSchedulerヘッダーがSwiftのC++連携チェックに引っかかる問題で、`feat/ios-widget`・`main`両方で再現（ウィジェット追加が原因という仮説は誤りと判明）。ヘッダーへの修正パッチは効果なしと実機ビルドで確認済み。EASの実際のビルドログ（2026-09-14提出のビルド7）を解析し、Xcode 26.6ではパッチ無しで成功することを確認、原因はXcode 26.3固有のコンパイラ不具合と特定。Xcode 26.6はmacOS Tahoe 26.2以降が必要でこの端末（Sequoia 15.8、意図的に維持）にはインストール不可と判明したため、ローカル開発はXcode 26.3を継続しつつ、この不具合に当たるiOSビルドはEAS（Xcode 26.6）を使う方針を確定。あわせて、iOSウィジェット開発（`feat/ios-widget`）はAndroid・iOS両ストアの審査が終わるまで一時停止することを決定 |
+| v2.29 | 2026-09-26 | Android版にRevenueCat（定期購入）とAdMob（バナー広告）を導入（`feat/revenuecat-admob-android`）。無料版に広告を表示し、Pro月額購読で非表示にする方針。iOS版は`react-native-purchases`/`react-native-google-mobile-ads`を`expo.autolinking.ios.exclude`でネイティブリンクから除外（未使用の`GADDelayAppMeasurementInit`キーがInfo.plistに残る点を除き実害なし。詳細は`CLAUDE.md`）。iOS対応は将来実施予定。10.6の課金モード案内を実装済みに更新。日英プライバシーポリシー・Google Playストア掲載文・App content/Data safety回答案に広告・アプリ内購入の開示を追記（`docs/privacy-policy.md`等）。APIキー・広告ユニットID等の実際のダッシュボード設定は未実施で、`docs/revenuecat-admob-setup.md`にセットアップ手順を記録 |
+| v2.30 | 2026-09-29 | RevenueCat/AdMobの実アカウント設定を完了。AdMobアプリ登録時の「app-ads.txt確認失敗」の原因が、ストア掲載情報の「ウェブサイト」欄が自分の管理外ドメイン（`github.com/...`）だったことと判明し、`yskms.github.io/retracks/`へ変更して解決（詳細は`~/.claude/CLAUDE.md`共通ナレッジ）。AdMobアプリID・バナー広告ユニットID、RevenueCatの公開APIキーを取得しコードへ反映。Google Playの定期購入商品（アイテムID`pro`・基本プランID`monthly`、価格は米国USD 0.99を基準に自動生成、日本のみJPY 100へ手動調整）を作成しようとしたところ、Billing権限を含むビルドが1つも無いため作成自体がブロックされることが判明し、`versionCode`を3・`version`を1.1.0へ上げてローカルで`bundleRelease`を実行、内部テストへアップロードして解消。ビルド過程で2つの技術的問題を発見・解消: (1) `react-native-google-mobile-ads`v17系がExpoの`app.json`を独自形式と誤認識しビルドが落ちる不具合を、config pluginの`androidSdk: "classic"`指定で回避（`CLAUDE.md`に記録）。(2) `expo prebuild`が`--clean`なしでも`android/`の中身を丸ごと削除し、`release.jks`・`keystore.properties`自体が物理的に消えることを実地で確認（事前バックアップにより復旧、13.5節・`CLAUDE.md`に教訓を追記）。RevenueCat側のProducts（`pro:monthly`）・Entitlement（`pro`）・Offering（`current`、Package識別子は独自の`monthly`ではなくRevenueCat予約識別子`$rc_monthly`が必須と判明）を設定 |
+| v2.31 | 2026-09-29 | Pixel 11の内部テストビルド（1.1.0/versionCode 3）でRevenueCat/AdMobの実機動作確認が完了。バナー広告が表示されない不具合を`adb logcat`（UserMessagingPlatformタグ）で調査し、「プライバシーとメッセージ」でGDPR同意メッセージにRE:TR4CKSを対象アプリとして追加していなかったことが原因と判明（`no form(s) configured for the input app ID`で`AdsConsent.gatherConsent()`が失敗し、対象地域を問わず広告が一切初期化されない）。既存メッセージへ追加・公開し、反映まで10〜30分ほど待って解消。バナー表示・月額購入・購入後の広告非表示までPixel 11実機で確認済み（ライセンステスター未登録のまま購入したため、実決済が発生している可能性があり要確認）。教訓は`~/.claude/CLAUDE.md`共通ナレッジと`docs/revenuecat-admob-setup.md`に記録 |
+| v2.32 | 2026-09-29 | Android版1.1.0（versionCode 3）を製品版として審査提出・公開。App content（広告・データセーフティ）の申告更新、`docs/privacy-policy.md`の施行日更新、`docs/google-play-listing.md`への1.1.0リリースノート追加を経て`feat/revenuecat-admob-android`を`main`へマージ・push。審査は短時間で通過し公開完了。RevenueCat/AdMob導入（v2.27〜）が本番環境で稼働開始 |
+| v2.33 | 2026-09-30 | M1 Air 8GBから新Mac（M4 MacBook Air、Xcode 27）への移行に伴い、iOSローカルビルドを再検証。v2.28で記録したXcode 26.3固有の問題は解消したが、Xcode 27 / iOS 27 SDK特有のUISceneライフサイクル必須化による起動直後のクラッシュ（`___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`）を実機（Simulator）で確認。姉妹プロジェクトfilto-appの対応（`plugins/withIosSceneDelegate.js`）を移植して解消した（retracksはAppDelegate.swiftが`internal import Expo`で生成される点がfiltoと異なり、importのアクセスレベルを合わせる調整が必要だった）。filtoが合わせて踏んでいたPodのdeployment target問題は、RevenueCat/AdMobをiOS autolinkingから除外済みのため再現せず。`expo prebuild` → `expo run:ios`でビルド成功、dev-client経由でのJSバンドル読み込み・アプリ本体表示まで確認済み。署名付きローカルビルド・実機確認は次のv2.34（ウィジェットマージ）の実機確認とあわせて実施予定。詳細は13.4・`CLAUDE.md`「iOSビルド」 |
+| v2.34 | 2026-09-30 | `feat/ios-widget`（v2.27・v2.28、iOSホーム画面ウィジェットv1）を`main`へマージ。両ブランチが独立に追記していた`CLAUDE.md`・本書・`docs/ios-release-checklist.md`のiOS関連記述を、片方を機械的に採用せず内容を統合する形で手動解消。ウィジェット機能自体の実機確認（EASビルド）はまだ未実施のまま引き継ぎ |
