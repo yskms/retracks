@@ -1,10 +1,6 @@
 # RE:TR4CKS Privacy Policy / プライバシーポリシー
 
-Effective date / 施行日: September 14, 2026 / 2026年9月14日
-
-<!-- TODO: Android版に広告（AdMob）と定期購入（RevenueCat）を追加するリリースを
-     公開する時点で、本文の更新に合わせてこの施行日も実際の公開日へ更新すること。
-     docs/revenuecat-admob-setup.md 参照。 -->
+Effective date / 施行日: September 29, 2026 / 2026年9月29日
 
 ## 日本語
 
