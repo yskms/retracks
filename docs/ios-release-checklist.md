@@ -68,8 +68,8 @@
 **実機確認完了（2026-09-30）**：`eas build --local --profile production`でローカル署名
 ビルドを作成し、`eas submit -p ios --path <ipa> --profile production`でTestFlightへ
 アップロード。iPhone 8はこのMac（M4 MacBook Air）とXcode経由で直接ペアリングできない
-既知の制約（詳細は`~/.claude/CLAUDE.md`「ローカル開発環境」参照）があるため、ad-hoc配布や
-ローカルインストールは行わず、TestFlightアプリ経由でのインストールに最初から切り替えた。
+ため、ad-hoc配布やローカルインストールは行わず、TestFlightアプリ経由での
+インストールに最初から切り替えた。
 iPhone 8で表示・タップ（アプリが開く）・idle状態（時間経過後もアートワーク・曲名が
 正しいまま）をすべて確認済み。
 

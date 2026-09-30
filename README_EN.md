@@ -8,7 +8,7 @@ Offline music player for rediscovering your local music.
 
 ## What is this
 
-An Android music player for the music files already on your device.
+A music player for local files already on your Android or iOS device.
 It exists to solve one problem: you own thousands of tracks but keep hearing the same few.
 
 Two ideas carry the app.
@@ -33,10 +33,12 @@ reached yet, so they surface without waiting for a full cycle.
 
 ## Status
 
-**Preparing the Android 1.0.0 release candidate.**
+**Android 1.1.0 is released. The iOS release is also available and actively maintained.**
 
 Design decisions and the reasoning behind them live in the
 [requirements document](docs/requirements.md) (Japanese).
+For a concise project timeline and current priorities, see the
+[development history](docs/development-history.md) (Japanese).
 See the [privacy policy](docs/privacy-policy.md) for privacy details.
 
 ## Technical notes
@@ -51,7 +53,7 @@ See the [privacy policy](docs/privacy-policy.md) for privacy details.
 - Fades compensate for the audio write-ahead: `player.volume` applies to samples about to
   be written, not to what is currently audible, so the gain is computed from a
   look-ahead position
-- Android only. Local files only. No network required
+- Android and iOS. Playback is limited to local music on the device
 
 ## Development
 
@@ -73,6 +75,8 @@ npx expo run:android
 | `src/shuffle.ts` | Shuffle permutation and cycle persistence |
 | `src/library.ts` | Library scanning and caching |
 | `docs/requirements.md` | Requirements document (Japanese) |
+| `docs/development-history.md` | Milestones and release history (Japanese) |
+| `docs/README.md` | Public documentation index (Japanese) |
 
 ## Naming
 

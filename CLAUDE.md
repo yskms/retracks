@@ -19,7 +19,7 @@
 - `src/purchasesConfig.ts` の `REVENUECAT_API_KEY_ANDROID`、`src/adConfig.ts` の
   本番用`AD_UNIT_ID`、`app.json` の `androidAppId` は2026-09-27〜29にかけて
   実際の値へ差し替え済み（RevenueCat/AdMobダッシュボードでの手順は
-  `docs/revenuecat-admob-setup.md` 参照）。
+  `docs/private/revenuecat-admob-setup.md` 参照）。
   - `src/purchasesConfig.ts`の`ENTITLEMENT_ID`（`pro`）、Play Console側の定期購入
     商品（アイテムID`pro`・基本プランID`monthly`）、RevenueCat側の紐付け
     （Products `pro:monthly` → Entitlement `pro` → Offering `current`）は

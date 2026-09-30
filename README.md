@@ -8,7 +8,7 @@ Offline music player for rediscovering your local music.
 
 ## これは何
 
-端末内のローカル音楽ファイルを対象にした Android 向け音楽プレイヤー。
+端末内のローカル音楽を対象にした Android / iOS 向け音楽プレイヤー。
 「大量に持っているのに、いつも同じ曲しか聴いていない」を解きほぐすことを狙っている。
 
 軸になる体験は2つ。
@@ -32,9 +32,10 @@ OFF にすれば普通の音楽プレイヤーとして使える。
 
 ## 状態
 
-**Android版 1.0.0 のリリース候補を準備中。**
+**Android版 1.1.0を公開済み。iOS版も公開・更新を継続中。**
 
 設計の経緯と決定事項は [要件定義書](docs/requirements.md) に集約している。
+開発の流れと現在地は [開発履歴](docs/development-history.md) に短くまとめている。
 プライバシーに関する説明は[プライバシーポリシー](docs/privacy-policy.md)を参照。
 
 ## 技術的なところ
@@ -44,7 +45,7 @@ OFF にすれば普通の音楽プレイヤーとして使える。
   通知・イヤホンからの「次の曲」を満たせなかったため（詳細は要件定義書 13.2）
 - 区間の切り出しは `MediaItem.ClippingConfiguration` に委ね、ExoPlayer 自身に
   サンプル単位で切らせている
-- Android 専用。ローカルファイルのみで、ネットワークを必要としない
+- Android / iOS対応。再生対象は端末内のローカル音楽
 
 ## 開発
 
@@ -66,6 +67,8 @@ npx expo run:android
 | `src/shuffle.ts` | シャッフルの順列と1巡状態の永続化 |
 | `src/library.ts` | 曲一覧の走査とキャッシュ |
 | `docs/requirements.md` | 要件定義書 |
+| `docs/development-history.md` | マイルストーンとリリース履歴 |
+| `docs/README.md` | 公開ドキュメントの案内 |
 
 ## 名前について
 
