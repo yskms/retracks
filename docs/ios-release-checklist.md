@@ -28,7 +28,14 @@
 - [x] Android向け空実装（`src/widgetSync.ts`）を用意し、`playback.tsx`からOSを問わず同じ関数を呼べるようにした
 - [x] `npx tsc --noEmit`・i18nキー検査
 - [x] EASビルド→実機（iPhone 8）でホーム画面に追加し表示・タップ・idle状態を確認（2026-09-30）
-- [ ] App Store掲載文・スクリーンショットからホーム画面ウィジェット除外の記載を外す（次回アップデート申請時）
+- [x] App Store掲載文・スクリーンショットからホーム画面ウィジェット除外の記載を外す（次回アップデート申請時）
+  - 掲載文（`docs/ios-app-store-listing.md`）は1.1.0向けに更新済み
+  - スクリーンショット（`06-widget.png`、en-US/en-US-6.5/ja-JP/ja-JP-6.5）はSimulator
+    （iPhone 18 Pro Max、iOS 27）で撮影して追加済み（2026-09-30）。Simulatorには
+    音楽ライブラリが無いため、App Group共有ディレクトリへダミーアートワークを直接配置し、
+    `app/debug.tsx`に一時的な`NowPlayingWidget.updateSnapshot()`呼び出しボタンを
+    追加してNow Playing表示を再現した（スクリーンショット撮影後にコードは削除済み、
+    差分なし）
 
 **実機確認の経緯（2026-09-23〜24、両ストア審査完了後に再開）**：ホーム画面に追加した
 ウィジェットが常に真っ黒になる不具合の調査でビルドを複数回消費した。

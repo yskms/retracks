@@ -2,8 +2,8 @@
 
 RE:TR4CKS iOS版のApp Store Connect入力用テキスト。
 
-初回iOS版では未実装の通知操作、指定フォルダ除外、ホーム画面ウィジェット、
-アプリ内購入・サブスクリプションを掲載文へ含めない。
+1.1.0でホーム画面ウィジェット（表示専用）を追加。通知操作、指定フォルダ除外、
+アプリ内購入・サブスクリプションはiOS版では引き続き未実装のため掲載文へ含めない。
 
 ## 共通設定
 
@@ -11,9 +11,9 @@ RE:TR4CKS iOS版のApp Store Connect入力用テキスト。
 - サポートURL: `https://yskms.github.io/retracks/`
 - マーケティングURL: `https://yskms.github.io/retracks/`
 - プライバシーポリシーURL（英語・日本語共通）: `https://yskms.github.io/retracks/privacy-policy.html`
-- バージョン: `1.0`
+- バージョン: `1.1`
 - 著作権: `2026 yskms`
-- ビルド: `7`（App Version `1.0.0`）
+- ビルド: `16`（App Version `1.1.0`）
 - サインインが必要: いいえ
 - リリース方法: 手動リリース
 - 価格: 無料
@@ -32,7 +32,9 @@ RE:TR4CKS iOS版のApp Store Connect入力用テキスト。
 - iMessageアプリ: なし
 - App Storeサーバ通知URL: なし
 - Sandboxサーバ通知URL: なし
-- 審査状況: 申請済み（2026-09-15）
+- 審査状況: TestFlightへアップロード済み（2026-09-30、ビルド16。ビルド15は
+  ローカルビルド後のsubmitが完了せず欠番）。App Store審査は未申請
+- 前回申請（1.0.0・ビルド7）: 申請済み・承認済み（2026-09-15）
 
 ## English (U.S.)
 
@@ -50,18 +52,24 @@ Rediscover Your Music
 Rediscover the music you already own. Move through forgotten tracks with adjustable Medley playback and a non-repeating shuffle.
 ```
 
+### What's New in This Version
+
+```text
+Added a home-screen widget that shows the currently playing track.
+```
+
 ### Description
 
 ```text
-Rediscover the music you already own.
+Rediscover your music with Medley playback.
+
+RE:TR4CKS is an offline music player that plays selected portions of your tracks one after another, helping you quickly rediscover forgotten music already in your library.
 
 Old favorites. Deep cuts from albums you used to love. Tracks you forgot were even in your library. Even with a large music collection, it's easy to end up listening to the same familiar songs again and again.
 
-RE:TR4CKS is an offline music player built to bring those forgotten tracks back into rotation.
+With Medley mode, you choose where playback starts and how long each track plays. RE:TR4CKS then moves through your shuffled music automatically, letting you revisit more of your collection in less time.
 
-Its signature feature is Medley mode, which plays a selected portion of each track before automatically moving on to the next. Set where playback starts and how long each track plays, then move through your shuffled music at a faster pace.
-
-Even when you don't have time to listen to every song from beginning to end, you can quickly revisit more of your collection. When something catches your attention, switch to normal playback and enjoy the full song.
+When something catches your attention, switch to normal playback and enjoy the full song.
 
 RE:TR4CKS isn't about finding new music. It's about rediscovering the music you already have.
 
@@ -75,6 +83,7 @@ Key features
 • Browse and search by song, artist, and album
 • Sorting and filters for short tracks and non-music audio
 • Background playback and lock-screen controls
+• Home-screen widget showing the currently playing track
 • Japanese and English interface
 
 Everything stays on your device
@@ -113,20 +122,22 @@ offline,medley,shuffle,local library,album,artist,background playback,rediscover
 手持ちの音楽を、もう一度。曲の一部分を次々と聴くメドレー再生と重複しないシャッフルで、忘れていた曲との再会を楽しめます。
 ```
 
+### このバージョンの新機能
+
+```text
+現在再生中の曲を表示するホーム画面ウィジェットを追加しました。
+```
+
 ### 概要
 
 ```text
-手持ちの音楽を、もう一度楽しみませんか？
+手持ちの音楽を、メドレーでもう一度。
+
+RE:TR4CKSは、曲の好きな部分を一定時間ずつ次々と再生する「メドレー」機能で、忘れていた音楽との再会を楽しむオフライン音楽プレイヤーです。
 
 昔よく聴いたアルバムの一曲、好きだったアーティストの隠れた曲、存在すら忘れていた曲。たくさんの音楽を持っていても、いつの間にか聴く曲はいつも同じになりがちです。
 
-RE:TR4CKSは、そんな手元の音楽をもう一度楽しむためのオフライン音楽プレイヤーです。
-
-特徴は、曲の一部分だけを聴いて次々と曲を切り替える「メドレー」機能です。「20秒から60秒間」のように再生する位置と長さを指定し、シャッフルした曲をテンポよく聴いていけます。
-
-一曲を最初から最後まで聴く時間がなくても、たくさんの曲に触れられます。「これ懐かしい」「こんな曲も持っていたな」と思ったら、その曲を通常再生でじっくり楽しむこともできます。
-
-RE:TR4CKSは、新しい音楽を探すためではなく、すでに持っている音楽ともう一度出会うためのプレイヤーです。
+メドレーでは、「20秒から60秒間」のように再生する位置と長さを指定し、シャッフルした曲をテンポよく聴いていけます。
 
 主な機能
 
@@ -138,6 +149,7 @@ RE:TR4CKSは、新しい音楽を探すためではなく、すでに持って�
 ・楽曲、アーティスト、アルバムから検索・再生
 ・短い曲や音楽以外の音声を対象にした並べ替えとフィルター
 ・バックグラウンド再生とロック画面操作
+・現在再生中の曲を表示するホーム画面ウィジェット
 ・日本語／英語表示
 
 すべて端末内で完結
