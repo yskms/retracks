@@ -125,8 +125,8 @@ AdMobバナー広告とRevenueCatによるPro月額購読をAndroidに続いてi
       一致しないという警告が出たが、書き出し済みIPAの実際のInfo.plistでは両方
       `17`で一致していることを確認済み（Xcodeのビルド中間段階の一時的な警告で、
       最終成果物には影響なし）
-- [ ] 実機（TestFlight経由iPhone 8）でのバナー広告表示・Sandbox購入・復元・
-      広告非表示化の確認
+- [x] 実機（TestFlight経由iPhone 8）でのバナー広告表示・Sandbox購入・復元・
+      広告非表示化の確認（2026-10-02、ビルド17で確認済み）
 - [ ] App Store ConnectのApp Privacy（データ収集の申告）を実態に合わせて更新
       （`docs/ios-app-store-listing.md`のTODO参照）
 - [ ] サブスクリプションの審査用スクリーンショットを追加（Pro画面の実装後）
