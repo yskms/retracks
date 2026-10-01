@@ -1,10 +1,10 @@
 /**
- * Pro画面（Android専用。iOSはまだ課金を導入していない）。
+ * Pro画面（Android/iOS共通）。
  * 無料版はバナー広告あり、Pro（月額課金）で広告を非表示にする。
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -199,12 +199,16 @@ export default function ProScreen() {
               )}
             </Pressable>
 
-            {/* Google Playの定期購入ポリシー: 支払い前に自動更新・価格・解約方法を
-                開示する必要がある。価格は上のpriceString（ストアのローカライズ済みの
-                値）が担うため、ここに金額を直書きしない ―― 通貨・地域ごとに嘘になる */}
+            {/* ストアの定期購入ポリシー: 支払い前に自動更新・価格・解約方法を開示する
+                必要がある。価格は上のpriceString（ストアのローカライズ済みの値）が
+                担うため、ここに金額を直書きしない ―― 通貨・地域ごとに嘘になる。
+                解約先のストア名はAndroid/iOSで異なる（Appleの審査ガイドライン上、
+                iOSでGoogle Playの解約導線を案内すると審査に通らない） */}
             <View style={styles.legalBlock}>
               <Text style={styles.legalTitle}>{t('pro.subscriptionTermsTitle')}</Text>
-              <Text style={styles.legalText}>{t('pro.subscriptionTerms')}</Text>
+              <Text style={styles.legalText}>
+                {t('pro.subscriptionTerms', { store: Platform.OS === 'ios' ? 'App Store' : 'Google Play' })}
+              </Text>
               <Pressable onPress={() => openLink(PRIVACY_POLICY_URL)}>
                 <Text style={styles.legalLink}>{t('pro.privacyPolicy')}</Text>
               </Pressable>

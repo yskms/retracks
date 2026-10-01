@@ -5,7 +5,8 @@ import MobileAds, {
 } from 'react-native-google-mobile-ads';
 
 /**
- * 広告SDKの初期化（Android専用。iOSはまだ導入していない → adInit.ios.ts）。
+ * 広告SDKの初期化（Android/iOS共通。react-native-google-mobile-adsのJS APIのみを
+ * 使っており、プラットフォーム固有の分岐は無い）。
  *
  * 1. UMP（User Messaging Platform）で同意情報を取得し、必要なら同意フォームを出す
  * 2. 広告をリクエストしてよい状態（canRequestAds）なら初期化する

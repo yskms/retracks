@@ -154,7 +154,7 @@ export default {
     alreadyProTitle: 'Pro版をご利用中です',
     alreadyProDescription: 'ご購読ありがとうございます。すべての広告が非表示になっています。',
     subscriptionTermsTitle: '購読について',
-    subscriptionTerms: '月額プランは自動更新されます。解約はGoogle Playの「定期購入」からいつでも行えます。',
+    subscriptionTerms: '月額プランは自動更新されます。解約は{{store}}の「定期購入」からいつでも行えます。',
     privacyPolicy: 'プライバシーポリシー',
   },
   debug: {

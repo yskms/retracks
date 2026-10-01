@@ -152,21 +152,17 @@ export default function SettingsScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.body}>
-        {/* Pro（RevenueCatの定期購入）はAndroid専用。iOSはまだ購入手段が無く、
-            開いても価格取得・復元のすべてが失敗する画面になるため導線ごと隠す */}
-        {Platform.OS === 'android' && (
-          <View style={styles.card}>
-            <Pressable style={styles.linkRow} onPress={() => router.push('/pro')}>
-              <View style={styles.rowText}>
-                <Text style={styles.rowLabel}>{t('settings.proTitle')}</Text>
-                <Text style={styles.rowHint}>
-                  {isPro ? t('settings.proActiveHint') : t('settings.proHint')}
-                </Text>
-              </View>
-              <Text style={styles.chevron}>›</Text>
-            </Pressable>
-          </View>
-        )}
+        <View style={styles.card}>
+          <Pressable style={styles.linkRow} onPress={() => router.push('/pro')}>
+            <View style={styles.rowText}>
+              <Text style={styles.rowLabel}>{t('settings.proTitle')}</Text>
+              <Text style={styles.rowHint}>
+                {isPro ? t('settings.proActiveHint') : t('settings.proHint')}
+              </Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Pressable>
+        </View>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>{t('settings.languageSectionTitle')}</Text>

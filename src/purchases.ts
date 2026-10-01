@@ -1,6 +1,12 @@
+import { Platform } from 'react-native';
 import Purchases, { LOG_LEVEL, CustomerInfo, PURCHASES_ERROR_CODE } from 'react-native-purchases';
-import { REVENUECAT_API_KEY_ANDROID, ENTITLEMENT_ID } from './purchasesConfig';
+import { REVENUECAT_API_KEY_ANDROID, REVENUECAT_API_KEY_IOS, ENTITLEMENT_ID } from './purchasesConfig';
 import type { PurchaseResult } from './purchasesTypes';
+
+const REVENUECAT_API_KEY = Platform.select({
+  ios: REVENUECAT_API_KEY_IOS,
+  default: REVENUECAT_API_KEY_ANDROID,
+});
 
 let configured = false;
 // 直近に判明しているPro状態。configure前・失敗時はfalse
@@ -32,7 +38,7 @@ function ensureConfigured(): void {
   if (configured) return;
   try {
     if (__DEV__) Purchases.setLogLevel(LOG_LEVEL.DEBUG);
-    Purchases.configure({ apiKey: REVENUECAT_API_KEY_ANDROID });
+    Purchases.configure({ apiKey: REVENUECAT_API_KEY });
     configured = true;
     Purchases.addCustomerInfoUpdateListener(updateCache);
     initialFetchPromise = Purchases.getCustomerInfo().then(updateCache).catch(() => {});

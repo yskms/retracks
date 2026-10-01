@@ -2,13 +2,6 @@
   "name": "retracks",
   "version": "1.0.0",
   "main": "expo-router/entry",
-  "expo": {
-    "autolinking": {
-      "ios": {
-        "exclude": ["react-native-purchases", "react-native-google-mobile-ads"]
-      }
-    }
-  },
   "dependencies": {
     "@expo/ui": "~57.0.18",
     "@expo/vector-icons": "^15.0.2",

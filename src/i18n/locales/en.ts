@@ -146,7 +146,7 @@ export default {
     alreadyProTitle: "You're a Pro member",
     alreadyProDescription: 'Thanks for subscribing. All ads are hidden.',
     subscriptionTermsTitle: 'Subscription terms',
-    subscriptionTerms: 'The monthly plan renews automatically. You can cancel anytime from Google Play subscriptions.',
+    subscriptionTerms: 'The monthly plan renews automatically. You can cancel anytime from {{store}} subscriptions.',
     privacyPolicy: 'Privacy policy',
   },
   debug: {

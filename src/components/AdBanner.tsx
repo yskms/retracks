@@ -6,7 +6,7 @@ import { getIsPro, onProStatusChange } from '../purchases';
 import { canShowAds, onAdsAllowedChange } from '../adInit';
 
 /**
- * 全画面共通の固定バナー広告（Android専用。iOS版は AdBanner.ios.tsx）。
+ * 全画面共通の固定バナー広告（Android/iOS共通）。
  * Pro版では表示しない。常に非パーソナライズ広告のみをリクエストする。
  * EEA/UKの同意状況は `canShowAds()` が見る（同意が無ければ広告を出さない）。
  * RootLayoutで常時マウントされる（画面遷移で再マウントされない）ため、
