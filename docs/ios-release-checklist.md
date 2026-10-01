@@ -119,6 +119,12 @@ AdMobバナー広告とRevenueCatによるPro月額購読をAndroidに続いてi
 - [x] Simulatorでのdev-client起動確認（テスト広告表示、Pro画面のクラッシュ無し。
       2026-10-02、iPhone 18 Pro Max Simulator。RevenueCat経由の価格取得・
       ストア名の出し分け（「App Storeの『定期購入』から」）も確認済み）
+- [x] `eas build --local --profile production`でビルド17（App Version 1.1.1）を
+      作成し、`eas submit`でTestFlightへアップロード完了（2026-10-02）。
+      ビルドログ上は拡張機能（ExpoWidgetsTarget）とアプリ本体のCFBundleVersionが
+      一致しないという警告が出たが、書き出し済みIPAの実際のInfo.plistでは両方
+      `17`で一致していることを確認済み（Xcodeのビルド中間段階の一時的な警告で、
+      最終成果物には影響なし）
 - [ ] 実機（TestFlight経由iPhone 8）でのバナー広告表示・Sandbox購入・復元・
       広告非表示化の確認
 - [ ] App Store ConnectのApp Privacy（データ収集の申告）を実態に合わせて更新
