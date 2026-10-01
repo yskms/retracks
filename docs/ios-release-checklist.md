@@ -95,6 +95,36 @@ Simulatorでのdev-client起動・JSバンドル読み込み・アプリ本体�
 （Xcode 26.6環境）でのビルド確認に頼っていた。新Mac（Xcode 27）への移行後は
 ローカルビルド自体が通るようになったため、この制約は解消済み。
 
+## 広告・課金導入（`feat/revenuecat-admob-ios`）
+
+AdMobバナー広告とRevenueCatによるPro月額購読をAndroidに続いてiOSにも導入
+（Android/iOS共通の設計判断は`CLAUDE.md`の「RevenueCat / AdMob（Android/iOS共通）」、
+ダッシュボード作業の記録は`docs/private/revenuecat-admob-setup.md`参照）。
+
+- [x] AdMobコンソールでiOSアプリを登録・確認完了
+- [x] AdMob iOS用バナー広告ユニットを作成
+- [x] 既存のGDPR同意メッセージの対象アプリにiOS版を追加
+- [x] App Store Connectでサブスクリプショングループ・月額商品（`pro_monthly`）を作成
+- [x] RevenueCatにApp Store Appを追加し、商品をEntitlement `pro`・
+      Offering `current`のPackage `$rc_monthly`へ紐付け
+- [x] `package.json`のiOSオートリンク除外を解除し、`.ios.ts`no-opスタブを削除して
+      共通実装（`src/adInit.ts`・`src/components/AdBanner.tsx`・`src/purchases.ts`）
+      に一本化
+- [x] `app.json`に`iosAppId`・`skAdNetworkItems`を追加
+- [x] `app/settings.tsx`のPro導線をAndroid限定から両OS表示に変更
+- [x] `app/pro.tsx`の解約案内文言をストア名で出し分けるよう修正（iOSでGoogle Playを
+      案内しないように）
+- [x] `npx expo prebuild --clean`でPodの解決を確認（Xcode 27でのdeployment target
+      問題は再発せず）
+- [x] Simulatorでのdev-client起動確認（テスト広告表示、Pro画面のクラッシュ無し。
+      2026-10-02、iPhone 18 Pro Max Simulator。RevenueCat経由の価格取得・
+      ストア名の出し分け（「App Storeの『定期購入』から」）も確認済み）
+- [ ] 実機（TestFlight経由iPhone 8）でのバナー広告表示・Sandbox購入・復元・
+      広告非表示化の確認
+- [ ] App Store ConnectのApp Privacy（データ収集の申告）を実態に合わせて更新
+      （`docs/ios-app-store-listing.md`のTODO参照）
+- [ ] サブスクリプションの審査用スクリーンショットを追加（Pro画面の実装後）
+
 ## App Store Connect
 
 - [x] App Store ConnectでBundle ID `com.yskms.retracks` のアプリを作成

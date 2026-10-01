@@ -1,40 +1,56 @@
-## RevenueCat / AdMob（Android専用）
+## RevenueCat / AdMob（Android/iOS共通）
 
 - RevenueCat（`react-native-purchases`）とAdMob（`react-native-google-mobile-ads`）は
-  現時点でAndroidにのみ導入している。iOS版はまだ課金・広告を提供しない。
-- そのため `package.json` の `expo.autolinking.ios.exclude` で、この2パッケージを
-  **iOSのオートリンクから明示的に除外している**。これを外すと、iOSのXcodeビルドに
-  GoogleMobileAds/PurchasesのPodが混ざり、ビルド時間や依存関係に悪影響が出るおそれがある。
-  iOS対応を追加する際は、この除外設定を消すのではなく、
-  `purchases.ios.ts` / `adInit.ios.ts` / `AdBanner.ios.tsx` の中身を実装に差し替えること。
-- `app.json` の `react-native-google-mobile-ads` プラグインには `androidAppId` のみを
-  設定し、`iosAppId` は意図的に渡していない（プラグイン側は未指定なら黙ってiOSの
-  `GADApplicationIdentifier`設定をスキップするだけで、ビルド自体は落ちない）。
-  ただし`delayAppMeasurementInit`はプラットフォームを問わず常に適用されるため、
-  `expo prebuild`後のiOSの`Info.plist`に`GADDelayAppMeasurementInit`キーが残る
-  （`node_modules/react-native-google-mobile-ads/plugin/build/index.js`の
-  `withIosAppMeasurementInitDelayed`が`iosAppId`の有無を見ずに実行されるため）。
-  ネイティブモジュール自体が存在しないため実害はないが、「iOSに一切影響しない」
-  わけではなく、未使用のキーが1つ残る点は把握しておくこと。
-- `src/purchasesConfig.ts` の `REVENUECAT_API_KEY_ANDROID`、`src/adConfig.ts` の
-  本番用`AD_UNIT_ID`、`app.json` の `androidAppId` は2026-09-27〜29にかけて
-  実際の値へ差し替え済み（RevenueCat/AdMobダッシュボードでの手順は
-  `docs/private/revenuecat-admob-setup.md` 参照）。
-  - `src/purchasesConfig.ts`の`ENTITLEMENT_ID`（`pro`）、Play Console側の定期購入
-    商品（アイテムID`pro`・基本プランID`monthly`）、RevenueCat側の紐付け
-    （Products `pro:monthly` → Entitlement `pro` → Offering `current`）は
-    2026-09-28に設定済み。
+  Android・iOS両方に導入済み（iOS版は2026-10に追加）。`src/adInit.ts`・
+  `src/components/AdBanner.tsx`・`src/purchases.ts`はどちらのプラットフォーム
+  固有のネイティブ呼び出しも持たない（JS APIのみ）ため、**実装は1つに統一している。
+  プラットフォーム別に分岐が必要なのはAdMobアプリID/広告ユニットID・RevenueCatの
+  APIキーだけ**で、それぞれ`app.json`（`androidAppId`/`iosAppId`）、
+  `src/adConfig.ts`、`src/purchasesConfig.ts`で`Platform.select`により分岐している。
+  - 過去形として、iOS導入前は`package.json`の`expo.autolinking.ios.exclude`で
+    この2パッケージをiOSのオートリンクから除外し、`purchases.ios.ts` /
+    `adInit.ios.ts` / `AdBanner.ios.tsx`というno-opスタブで置き換えていた時期が
+    あった。iOS導入時（2026-10）にこの除外設定とスタブは撤去し、共通実装へ一本化
+    済み。**もし将来再びこの3ファイルが復活していたら、それは意図的な設計回帰では
+    なく誤った復元なので、復活させずこの節の方針に合わせて削除すること。**
+- `app.json`の`react-native-google-mobile-ads`プラグインは`androidAppId`に加え
+  `iosAppId`も設定済み（iOS導入前は`iosAppId`未設定だったため、`GADDelayAppMeasurementInit`
+  キーだけがInfo.plistに残り実害のない状態だったが、`iosAppId`設定後は
+  `GADApplicationIdentifier`と合わせて実際に効くようになった）。`skAdNetworkItems`
+  （Google公式のSKAdNetwork ID一覧、2026-10時点で50件）も設定済み。この一覧は
+  Google側で更新されることがあるため、大きく変更する際は
+  `https://developers.google.com/admob/ios/ios14`等の公式ガイドを都度確認すること
+  （記憶や過去の値から書き起こさない）。
+- **ATT（App Tracking Transparency）・IDFAは意図的に使っていない。**
+  `AdBanner.tsx`は常に`requestNonPersonalizedAdsOnly: true`でリクエストする設計
+  （Android/iOS共通）。IDFAへ一切アクセスしないため、`NSUserTrackingUsageDescription`や
+  ATT許可ダイアログの実装は不要と判断している。AdMobの「IDFA説明メッセージ」機能も
+  意図的に未設定。この方針を変える（パーソナライズ広告を使う）場合のみATT対応が必要になる。
+- `src/purchasesConfig.ts`の`ENTITLEMENT_ID`（`pro`）は、Android（Play Console商品
+  `pro`/`monthly` → RevenueCat `pro:monthly`）・iOS（App Store Connect製品
+  `pro_monthly` → RevenueCat `pro_monthly`）の両方で同じEntitlementに紐付け済み
+  （iOS側は2026-10設定）。両プラットフォームの商品は同じOffering `current`の
+  同じPackage `$rc_monthly`に入っている。
   - **RevenueCatのOffering内Packageの識別子は、独自の`monthly`ではなく予約識別子
     `$rc_monthly`にすること。** `src/purchases.ts`が使う`offerings.current?.monthly`
     はSDK側で`$rc_monthly`識別子のPackageだけを拾う仕様で、`monthly`という
     見た目が紛らわしい独自識別子を付けるとCUSTOM種別扱いになり`.monthly`に
     載らない（RevenueCatダッシュボードでPackage作成時のデフォルト値が
     `$rc_monthly`なので、それを変更しなければ問題ない）。
-- `purchases.ios.ts` / `adInit.ios.ts` / `AdBanner.ios.tsx` によるプラットフォーム別
-  ファイル解決（Metroの標準機能）は、このリポジトリでは今回が初出。2026-09-30、
-  Xcode 27のiOS Simulatorでdev-client起動・JSバンドル読み込みまで確認し、
-  Android専用パッケージ（`react-native-purchases`・`react-native-google-mobile-ads`）
-  をトップレベルimportしてクラッシュすることなく `.ios.ts` 側が解決されることを確認済み。
+- iOSの新規サブスクリプションは、実際にアプリのビルドへ組み込んで審査提出するまで
+  RevenueCat側のProductsで「Missing Metadata」のままになることがある（Apple側の
+  仕様で、未提出のサブスクリプションは価格等のメタデータが完全に同期されないため）。
+  1.1.1ビルドの審査提出後に解消される想定。
+- ダッシュボード側（AdMob/App Store Connect/RevenueCat）の作業記録は
+  `docs/private/revenuecat-admob-setup.md`参照。
+- iOSビルド時、`[CP-User] [RNGoogleMobileAds] Configuration`スクリプトが
+  `ios_app_id key not found in react-native-google-mobile-ads key in app.json`
+  という警告を出すが、これは無害（ビルド成功・実機/Simulatorでの広告表示も確認済み）。
+  このスクリプトはExpoのconfig plugin経由の設定を見ておらず、`app.json`直下に
+  旧来の`react-native-google-mobile-ads`トップレベルキーがあるかどうかだけを
+  チェックしている（警告文自体も「Expo config pluginを使っているなら無視してよい」
+  と明記している）。このリポジトリはconfig plugin経由（`expo.plugins`内）でのみ
+  設定しているため、追加対応は不要。
 
 ## iOSビルド
 
