@@ -129,7 +129,11 @@ AdMobバナー広告とRevenueCatによるPro月額購読をAndroidに続いてi
       広告非表示化の確認（2026-10-02、ビルド17で確認済み）
 - [x] App Store ConnectのApp Privacy（データ収集の申告）を更新（2026-10-02。
       内容は`docs/ios-app-store-listing.md`参照）
-- [ ] サブスクリプションの審査用スクリーンショットを追加（Pro画面の実装後）
+- [x] サブスクリプションの審査用スクリーンショットを追加（Simulatorで撮影した
+      Pro画面、`docs/private/app-store-assets/ios-subscription-review/`）
+- [x] サブスクリプショングループの表示名ローカライズ（日英「RE:TR4CKS Pro」）を設定
+- [x] アプリバージョン1.1.1（ビルド17）・サブスクリプション・サブスクリプション
+      グループの3項目をまとめて審査へ提出（2026-10-02 10:37）
 
 ## App Store Connect
 

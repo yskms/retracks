@@ -1,12 +1,12 @@
 # RE:TR4CKS 要件定義書
 
-- バージョン: v2.35
+- バージョン: v2.36
 - 更新日: 2026-10-02
 - ステータス: Android版は1.1.0（RevenueCat定期購入＋AdMobバナー広告を導入）が審査通過・
-  公開済み（2026-09-29）。iOS版は1.0.0（ビルド7、2026-09-15審査提出）が公開中の最新版で、
-  ホーム画面ウィジェット（表示専用v1）・RevenueCat/AdMob（Android同様の広告・Pro購読）を
-  `feat/revenuecat-admob-ios`ブランチで実装中。開発機をM4 MacBook Air（Xcode 27）へ
-  移行済み
+  公開済み（2026-09-29）。iOS版は1.0.0（ビルド7、2026-09-15審査提出）が公開中の最新版だが、
+  ホーム画面ウィジェット・RevenueCat/AdMob（Android同様の広告・Pro購読）を追加した
+  1.1.1（ビルド17）を審査へ提出済み（2026-10-02、`feat/revenuecat-admob-ios`
+  ブランチ。mainへは未マージ）。開発機をM4 MacBook Air（Xcode 27）へ移行済み
 
 > Remember. Replay. Rediscover. Revisit.
 
@@ -1617,3 +1617,4 @@ crash無し、dev-client経由でMetroからJSバンドルを読み込みアプ�
 | v2.33 | 2026-09-30 | M1 Air 8GBから新Mac（M4 MacBook Air、Xcode 27）への移行に伴い、iOSローカルビルドを再検証。v2.28で記録したXcode 26.3固有の問題は解消したが、Xcode 27 / iOS 27 SDK特有のUISceneライフサイクル必須化による起動直後のクラッシュ（`___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption`）を実機（Simulator）で確認。姉妹プロジェクトfilto-appの対応（`plugins/withIosSceneDelegate.js`）を移植して解消した（retracksはAppDelegate.swiftが`internal import Expo`で生成される点がfiltoと異なり、importのアクセスレベルを合わせる調整が必要だった）。filtoが合わせて踏んでいたPodのdeployment target問題は、RevenueCat/AdMobをiOS autolinkingから除外済みのため再現せず。`expo prebuild` → `expo run:ios`でビルド成功、dev-client経由でのJSバンドル読み込み・アプリ本体表示まで確認済み。署名付きローカルビルド・実機確認は次のv2.34（ウィジェットマージ）の実機確認とあわせて実施予定。詳細は13.4・`CLAUDE.md`「iOSビルド」 |
 | v2.34 | 2026-09-30 | `feat/ios-widget`（v2.27・v2.28、iOSホーム画面ウィジェットv1）を`main`へマージ。両ブランチが独立に追記していた`CLAUDE.md`・本書・`docs/ios-release-checklist.md`のiOS関連記述を、片方を機械的に採用せず内容を統合する形で手動解消。ウィジェット機能自体の実機確認（EASビルド）はまだ未実施のまま引き継ぎ |
 | v2.35 | 2026-10-02 | iOS版にAdMobバナー広告とRevenueCat Pro月額購読を追加（`feat/revenuecat-admob-ios`、バージョンを1.1.1へ）。Android版（v2.29〜v2.32）とのバージョン番号の食い違い（Androidは広告・Pro込みの1.1.0、iOSはウィジェットのみの1.1.0）を解消する目的。AdMob側にiOS用アプリ・バナー広告ユニットを新規登録（登録直後の「app-ads.txt確認失敗」は設定不備ではなく新規アプリの再クロール待ちで、1日程度で解消。Androidのときより反映が遅かった点を運用メモに記録）、既存GDPR同意メッセージの対象アプリにiOS版を追加（iOS側のプライバシーポリシーURL未設定が原因で一度つまずいた）。App Store Connectにサブスクリプショングループ・月額商品`pro_monthly`を作成（価格はAndroidと同じ日本円ティアに自動一致）。RevenueCatにApp Store Appを追加し、Androidと同じEntitlement`pro`・Offering`current`のPackage`$rc_monthly`へ商品を紐付け（App Store Connect APIキー・In-app purchase keyは同じApple Developerチームのfilto用キーをダッシュボードのドロップダウンから再利用できた）。コード側は、`src/adInit.ts`・`src/components/AdBanner.tsx`・`src/purchases.ts`がAndroid固有のネイティブ呼び出しを持たないことを確認した上で、`package.json`の`expo.autolinking.ios.exclude`を解除し、`adInit.ios.ts`・`AdBanner.ios.tsx`・`purchases.ios.ts`のno-opスタブを削除して共通実装に一本化（プラットフォーム差分はAdMobアプリID/広告ユニットID・RevenueCat APIキーのみ`Platform.select`で分岐）。`app.json`に`iosAppId`と、Google公式ガイドから取得した`skAdNetworkItems`（50件）を追加。ATT/IDFAは使わず常に非パーソナライズ広告のみをリクエストする方針をAndroidから踏襲（Apple側のATT許可ダイアログ・`NSUserTrackingUsageDescription`は意図的に未実装）。`app/pro.tsx`の解約案内文言が「Google Play」固定になっていた（Apple審査ガイドライン上iOSで案内すると通らない）のをストア名の動的出し分けに修正。`npx expo prebuild --clean`でPod解決を確認し、v2.29で懸念していたXcode 27のdeployment target問題は再発せず。`docs/privacy-policy.md`・`docs/ios-app-store-listing.md`のiOS向け「広告・購入は未提供」という記述を削除し、Androidと同内容の開示に統一（App Store ConnectのApp Privacy回答は別途確定が必要なためTODOとして明示）。実機確認・ストア提出は次バージョンへ継続 |
+| v2.36 | 2026-10-02 | iOS版1.1.1（ビルド17）を実機確認・App Store Connect設定まで完了させ、App Store審査へ提出。`eas build --local --profile production`でのビルドログに拡張機能（ExpoWidgetsTarget）とアプリ本体のCFBundleVersion不一致警告が出たが、書き出し済みIPAの実際のInfo.plistでは両方`17`で一致しており実害なしと確認（Xcodeのビルド中間段階の一時的な警告）。`eas submit`でTestFlightへアップロード後、iPhone 8実機でバナー広告表示・Sandbox購入・復元・広告非表示化を確認。App Store ConnectのApp Privacyは姉妹アプリfiltoの既存申告（同じAdMob＋RevenueCat構成）に倣い、デバイスID・購入履歴・製品の操作・広告データ・クラッシュデータ・パフォーマンスデータの6種類を「ユーザに関連付けないデータ」として申告。サブスクリプショングループの表示名ローカライズ、サブスクリプション審査用スクリーンショット（Simulatorで撮影したPro画面）、アプリバージョン1.1.1の「このバージョンの新機能」・概要（広告・Pro購読の開示を追記、「広告なし」の記述を削除）・審査メモ（Sandboxテスト手順を追記）を設定し、アプリバージョン・サブスクリプション・サブスクリプショングループの3項目をまとめて審査へ提出（10:37、提出ID`aaa2fb11-5d65-4b9d-a3f1-a81d8125279d`）。`feat/revenuecat-admob-ios`ブランチはmainへ未マージのまま |
