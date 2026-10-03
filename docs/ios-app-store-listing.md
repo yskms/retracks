@@ -46,13 +46,21 @@ Android限定の機能のため、引き続き掲載文へ含めない。
 - iMessageアプリ: なし
 - App Storeサーバ通知URL: なし
 - Sandboxサーバ通知URL: なし
-- 審査状況: 1.1.1（ビルド17）を審査へ提出済み（2026-10-02 10:37、提出ID
-  `aaa2fb11-5d65-4b9d-a3f1-a81d8125279d`）。アプリバージョン・サブスクリプション
-  `Pro Monthly`・サブスクリプショングループ`RE:TR4CKS Pro`の3項目がまとめて
-  審査待ち。実機（iPhone 8、TestFlight経由）でのバナー広告表示・Sandbox購入・
-  復元・広告非表示化は確認済み。1.1.0はTestFlightへのアップロードのみ
-  （2026-09-30、ビルド16。ビルド15はローカルビルド後のsubmitが完了せず欠番）で、
-  広告・Pro購読を同時に含めるため審査提出せず1.1.1へまとめた
+- 審査状況: 1.1.1（ビルド17）を審査へ提出（2026-10-02 10:37、提出ID
+  `aaa2fb11-5d65-4b9d-a3f1-a81d8125279d`）→ 2026-10-03にメタデータ指摘で
+  差し戻し（詳細下記）。実機（iPhone 8、TestFlight経由）でのバナー広告表示・
+  Sandbox購入・復元・広告非表示化は確認済み。1.1.0はTestFlightへのアップロード
+  のみ（2026-09-30、ビルド16。ビルド15はローカルビルド後のsubmitが完了せず
+  欠番）で、広告・Pro購読を同時に含めるため審査提出せず1.1.1へまとめた
+  - **2026-10-03の差し戻し内容**: サブスクリプション（Pro Monthly）を提供して
+    いるが、商品ページのApp DescriptionにTerms of Use（EULA）への有効なリンクが
+    無い、という指摘（自動チェック、新しいビルドは不要）。使用許諾契約は
+    Appleの標準EULAのままにし、上記English/日本語のDescriptionへ標準EULAの
+    URL（`https://www.apple.com/legal/internet-services/itunes/dev/stdeula/`）を
+    追記して対応。App Store ConnectでApp Descriptionを編集後、新しいビルドの
+    再送信ではなく「App Review」ページから同じビルド（17）を再送信すればよい
+    （異議申し立てではなく通常の再送信）。→ English/日本語Description双方へ
+    追記し、2026-10-03に同ビルドを再送信済み。結果待ち。
 - 前回申請（1.0.0・ビルド7）: 申請済み・承認済み（2026-09-15）
 
 ## English (U.S.)
@@ -116,6 +124,8 @@ Your music and listening activity are never sent off your device. RE:TR4CKS has 
 The App is free to use, with a banner ad shown in the free tier. Pro (monthly subscription) removes ads.
 
 Music is not included. You need compatible music available in your device’s media library that you have the right to play.
+
+Terms of Use (EULA): https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 ```
 
 ### Keywords
@@ -185,6 +195,8 @@ RE:TR4CKSは、曲の好きな部分を一定時間ずつ次々と再生する�
 本アプリは無料でご利用いただけます（バナー広告表示）。Pro（月額購読）で広告を非表示にできます。
 
 本アプリに音楽は含まれません。ユーザー自身が再生する権利を持ち、端末のメディアライブラリで利用できる対応楽曲が必要です。
+
+利用規約（EULA）: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/
 ```
 
 ### キーワード
