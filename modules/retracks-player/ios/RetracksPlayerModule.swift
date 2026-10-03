@@ -59,6 +59,7 @@ public final class RetracksPlayerModule: Module {
   private static let emptySnapshot: [String: Any] = [
     "connected": false,
     "isPlaying": false,
+    "shouldShowPlayButton": true,
     "index": -1,
     "positionMs": 0.0,
     "durationMs": 0.0,
@@ -176,6 +177,21 @@ public final class RetracksPlayerModule: Module {
     Function("pause") {
       DispatchQueue.main.async {
         self.player.pause()
+        self.playbackChanged()
+      }
+    }
+    /**
+     * 再生/一時停止の切り替えをネイティブ側で判定する（Android の
+     * toggle() と同じ理由、→ そちらのコメント参照）。
+     */
+    Function("toggle") {
+      DispatchQueue.main.async {
+        if self.shouldShowPlayButton {
+          if self.player.currentItem == nil { self.loadCurrent(autoplay: false) }
+          self.player.play()
+        } else {
+          self.player.pause()
+        }
         self.playbackChanged()
       }
     }
@@ -393,7 +409,10 @@ public final class RetracksPlayerModule: Module {
   private func playbackChanged() {
     refreshSnapshot()
     updateElapsedNowPlaying()
-    sendEvent("onPlaybackStateChange", ["isPlaying": player.rate > 0])
+    sendEvent(
+      "onPlaybackStateChange",
+      ["isPlaying": player.rate > 0, "shouldShowPlayButton": shouldShowPlayButton]
+    )
   }
 
   private func handleInterruption(_ notification: Notification) {
@@ -428,10 +447,37 @@ public final class RetracksPlayerModule: Module {
     return snapshot
   }
 
+  /**
+   * Android の shouldShowPlayButton() と役割を揃えるために用意しているが、
+   * iOS では rate == 0 ⇔ !isPlaying（player.rate > 0 の否定）と常に等価で、
+   * Android のような「意図（playWhenReady相当）」と「実際にいま音が
+   * 出ているか」の区別はできていない（2026-10）。
+   *
+   * 当初 timeControlStatus == .paused を使っていたが、クロスレビューで
+   * 次の2点を指摘された。
+   * - play()/pause() を呼んだ直後、timeControlStatus が同期的に切り替わる
+   *   保証がない。KVO も張っていないため、ずれた値が次のポーリングまで
+   *   残り得る
+   * - rate は「再生を要求しているか」を表す値で、待機中（バッファリング中）
+   *   も 1 のままである可能性がある。だとすれば isPlaying（rate > 0）の
+   *   時点で既にユーザーの再生意図を表しており、Android のような一瞬の
+   *   アイコン変化はそもそも起きていなかった可能性がある
+   * どちらも実機で検証できていないため、play()/pause() の呼び出しと同期
+   * して確実に変わる rate を安全側として採用した。rate がバッファリング中も
+   * 本当に 1 のままなら（2点目の想定通りなら）ちらつきは起きない。もし
+   * Android と同じく 0 に落ちるなら、この定義は常に !isPlaying と同じ値に
+   * しかならないため、Android で直したのと同じちらつきが iOS には残る
+   * （未検証・2026-10時点）。
+   */
+  private var shouldShowPlayButton: Bool {
+    player.rate == 0
+  }
+
   private func refreshSnapshot() {
     let next: [String: Any] = [
       "connected": true,
       "isPlaying": player.rate > 0,
+      "shouldShowPlayButton": shouldShowPlayButton,
       "index": index,
       "positionMs": currentPositionMs,
       "durationMs": tracks.indices.contains(index) ? tracks[index].durationMs : 0,

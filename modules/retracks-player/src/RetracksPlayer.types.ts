@@ -41,7 +41,14 @@ export type TrackFolders = {
 
 export type PlayerStatus = {
   connected: boolean;
+  /** 実際にいま音が進んでいるか。曲の切り替え等のバッファリング中は一瞬 false になる。 */
   isPlaying: boolean;
+  /**
+   * 再生/一時停止アイコンの表示・toggle() の判定に使うこと。isPlaying と違い、
+   * バッファリング中もユーザーの再生意図を維持したまま true のまま（Media3 の
+   * Util.shouldShowPlayButton() と同じ考え方）。false のときに一時停止アイコンを出す。
+   */
+  shouldShowPlayButton: boolean;
   index: number;
   positionMs: number;
   durationMs: number;
@@ -61,7 +68,10 @@ export enum RepeatMode {
 
 export type RetracksPlayerEvents = {
   onTrackChange: (event: { index: number; id: string }) => void;
-  onPlaybackStateChange: (event: { isPlaying: boolean }) => void;
+  onPlaybackStateChange: (event: {
+    isPlaying: boolean;
+    shouldShowPlayButton: boolean;
+  }) => void;
   /**
    * リピート設定が変わったときの通知。Android は controller 接続後のみ
    * （→ RetracksPlayerModule.kt の onRepeatModeChanged のコメント）。

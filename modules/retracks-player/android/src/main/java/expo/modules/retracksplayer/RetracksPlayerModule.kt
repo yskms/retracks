@@ -93,6 +93,7 @@ class RetracksPlayerModule : Module() {
   private fun emptySnapshot(): Map<String, Any?> = mapOf(
     "connected" to false,
     "isPlaying" to false,
+    "shouldShowPlayButton" to true,
     "index" to -1,
     "positionMs" to 0.0,
     "durationMs" to 0.0,
@@ -221,6 +222,21 @@ class RetracksPlayerModule : Module() {
     if (isControllerConnected()) controller else PlaybackService.instance?.playerOrNull()
 
   /**
+   * isPlaying は「実際にいま音が進んでいるか」で、曲の切り替わり等で一瞬
+   * STATE_BUFFERING を経由する間は再生継続中でも false になる（2026-10）。
+   * 再生/一時停止アイコンや toggle() の判定にそのまま使うと、バッファリング
+   * のたびに一瞬「一時停止中」に見えてしまう。UI 表示用にはこちらを使うこと
+   * （Media3 公式の Util.shouldShowPlayButton() と同じ考え方）。
+   */
+  private fun shouldShowPlayButton(p: Player): Boolean {
+    val suppressed = p.playbackSuppressionReason != Player.PLAYBACK_SUPPRESSION_REASON_NONE
+    return p.playbackState == Player.STATE_IDLE ||
+      p.playbackState == Player.STATE_ENDED ||
+      !p.playWhenReady ||
+      suppressed
+  }
+
+  /**
    * snapshot を現在値で更新する。メインスレッドから呼ぶこと。
    *
    * getStatus() はこの snapshot をそのまま返すだけで、呼ばれた時点で
@@ -239,6 +255,7 @@ class RetracksPlayerModule : Module() {
       mapOf(
         "connected" to true,
         "isPlaying" to p.isPlaying,
+        "shouldShowPlayButton" to shouldShowPlayButton(p),
         "index" to p.currentMediaItemIndex,
         "positionMs" to p.currentPosition.toDouble(),
         "durationMs" to (p.duration.takeIf { it > 0 }?.toDouble() ?: 0.0),
@@ -272,15 +289,32 @@ class RetracksPlayerModule : Module() {
       )
     }
 
-    override fun onIsPlayingChanged(isPlaying: Boolean) {
-      // 他の3つのリスナー・iOS の playbackChanged() と同様、イベントを送る前に
-      // snapshot を最新化する。これが無いと、JS がイベントで status.isPlaying
-      // を更新した直後に1秒ポーリング（最大200ms古いnative snapshot）が
-      // statusEquals() で「違う」と判定し、一旦古い値へ巻き戻ってから次の
-      // ポーリングで再度正しい値に戻る、という表示のちらつきが起きる
-      // （2026-10）。
-      refreshSnapshot()
-      sendEvent("onPlaybackStateChange", mapOf("isPlaying" to isPlaying))
+    override fun onEvents(player: Player, events: Player.Events) {
+      // isPlaying・playbackState・playWhenReady・playbackSuppressionReason の
+      // 4つはどれか1つでも変わると shouldShowPlayButton が変わり得る
+      // （例：バッファリング中に一時停止すると playWhenReady だけが変わり、
+      // isPlaying も playbackState も変化しない）。onIsPlayingChanged /
+      // onPlaybackStateChanged の2つだけでは拾いきれないので、まとめて
+      // 1回で判定できる onEvents を使う（2026-10、クロスレビューで指摘）。
+      // 他のリスナーと同様、イベントを送る前に snapshot を最新化する
+      // （refreshSnapshot() のコメント参照）。
+      if (
+        events.containsAny(
+          Player.EVENT_IS_PLAYING_CHANGED,
+          Player.EVENT_PLAYBACK_STATE_CHANGED,
+          Player.EVENT_PLAY_WHEN_READY_CHANGED,
+          Player.EVENT_PLAYBACK_SUPPRESSION_REASON_CHANGED
+        )
+      ) {
+        refreshSnapshot()
+        sendEvent(
+          "onPlaybackStateChange",
+          mapOf(
+            "isPlaying" to player.isPlaying,
+            "shouldShowPlayButton" to snapshot["shouldShowPlayButton"]
+          )
+        )
+      }
     }
 
     override fun onRepeatModeChanged(repeatMode: Int) {
@@ -683,6 +717,32 @@ class RetracksPlayerModule : Module() {
 
     Function("play") { onMain { controller?.play() } }
     Function("pause") { onMain { controller?.pause() } }
+    /**
+     * 再生/一時停止の切り替えをネイティブ側で判定する。JS 側で
+     * status.isPlaying を見て play()/pause() を出し分けていたときは、
+     * バッファリング中の一瞬だけ isPlaying が false になるのに引きずられて
+     * 判定を誤ったり、JS に最新状態が届く前の連打で同じ命令が重複したり
+     * する可能性があった（2026-10）。ここで現在の Player の状態を読んで
+     * 原子的に決めることでその種の競合を避ける。
+     *
+     * controller（activePlayer() ではなく）を使っているのは play()/pause()
+     * と揃えるため。接続前（起動直後の数秒）は play()/pause() と同じく
+     * 何も起きない。setRepeatMode() は活動が消えないよう activePlayer() に
+     * 書いているが、play/pause/toggle はそこまでする理由が無い（起動直後に
+     * タップしても、曲自体がまだ用意できていないことが多い）ので揃えて
+     * いない（2026-10、クロスレビューで指摘）。
+     *
+     * ENDED（リピート OFF でキューを再生し終わった状態）で shouldShowPlayButton
+     * が true になったときも、ここでは単に play() を呼ぶだけで
+     * seekToDefaultPosition() 等はしない。これは従来の play() 単体でも
+     * 同じ挙動だったため、今回の変更による劣化ではない。
+     */
+    Function("toggle") {
+      onMain {
+        val p = controller ?: return@onMain
+        if (shouldShowPlayButton(p)) p.play() else p.pause()
+      }
+    }
     Function("next") { onMain { controller?.seekToNextMediaItem() } }
     Function("previous") { onMain { controller?.seekToPreviousMediaItem() } }
     Function("skipTo") { index: Int -> onMain { controller?.seekTo(index, 0L) } }

@@ -49,6 +49,14 @@ declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
   playCurrentFromStart(): void;
   play(): void;
   pause(): void;
+  /**
+   * 再生/一時停止の切り替え。JS 側で status.isPlaying を見て play()/pause()
+   * を出し分けるのではなく、こちらを使うこと。ネイティブ側で現在の Player
+   * 状態を見て原子的に決めるため、バッファリング中の一瞬の isPlaying=false
+   * に引きずられた誤判定や、イベントがJSへ届く前の連打での重複送信が
+   * 起きない（2026-10 → RetracksPlayerModule.kt の toggle() のコメント）。
+   */
+  toggle(): void;
   next(): void;
   previous(): void;
   skipTo(index: number): void;

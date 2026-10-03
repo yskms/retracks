@@ -44,7 +44,9 @@ export function MiniPlayer() {
             toggle();
           }}
         >
-          <Text style={styles.glyph}>{status?.isPlaying ? '❚❚' : '▶'}</Text>
+          <Text style={styles.glyph}>
+            {(status?.shouldShowPlayButton ?? true) ? '▶' : '❚❚'}
+          </Text>
         </Pressable>
         <Pressable
           style={styles.button}

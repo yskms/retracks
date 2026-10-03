@@ -114,6 +114,7 @@ type PlaybackValue = {
 
   play: () => void;
   pause: () => void;
+  /** 再生/一時停止の切り替え。ネイティブ側で原子的に判定する（→ RetracksPlayerModule.ts）。 */
   toggle: () => void;
   next: () => void;
   previous: () => void;
@@ -180,6 +181,7 @@ function statusEquals(a: PlayerStatus | null, b: PlayerStatus | null): boolean {
   return (
     a.connected === b.connected &&
     a.isPlaying === b.isPlaying &&
+    a.shouldShowPlayButton === b.shouldShowPlayButton &&
     a.index === b.index &&
     a.positionMs === b.positionMs &&
     a.durationMs === b.durationMs &&
@@ -208,13 +210,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [albumYears, setAlbumYears] = useState<Record<string, number>>({});
   const [queue, setQueue] = useState<Track[]>([]);
   const [status, setStatus] = useState<PlayerStatus | null>(null);
-  // toggle() 等、usePlayback() の value（250ms ごとには作り直さない）から
-  // isPlaying を読みたい箇所向け。クロージャに status を持たせると、value を
-  // メモ化した時点の古い値のまま固まってしまうため、常に最新を指す ref で読む。
-  const statusRef = useRef<PlayerStatus | null>(null);
-  useEffect(() => {
-    statusRef.current = status;
-  }, [status]);
   const [shuffle, setShuffle] = useState<ShuffleState | null>(null);
   const [setting, setSettingState] = useState<SegmentSetting>(DEFAULT_SEGMENT);
   const [rushOn, setRushOn] = useState(true);
@@ -548,8 +543,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       'onPlaybackStateChange',
       (event) => {
         setStatus((prev) => {
-          if (!prev || prev.isPlaying === event.isPlaying) return prev;
-          return { ...prev, isPlaying: event.isPlaying };
+          if (
+            !prev ||
+            (prev.isPlaying === event.isPlaying &&
+              prev.shouldShowPlayButton === event.shouldShowPlayButton)
+          ) {
+            return prev;
+          }
+          return {
+            ...prev,
+            isPlaying: event.isPlaying,
+            shouldShowPlayButton: event.shouldShowPlayButton,
+          };
         });
       }
     );
@@ -848,8 +853,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [tracks]);
 
   // status は含めない（250msごとに新しいオブジェクトになるため。
-  // → usePlaybackStatus()）。toggle は statusRef 経由で最新の isPlaying を
-  // 読むので、この value が古いタイミングで作られていても問題ない。
+  // → usePlaybackStatus()）。toggle はネイティブ側で現在の Player 状態を
+  // 見て判定するので、この value が古いタイミングで作られていても問題ない。
   const value: PlaybackValue = useMemo(
     () => ({
       ready,
@@ -875,8 +880,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       playFrom,
       play: () => RetracksPlayer.play(),
       pause: () => RetracksPlayer.pause(),
-      toggle: () =>
-        statusRef.current?.isPlaying ? RetracksPlayer.pause() : RetracksPlayer.play(),
+      toggle: () => RetracksPlayer.toggle(),
       next: () => RetracksPlayer.next(),
       previous: () => RetracksPlayer.previous(),
       skipTo: (index: number) => RetracksPlayer.skipTo(index),

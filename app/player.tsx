@@ -335,7 +335,7 @@ export default function PlayerScreen() {
               </Pressable>
               <Pressable style={[styles.control, styles.controlMain]} onPress={toggle}>
                 <Text style={styles.controlMainGlyph}>
-                  {status?.isPlaying ? '❚❚' : '▶'}
+                  {(status?.shouldShowPlayButton ?? true) ? '▶' : '❚❚'}
                 </Text>
               </Pressable>
               <Pressable style={styles.control} onPress={next} hitSlop={10}>

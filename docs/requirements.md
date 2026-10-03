@@ -1,7 +1,7 @@
 # RE:TR4CKS 要件定義書
 
-- バージョン: v2.36
-- 更新日: 2026-10-02
+- バージョン: v2.37
+- 更新日: 2026-10-04
 - ステータス: Android版は1.1.0（RevenueCat定期購入＋AdMobバナー広告を導入）が審査通過・
   公開済み（2026-09-29）。iOS版は1.0.0（ビルド7、2026-09-15審査提出）が公開中の最新版だが、
   ホーム画面ウィジェット・RevenueCat/AdMob（Android同様の広告・Pro購読）を追加した
@@ -1228,11 +1228,49 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
     `isPlaying` が瞬間的に `false` を返すことによるもの（音切れは無い）。
     Media3 公式は独自UIでの再生/一時停止表示に `isPlaying` ではなく
     ユーザーの意図を表す `playWhenReady`（または `Util.shouldShowPlayButton()`
-    相当）を使うことを推奨しており、表示を `playWhenReady` ベースに
-    変えればこの点滅・および `toggle()` がバッファリング中に判定を誤る
-    narrow case は原理的に解消できる（クロスレビューで指摘）。今回は
-    実害がないとの判断で見送ったが、対応する場合は Android・iOS 両方の
-    ネイティブ側で `playWhenReady` 相当を snapshot に追加露出する必要がある
+    相当）を使うことを推奨している。当初は実害が無いとして見送ったが、
+    後日「直せるなら直したい」との要望で対応した（下記）
+  - **`isPlaying` と `shouldShowPlayButton` を分離**（2026-10、クロスレビュー
+    2件の指摘を踏まえて複数回修正）
+    - Android：`Player.playbackState`・`playWhenReady`・
+      `playbackSuppressionReason` から `shouldShowPlayButton()` を計算し、
+      `snapshot`・`onPlaybackStateChange` の両方に乗せる。イベント送信は
+      `onIsPlayingChanged`/`onPlaybackStateChanged` の2つを別々に実装すると、
+      「バッファリング中に一時停止」のように `playWhenReady` だけが変わる
+      操作でどちらも発火せず、最大1秒アイコンが誤ったまま残るケースが
+      あった（クロスレビューで指摘・修正前は未検知）。`Player.Listener`
+      の `onEvents(player, events)` で
+      `EVENT_IS_PLAYING_CHANGED`/`EVENT_PLAYBACK_STATE_CHANGED`/
+      `EVENT_PLAY_WHEN_READY_CHANGED`/`EVENT_PLAYBACK_SUPPRESSION_REASON_CHANGED`
+      のいずれかを含むかで判定し、1回にまとめた（1操作で複数イベントが
+      同時に変わる場合の二重送信も防げる）
+    - iOS：当初 `player.timeControlStatus == .paused` で判定していたが、
+      (1) `play()`/`pause()` 呼び出し直後に同期的に切り替わる保証がなく
+      KVO も張っていないため最大1秒ずれた値が残り得る、(2) `player.rate`
+      （元々の `isPlaying` の判定に使っている値）がそもそも「要求している
+      再生速度」を表しており、バッファリング中も 1 のままである可能性が
+      あり、だとすれば iOS はそもそも Android のような一瞬のアイコン変化が
+      起きていなかった可能性がある、という2点をクロスレビューで指摘され、
+      どちらも実機未検証だったため、安全側の `player.rate == 0` に変更した
+      （play()/pause() の呼び出しと同期して確実に変わる値のため）。ただし
+      `rate == 0` は常に `!isPlaying`（`rate > 0` の否定）と等価なので、
+      iOS では Android のような「意図」と「実際の再生状態」の区別はできて
+      いない。rate がバッファリング中も1のままなら（上の(2)の想定通りなら）
+      ちらつきは起きないが、Android と同じく0へ落ちるなら、Android で
+      直したのと同じちらつきが iOS には残る（2026-10時点で未検証）
+    - `toggle()` をネイティブ関数として追加し、JS 側の
+      `statusRef.current?.isPlaying` を見た分岐は撤廃（`statusRef` 自体も
+      削除）。バッファリング中の誤判定や、イベントが JS に届く前の連打での
+      重複送信を避けるため、現在の Player 状態を見て原子的に判定する
+    - 未対応のまま残した点（既存の `play()`/`pause()` と同じ挙動なので
+      劣化ではない）：Android の `toggle()` は、リピート OFF でキューを
+      再生し終えた ENDED 状態で `shouldShowPlayButton` が true になっても
+      `play()` を呼ぶだけで、`Util.handlePlayButtonAction()` のような
+      `seekToDefaultPosition()` はしない。`toggle()` は `controller`
+      （`activePlayer()` ではない）を使っており、接続前（起動直後の数秒）は
+      `play()`/`pause()` と同じく何も起きない（`setRepeatMode()` は設定が
+      消えないよう `activePlayer()` に書いているが、再生操作はそこまでする
+      理由が無いため揃えていない）
 - **iOSのローカルビルドがXcode 26.3で失敗する（`expo-modules-jsi`側のバグ、
   この端末では26.6へ上げられない）**（2026-09-15〜18、`feat/ios-widget`
   ブランチの実機確認中に発覚）
@@ -1717,3 +1755,4 @@ crash無し、dev-client経由でMetroからJSバンドルを読み込みアプ�
 | v2.34 | 2026-09-30 | `feat/ios-widget`（v2.27・v2.28、iOSホーム画面ウィジェットv1）を`main`へマージ。両ブランチが独立に追記していた`CLAUDE.md`・本書・`docs/ios-release-checklist.md`のiOS関連記述を、片方を機械的に採用せず内容を統合する形で手動解消。ウィジェット機能自体の実機確認（EASビルド）はまだ未実施のまま引き継ぎ |
 | v2.35 | 2026-10-02 | iOS版にAdMobバナー広告とRevenueCat Pro月額購読を追加（`feat/revenuecat-admob-ios`、バージョンを1.1.1へ）。Android版（v2.29〜v2.32）とのバージョン番号の食い違い（Androidは広告・Pro込みの1.1.0、iOSはウィジェットのみの1.1.0）を解消する目的。AdMob側にiOS用アプリ・バナー広告ユニットを新規登録（登録直後の「app-ads.txt確認失敗」は設定不備ではなく新規アプリの再クロール待ちで、1日程度で解消。Androidのときより反映が遅かった点を運用メモに記録）、既存GDPR同意メッセージの対象アプリにiOS版を追加（iOS側のプライバシーポリシーURL未設定が原因で一度つまずいた）。App Store Connectにサブスクリプショングループ・月額商品`pro_monthly`を作成（価格はAndroidと同じ日本円ティアに自動一致）。RevenueCatにApp Store Appを追加し、Androidと同じEntitlement`pro`・Offering`current`のPackage`$rc_monthly`へ商品を紐付け（App Store Connect APIキー・In-app purchase keyは同じApple Developerチームのfilto用キーをダッシュボードのドロップダウンから再利用できた）。コード側は、`src/adInit.ts`・`src/components/AdBanner.tsx`・`src/purchases.ts`がAndroid固有のネイティブ呼び出しを持たないことを確認した上で、`package.json`の`expo.autolinking.ios.exclude`を解除し、`adInit.ios.ts`・`AdBanner.ios.tsx`・`purchases.ios.ts`のno-opスタブを削除して共通実装に一本化（プラットフォーム差分はAdMobアプリID/広告ユニットID・RevenueCat APIキーのみ`Platform.select`で分岐）。`app.json`に`iosAppId`と、Google公式ガイドから取得した`skAdNetworkItems`（50件）を追加。ATT/IDFAは使わず常に非パーソナライズ広告のみをリクエストする方針をAndroidから踏襲（Apple側のATT許可ダイアログ・`NSUserTrackingUsageDescription`は意図的に未実装）。`app/pro.tsx`の解約案内文言が「Google Play」固定になっていた（Apple審査ガイドライン上iOSで案内すると通らない）のをストア名の動的出し分けに修正。`npx expo prebuild --clean`でPod解決を確認し、v2.29で懸念していたXcode 27のdeployment target問題は再発せず。`docs/privacy-policy.md`・`docs/ios-app-store-listing.md`のiOS向け「広告・購入は未提供」という記述を削除し、Androidと同内容の開示に統一（App Store ConnectのApp Privacy回答は別途確定が必要なためTODOとして明示）。実機確認・ストア提出は次バージョンへ継続 |
 | v2.36 | 2026-10-02 | iOS版1.1.1（ビルド17）を実機確認・App Store Connect設定まで完了させ、App Store審査へ提出。`eas build --local --profile production`でのビルドログに拡張機能（ExpoWidgetsTarget）とアプリ本体のCFBundleVersion不一致警告が出たが、書き出し済みIPAの実際のInfo.plistでは両方`17`で一致しており実害なしと確認（Xcodeのビルド中間段階の一時的な警告）。`eas submit`でTestFlightへアップロード後、iPhone 8実機でバナー広告表示・Sandbox購入・復元・広告非表示化を確認。App Store ConnectのApp Privacyは姉妹アプリfiltoの既存申告（同じAdMob＋RevenueCat構成）に倣い、デバイスID・購入履歴・製品の操作・広告データ・クラッシュデータ・パフォーマンスデータの6種類を「ユーザに関連付けないデータ」として申告。サブスクリプショングループの表示名ローカライズ、サブスクリプション審査用スクリーンショット（Simulatorで撮影したPro画面）、アプリバージョン1.1.1の「このバージョンの新機能」・概要（広告・Pro購読の開示を追記、「広告なし」の記述を削除）・審査メモ（Sandboxテスト手順を追記）を設定し、アプリバージョン・サブスクリプション・サブスクリプショングループの3項目をまとめて審査へ提出（10:37、提出ID`aaa2fb11-5d65-4b9d-a3f1-a81d8125279d`）。`feat/revenuecat-admob-ios`ブランチはmainへ未マージのまま |
+| v2.37 | 2026-10-04 | プレイヤー画面のリピート・再生/一時停止ボタンの反応が鈍い不具合を調査・修正（`fix/repeat-button-latency`、詳細は13.4節）。リピートは、ネイティブの`setRepeatMode()`がメインスレッドへの非同期postを挟むため直後の読み直しがほぼ空振りしていたのが主因で、`onTrackChange`と同じイベント駆動（`onRepeatModeChange`）に変更。あわせてプレイヤー画面がリピート状態を`usePlayback()`の共有valueから読んでいたため無関係な画面まで再レンダーされていた問題も解消（`usePlaybackStatus()`のstatusを直接読む形に変更）。再生/一時停止ボタンも同根（ネイティブの`onPlaybackStateChange`イベントをJS側で未購読）で同様に修正。さらに、曲送り時のバッファリングで再生/一時停止アイコンが一瞬誤表示される問題に対し、「実際にいま音が進んでいるか」（`isPlaying`）と「ユーザーの再生意図」（`shouldShowPlayButton`、Media3の`Util.shouldShowPlayButton()`に相当）を分離し、表示と`toggle()`の判定を後者ベースに変更（Android）。`toggle()`はJS側の`isPlaying`判定から、ネイティブ側で現在のPlayer状態を見て原子的に判定する専用関数へ変更（Android・iOS）。実装過程で複数回のクロスレビューを受け、Androidは`onIsPlayingChanged`単体でのsnapshot更新漏れ、`playWhenReady`変化のみでは`onIsPlayingChanged`/`onPlaybackStateChanged`のどちらも発火しない取りこぼし（`Player.Listener.onEvents()`への統合で解消）を修正。iOSは`shouldShowPlayButton`の判定を`timeControlStatus`ベースから、`play()`/`pause()`と同期して確実に変わる`player.rate == 0`ベースへ変更（ただしこれは常に`!isPlaying`と等価で、Androidのような「意図」と「実際の再生状態」の区別はできておらず、rateがバッファリング中に0へ落ちる場合はちらつきが残る可能性があり未検証）。Android実機（Pixel 11）で反応速度・ちらつき解消を確認。iOSはSimulatorでのビルド・起動・Fast Refresh接続のみ確認（Simulatorに音楽ライブラリが無いため実際の再生操作は未確認）。`fix/repeat-button-latency`ブランチはmainへ未マージのまま |
