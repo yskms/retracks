@@ -1175,8 +1175,11 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
     `onRepeatModeChanged` 側の `refreshSnapshot()` と役割が違うため重複では
     ない
   - 続き（同じ2026-10）：上のイベント化だけでは実機で「良くなったが、まだ
-    微妙に遅い」という状態が残った。真因はネイティブではなく JS 側の
-    再レンダー構造だった。`player.tsx` はリピートアイコンを
+    微妙に遅い」という状態が残った。このリピート固有の残り遅延に限って言えば
+    真因はネイティブではなく JS 側の再レンダー構造だった（`onRepeatModeChanged`
+    は最初から `refreshSnapshot()` を呼んでいたため）。ただし後述の通り、
+    再生/一時停止側では別にネイティブ側の更新漏れが残っていた。
+    `player.tsx` はリピートアイコンを
     `usePlayback()` の value 経由（`repeatModeState`）で読んでいたが、
     `repeatModeState` は `status` が変わった「後」の別の `useEffect` でしか
     更新されないため、①イベントで `status` 更新→再レンダー、②その
@@ -1207,11 +1210,29 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
     いたが、JS 側 `playback.tsx` がリッスンしていなかった）で、再生/一時
     停止ボタンのアイコン反映も1秒ポーリング任せで遅れていた。同じ形で
     `addListener('onPlaybackStateChange', ...)` を追加して解消（実機で
-    確認済み）。なお、再生中に次/前の曲ボタンを押すと一瞬だけ再生アイコンが
-    出て一時停止アイコンに戻ることがあるが、これは曲の切り替え時に
-    ExoPlayer が一瞬 `STATE_BUFFERING` を経由し `isPlaying` が瞬間的に
-    `false` を返すことによるもので、コード側の不具合ではなく想定内の挙動
-    と考えている（音切れは無い）
+    確認済み）
+  - 上の対応を入れた直後、`onIsPlayingChanged()` だけ他の3つのリスナー
+    （`onMediaItemTransition`・`onRepeatModeChanged`・iOS の
+    `playbackChanged()`）と違って `refreshSnapshot()` を呼ばずに
+    `sendEvent()` していたことが発覚（クロスレビューで指摘）。イベントで
+    JS の `status.isPlaying` を更新した直後、1秒ポーリングが
+    `SNAPSHOT_INTERVAL_MS`（200ms）ぶん古い native snapshot を取得すると
+    `statusEquals()` が「違う」と判定し、一旦古い値へ表示が巻き戻ってから
+    次のポーリングで再び正しい値に戻る、というちらつきが起こり得た
+    （指摘時点では未計測。ポーリング周期1秒・ずれの窓200msから
+    単純計算で2割程度の確率と推定）。他の3箇所と同じ順序
+    （`refreshSnapshot()` → `sendEvent()`）に揃えて解消した
+  - なお、再生中に次/前の曲ボタンを押すと一瞬だけ再生アイコンが出て
+    一時停止アイコンに戻ることがある。これは曲の切り替え時に ExoPlayer が
+    一瞬 `STATE_BUFFERING` を経由し、実際に音が進んでいるかを表す
+    `isPlaying` が瞬間的に `false` を返すことによるもの（音切れは無い）。
+    Media3 公式は独自UIでの再生/一時停止表示に `isPlaying` ではなく
+    ユーザーの意図を表す `playWhenReady`（または `Util.shouldShowPlayButton()`
+    相当）を使うことを推奨しており、表示を `playWhenReady` ベースに
+    変えればこの点滅・および `toggle()` がバッファリング中に判定を誤る
+    narrow case は原理的に解消できる（クロスレビューで指摘）。今回は
+    実害がないとの判断で見送ったが、対応する場合は Android・iOS 両方の
+    ネイティブ側で `playWhenReady` 相当を snapshot に追加露出する必要がある
 - **iOSのローカルビルドがXcode 26.3で失敗する（`expo-modules-jsi`側のバグ、
   この端末では26.6へ上げられない）**（2026-09-15〜18、`feat/ios-widget`
   ブランチの実機確認中に発覚）

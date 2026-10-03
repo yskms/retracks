@@ -273,6 +273,13 @@ class RetracksPlayerModule : Module() {
     }
 
     override fun onIsPlayingChanged(isPlaying: Boolean) {
+      // 他の3つのリスナー・iOS の playbackChanged() と同様、イベントを送る前に
+      // snapshot を最新化する。これが無いと、JS がイベントで status.isPlaying
+      // を更新した直後に1秒ポーリング（最大200ms古いnative snapshot）が
+      // statusEquals() で「違う」と判定し、一旦古い値へ巻き戻ってから次の
+      // ポーリングで再度正しい値に戻る、という表示のちらつきが起きる
+      // （2026-10）。
+      refreshSnapshot()
       sendEvent("onPlaybackStateChange", mapOf("isPlaying" to isPlaying))
     }
 
