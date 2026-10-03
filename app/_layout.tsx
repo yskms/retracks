@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View, StyleSheet } from 'react-native';
 
 import '../src/i18n';
@@ -63,8 +63,7 @@ export default function RootLayout() {
                   <Stack.Screen name="artist/[id]" />
                   <Stack.Screen name="album/[id]" />
                 </Stack>
-                <AdBannerSlot />
-                <MiniPlayerSlot />
+                <BottomBar />
               </View>
               {showSplash && <SplashFade onDone={hideSplash} />}
             </PlaybackProvider>
@@ -94,6 +93,22 @@ function AdBannerSlot() {
   const pathname = usePathname();
   if (HIDE_AD_BANNER_PATHS.includes(pathname)) return null;
   return <AdBanner />;
+}
+
+/**
+ * 画面下部固定のAdBanner/MiniPlayerをまとめ、システムナビゲーションバー分の
+ * bottom insetを確保する。Android edge-to-edge（Expo SDK 54〜のデフォルト）では
+ * コンテンツがナビゲーションバーの裏まで描画されるため、3ボタンナビゲーション
+ * 端末ではこれが無いと広告・ミニプレイヤーがナビゲーションバーと重なる。
+ */
+function BottomBar() {
+  const insets = useSafeAreaInsets();
+  return (
+    <View style={{ paddingBottom: insets.bottom, backgroundColor: colors.background }}>
+      <AdBannerSlot />
+      <MiniPlayerSlot />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
