@@ -105,9 +105,11 @@ type PlaybackValue = {
    */
   playFrom: (source: Track[], index: number) => Promise<void>;
 
-  /** いまのリピート設定（RepeatMode）。ネイティブ側のプレイヤーが持つ値。 */
-  repeatMode: number;
-  /** リピートを OFF → 全曲 → 1曲 → OFF の順に切り替える。 */
+  /**
+   * リピートを OFF → 全曲 → 1曲 → OFF の順に切り替える。
+   * いまのリピート設定自体は usePlaybackStatus() の repeatMode を見ること
+   * （この value には含めない。→ 下のコメント参照）。
+   */
   cycleRepeat: () => void;
 
   play: () => void;
@@ -212,15 +214,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const statusRef = useRef<PlayerStatus | null>(null);
   useEffect(() => {
     statusRef.current = status;
-  }, [status]);
-  // repeatMode は status（250ms ごとに新しいオブジェクトになる）由来だが、
-  // 値そのものはユーザー操作でしか変わらない。value に status をそのまま
-  // 含めると再生中ずっと value が作り直され続けてしまうため、実際に値が
-  // 変わったときだけ更新される独立した state にして切り離す。
-  const [repeatModeState, setRepeatModeState] = useState<number>(RepeatMode.All);
-  useEffect(() => {
-    const next = status?.repeatMode ?? RepeatMode.All;
-    setRepeatModeState((prev) => (prev === next ? prev : next));
   }, [status]);
   const [shuffle, setShuffle] = useState<ShuffleState | null>(null);
   const [setting, setSettingState] = useState<SegmentSetting>(DEFAULT_SEGMENT);
@@ -528,6 +521,39 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       void writeJson(StorageKeys.playbackPosition(queueKeyRef.current), 0);
     });
 
+    // リピート設定の変更通知。cycleRepeat() 側では以前、変更直後に
+    // getStatus() を読み直して即時反映しようとしていたが、ネイティブの
+    // setRepeatMode() がメインスレッドへの非同期 post を挟むため、その
+    // 読み直しは post が終わる前の古い値を返していた（2026-10）。
+    // onTrackChange と同じ、ネイティブ側で値を確定させた後に送られる
+    // イベントで反映する。画面側（player.tsx）は usePlayback() の value
+    // ではなく usePlaybackStatus() の repeatMode を読む。value に含めると
+    // repeatMode が変わるたびに index 画面など usePlayback() の購読者
+    // 全員が再レンダーされてしまう（2026-10、repeatMode を使うのは
+    // player.tsx だけなので value から外した）。
+    const onRepeatModeChange = RetracksPlayer.addListener(
+      'onRepeatModeChange',
+      (event) => {
+        setStatus((prev) => {
+          if (!prev || prev.repeatMode === event.repeatMode) return prev;
+          return { ...prev, repeatMode: event.repeatMode };
+        });
+      }
+    );
+
+    // 再生/一時停止の切り替え通知。ネイティブは以前から onPlaybackStateChange
+    // を送っていたが、JS 側がリッスンしておらず、toggle() 直後のアイコン
+    // 反映が1秒ポーリング任せになっていた（2026-10、repeatMode と同根）。
+    const onPlaybackStateChange = RetracksPlayer.addListener(
+      'onPlaybackStateChange',
+      (event) => {
+        setStatus((prev) => {
+          if (!prev || prev.isPlaying === event.isPlaying) return prev;
+          return { ...prev, isPlaying: event.isPlaying };
+        });
+      }
+    );
+
     const timer = setInterval(() => {
       // status を見ているのは画面（MiniPlayer・プレイヤー画面・デバッグ画面）
       // だけで、バックグラウンドでは誰も見ていない。再生自体はサービス側で
@@ -550,6 +576,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
     return () => {
       onTrack.remove();
+      onRepeatModeChange.remove();
+      onPlaybackStateChange.remove();
       clearInterval(timer);
       clearInterval(saver);
     };
@@ -687,6 +715,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * 復元される。ここでは巡回の順番だけを決める。
    */
   const cycleRepeat = useCallback(() => {
+    // ここで読む current は連打対策（200ms以内の2回目が同じ値に戻らない
+    // ようにする、→ RetracksPlayerModule.kt の setRepeatMode のコメント）
+    // のためのもので、画面への反映は onRepeatModeChange イベント経由。
     const current = RetracksPlayer.getStatus().repeatMode ?? RepeatMode.All;
     const next =
       current === RepeatMode.Off
@@ -695,7 +726,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           ? RepeatMode.One
           : RepeatMode.Off;
     RetracksPlayer.setRepeatMode(next);
-    setStatus(RetracksPlayer.getStatus());
   }, []);
 
   const rescan = useCallback(async () => {
@@ -852,7 +882,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       skipTo: (index: number) => RetracksPlayer.skipTo(index),
       seekTo: (positionMs: number) => void RetracksPlayer.seekTo(positionMs),
       playCurrentFromStart: () => RetracksPlayer.playCurrentFromStart(),
-      repeatMode: repeatModeState,
       cycleRepeat,
       rescan,
       clearStorage,
@@ -877,7 +906,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       playTracks,
       playAll,
       playFrom,
-      repeatModeState,
       cycleRepeat,
       rescan,
       clearStorage,

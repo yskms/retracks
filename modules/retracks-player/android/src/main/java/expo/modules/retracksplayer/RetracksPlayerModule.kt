@@ -205,6 +205,21 @@ class RetracksPlayerModule : Module() {
     if (Looper.myLooper() == Looper.getMainLooper()) block() else mainHandler.post(block)
   }
 
+  private fun isControllerConnected(): Boolean {
+    val c = controller
+    return c != null && c.isConnected
+  }
+
+  /**
+   * 接続が終わるまで controller は既定値を返す（リピートは OFF 扱いになり、
+   * 起動直後の数秒だけ設定が消えたように見える）。サービスは同じプロセスに
+   * いるので、その間はプレイヤーを直接読み書きする。どちらも Player なので
+   * 扱いは同じ（→ setRepeatMode() でも同じ判定を使う。読み出しと書き込みの
+   * 対象がずれると、見えている値と実際に再生へ反映される値が食い違う）。
+   */
+  private fun activePlayer(): Player? =
+    if (isControllerConnected()) controller else PlaybackService.instance?.playerOrNull()
+
   /**
    * snapshot を現在値で更新する。メインスレッドから呼ぶこと。
    *
@@ -216,13 +231,7 @@ class RetracksPlayerModule : Module() {
    * 待たずここを直接呼んで snapshot を最新化すること。
    */
   private fun refreshSnapshot() {
-    val c = controller
-    val service = PlaybackService.instance
-
-    // 接続が終わるまで controller は既定値を返す（リピートは OFF 扱いになり、
-    // 起動直後の数秒だけ設定が消えたように見える）。サービスは同じプロセスに
-    // いるので、その間はプレイヤーを直接読む。どちらも Player なので扱いは同じ。
-    val p: Player? = if (c != null && c.isConnected) c else service?.playerOrNull()
+    val p = activePlayer()
 
     snapshot = if (p == null) {
       emptySnapshot()
@@ -236,7 +245,7 @@ class RetracksPlayerModule : Module() {
         "queueSize" to p.mediaItemCount,
         "repeatMode" to p.repeatMode,
         // これはコントローラではなくサービスしか知らない
-        "fullPlayback" to (service?.isFullPlayback() ?: false)
+        "fullPlayback" to (PlaybackService.instance?.isFullPlayback() ?: false)
       )
     }
   }
@@ -266,12 +275,23 @@ class RetracksPlayerModule : Module() {
     override fun onIsPlayingChanged(isPlaying: Boolean) {
       sendEvent("onPlaybackStateChange", mapOf("isPlaying" to isPlaying))
     }
+
+    override fun onRepeatModeChanged(repeatMode: Int) {
+      // controller（接続後）が監視しているのは MediaSession 側のプレイヤー
+      // そのものなので、ウィジェット側の直接書き込み（RetracksWidgetProvider）
+      // のような、controller のコマンド経由ではない変更も自動で転送されてくる
+      // （曲の自然な終端での自動送りが onMediaItemTransition を拾えるのと
+      // 同じ仕組み）。拾えないのは controller 接続前（起動直後の数秒）だけで、
+      // そちらは setRepeatMode() 側で直接 sendEvent している。
+      refreshSnapshot()
+      sendEvent("onRepeatModeChange", mapOf("repeatMode" to repeatMode))
+    }
   }
 
   override fun definition() = ModuleDefinition {
     Name("RetracksPlayer")
 
-    Events("onTrackChange", "onPlaybackStateChange", "onSegmentCut")
+    Events("onTrackChange", "onPlaybackStateChange", "onSegmentCut", "onRepeatModeChange")
 
     /**
      * 通知の権限をリクエストする（Android 13 以降のみ実在する権限）。
@@ -419,15 +439,34 @@ class RetracksPlayerModule : Module() {
       }
     }
 
-    /** リピート。0=OFF, 1=1曲, 2=全曲（Player.REPEAT_MODE_* と同じ） */
+    /**
+     * リピート。0=OFF, 1=1曲, 2=全曲（Player.REPEAT_MODE_* と同じ）。
+     *
+     * controller ではなく activePlayer() に書き込む（2026-10）。接続前
+     * （起動直後の数秒）に controller へ書いても無言の no-op になり、設定が
+     * そのまま失われていた。サービス側のプレイヤーに直接書けば、接続前でも
+     * 設定自体は反映される。
+     *
+     * この書き込みが controller 接続後なら、playerListener の
+     * onRepeatModeChanged が自動で呼ばれて onRepeatModeChange イベントを送る
+     * （→ そちらのコメント参照）。接続前はそのリスナーがまだ登録されていない
+     * ので、ここで直接 sendEvent する（接続後にこの分岐を通ることはないので
+     * 二重送信にはならない）。
+     *
+     * refreshSnapshot() は cycleRepeat() 冒頭の getStatus() 読み取り
+     * （連打対策）のために必要（2026-09-11）。ここで最新化しないと、200ms
+     * 以内の連打で2回目が古い repeatMode から次の値を計算し、同じ値に
+     * 戻ってしまう。
+     */
     Function("setRepeatMode") { mode: Int ->
       onMain {
-        controller?.repeatMode = mode.coerceIn(0, 2)
-        // 直後に JS 側が getStatus() で repeatMode を読みに来る
-        // （cycleRepeat()）。ここで最新化しないと、200ms以内の連打で
-        // 2回目が古い repeatMode から次の値を計算し、同じ値に
-        // 戻ってしまう（2026-09-11）。
+        val coerced = mode.coerceIn(0, 2)
+        val wasConnected = isControllerConnected()
+        activePlayer()?.repeatMode = coerced
         refreshSnapshot()
+        if (!wasConnected) {
+          sendEvent("onRepeatModeChange", mapOf("repeatMode" to coerced))
+        }
         // ウィジェットから起こしたときに同じ設定で始まるよう控える
         PlaybackService.instance?.saveState()
       }

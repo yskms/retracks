@@ -1134,6 +1134,84 @@ ExoPlayer は音声を先読みして書き込むため、再生位置を見て�
   - 教訓：このモジュールで「JS側に対処を入れたのに体感が変わらない」ときは、
     まず `getStatus()` がネイティブ側のポーリング間隔ぶん古い値を返している
     可能性を疑う
+- **リピートボタンだけ反応が遅く感じる──`cycleRepeat()` の「直後の読み直し」
+  が機能していなかった**（2026-10、プレイヤー画面のリピートボタンの反応が
+  鈍いという報告で発覚。上の項目の続き）
+  - 症状：リピートボタンをタップしてもアイコンがすぐ変わらず、次の1秒
+    ポーリングまで反映が遅れる。前後ボタンはイベント駆動（`onTrackChange`）
+    のため遅延がない一方、リピートには対応するイベントが無く、
+    `cycleRepeat()` 末尾の `setStatus(RetracksPlayer.getStatus())`
+    （直後に読み直して即時反映しようとしていた行）に頼っていた
+  - 主因と推定（計測なし）：`setRepeatMode()` は `onMain { ... }`（メイン
+    スレッドへの非同期 post）の中で値を書き換える。Expo の同期 `Function` は
+    JS スレッドで実行されるため（→ `RetracksPlayerModule.kt` 冒頭の
+    コメント）、`setRepeatMode()` を呼んだ直後に同じ JS tick で
+    `getStatus()` を呼んでも、post がまだ処理されておらず古い値を返す。
+    つまり末尾の読み直しは呼ぶたびほぼ空振りしていたと考えられる
+  - 対処：`onTrackChange` と同じ構成にした。Android は
+    `Player.Listener.onRepeatModeChanged`（controller 接続後のみ発火）で
+    `refreshSnapshot()` の後に `onRepeatModeChange` イベントを送る。iOS は
+    `Player.Listener` が無いので `setRepeatMode()` 内で直接送る。
+    `cycleRepeat()` の末尾の読み直しは削除し、JS 側は
+    `addListener('onRepeatModeChange', ...)` で反映する（ネイティブの
+    再ビルドが必要）
+  - `setRepeatMode()` は `controller` ではなく `activePlayer()`
+    （未接続中はサービス側のプレイヤーを直接書く）に書き込むようにしたため、
+    起動直後の数秒間（controller 接続前）にタップしても設定自体は失われない。
+    この間は `playerListener` が未登録で `onRepeatModeChanged` が呼ばれない
+    ため、`setRepeatMode()` 側で直接 `onRepeatModeChange` を送っている
+    （接続後にこの分岐を通ることはないので二重送信にはならない）
+  - ウィジェット（`RetracksWidgetProvider`）がリピートを変えた場合も、
+    controller 接続中であればこのイベントで即座に拾える。ウィジェットが
+    書き込む `PlaybackService.playerOrNull()` は `MediaSession.Builder` に
+    渡した Player そのもの（[PlaybackService.kt:179](../modules/retracks-player/android/src/main/java/expo/modules/retracksplayer/PlaybackService.kt#L179)）で、
+    MediaSession は接続中の MediaController へ player の状態変化を自動転送
+    する。曲の自然な終端での自動送り（`next()` を呼ばなくても
+    `onMediaItemTransition` が飛ぶ）と同じ仕組みで、新たに検証したものでは
+    ない
+  - `cycleRepeat()` 冒頭の `RetracksPlayer.getStatus().repeatMode` 読み取り
+    （連打対策、上の項目参照）はそのまま残した。`setRepeatMode()` 内の
+    `refreshSnapshot()` もこの連打対策のために必要で、
+    `onRepeatModeChanged` 側の `refreshSnapshot()` と役割が違うため重複では
+    ない
+  - 続き（同じ2026-10）：上のイベント化だけでは実機で「良くなったが、まだ
+    微妙に遅い」という状態が残った。真因はネイティブではなく JS 側の
+    再レンダー構造だった。`player.tsx` はリピートアイコンを
+    `usePlayback()` の value 経由（`repeatModeState`）で読んでいたが、
+    `repeatModeState` は `status` が変わった「後」の別の `useEffect` でしか
+    更新されないため、①イベントで `status` 更新→再レンダー、②その
+    `useEffect` が `repeatModeState` を更新→再レンダー、という2回のレンダーを
+    経てようやくアイコンが変わっていた。さらに ② の再レンダーは
+    `usePlayback()` の value（大きな1つの Context）を作り直すため、同じ
+    value を購読している `index` 画面（ライブラリ一覧、曲数が多いと重い）
+    まで巻き込んで再レンダーしていた（`index` は `player` の下に
+    Stack で積まれたままマウントされ続けている）。対処として
+    `repeatMode`/`repeatModeState` を `usePlayback()` の value から完全に
+    外し、`player.tsx` は（`progress` 表示などで元々 1秒ごとに再レンダーが
+    発生している）`usePlaybackStatus()` の `status.repeatMode` を直接読む
+    形にした。これで『イベント受信→1回の再レンダーでアイコンが変わる』
+    形になり、`index` 画面を巻き込むこともなくなった
+  - 教訓：ネイティブ側を直しても JS 側の Context 設計（大きな value を
+    1箇所で作り直すと無関係な画面まで再レンダーされる）が別のボトルネックに
+    なり得る。「イベント化したのに微妙に遅い」ときは、変更が実際にどの
+    state・どの Context 経由で画面まで届いているかを追うこと
+  - 上の再レンダー対処を実機に反映する前（Metro 再接続待ちの間）に、
+    タップの手応え改善や楽観的更新（タップ直後にローカルで `next` を仮表示
+    する）も検討したが、後者は解除条件とタイムアウトの両方が要るぶん複雑さが
+    増す一方で効果は小さいと判断し見送った。実機で再レンダー対処を確認した
+    ところ、体感は完全に解消し「めっちゃ早くなった」との評価を得た
+    （2026-10、実機 Pixel 11）。見送った手応え改善（押している間だけ不透明度
+    を下げる等）は、この画面の他のボタン（前後・再生/一時停止）にも無い
+    見た目なので、入れるなら画面全体のボタンに揃えて別タスクで対応する
+  - 同じ根本原因（ネイティブは `onPlaybackStateChange` イベントを送って
+    いたが、JS 側 `playback.tsx` がリッスンしていなかった）で、再生/一時
+    停止ボタンのアイコン反映も1秒ポーリング任せで遅れていた。同じ形で
+    `addListener('onPlaybackStateChange', ...)` を追加して解消（実機で
+    確認済み）。なお、再生中に次/前の曲ボタンを押すと一瞬だけ再生アイコンが
+    出て一時停止アイコンに戻ることがあるが、これは曲の切り替え時に
+    ExoPlayer が一瞬 `STATE_BUFFERING` を経由し `isPlaying` が瞬間的に
+    `false` を返すことによるもので、コード側の不具合ではなく想定内の挙動
+    と考えている（音切れは無い）
 - **iOSのローカルビルドがXcode 26.3で失敗する（`expo-modules-jsi`側のバグ、
   この端末では26.6へ上げられない）**（2026-09-15〜18、`feat/ios-widget`
   ブランチの実機確認中に発覚）

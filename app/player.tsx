@@ -109,10 +109,13 @@ export default function PlayerScreen() {
     seekTo,
     skipTo,
     playCurrentFromStart,
-    repeatMode,
     cycleRepeat,
   } = usePlayback();
   const status = usePlaybackStatus();
+  // usePlayback() の value ではなく usePlaybackStatus() から読む。value に
+  // 含めると、repeatMode が変わるたびに index 画面など usePlayback() の
+  // 購読者全員が再レンダーされ、アイコンの反映が遅れて見える（2026-10）。
+  const repeatMode = status?.repeatMode ?? RepeatMode.All;
 
   const listRef = useRef<FlatList<Track>>(null);
   const { width } = useWindowDimensions();

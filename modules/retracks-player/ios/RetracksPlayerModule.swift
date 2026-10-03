@@ -69,7 +69,7 @@ public final class RetracksPlayerModule: Module {
 
   public func definition() -> ModuleDefinition {
     Name("RetracksPlayer")
-    Events("onTrackChange", "onPlaybackStateChange", "onSegmentCut")
+    Events("onTrackChange", "onPlaybackStateChange", "onSegmentCut", "onRepeatModeChange")
 
     AsyncFunction("requestNotificationPermissionAsync") { () -> [String: Any] in
       // iOSのロック画面メディア操作に通知権限は不要。
@@ -124,6 +124,11 @@ public final class RetracksPlayerModule: Module {
       DispatchQueue.main.async {
         self.repeatMode = min(max(mode, 0), 2)
         self.refreshSnapshot()
+        // Android の Player.Listener.onRepeatModeChanged と同じ役割。iOS には
+        // controller/未接続の区別も、ウィジェット等の外部からリピートを変える
+        // 経路も無いので、ここで直接送れば十分（MPRemoteCommand にリピート
+        // コマンドは無い）。
+        self.sendEvent("onRepeatModeChange", ["repeatMode": self.repeatMode])
       }
     }
 

@@ -63,6 +63,11 @@ export type RetracksPlayerEvents = {
   onTrackChange: (event: { index: number; id: string }) => void;
   onPlaybackStateChange: (event: { isPlaying: boolean }) => void;
   /**
+   * リピート設定が変わったときの通知。Android は controller 接続後のみ
+   * （→ RetracksPlayerModule.kt の onRepeatModeChanged のコメント）。
+   */
+  onRepeatModeChange: (event: { repeatMode: number }) => void;
+  /**
    * 区間が切り替わったときの通知。
    * 切り出し自体は ExoPlayer が行うため、実経過時間と期待値の差で精度を測る。
    */
