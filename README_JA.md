@@ -42,7 +42,7 @@ OFF にすれば普通の音楽プレイヤーとして使える。
 
 ## 状態
 
-**Android版 1.1.0を公開済み。iOS版も公開・更新を継続中。**
+**Android / iOSともに公開中。**
 
 設計の経緯と決定事項は [要件定義書](docs/requirements.md) に集約している。
 開発の流れと現在地は [開発履歴](docs/development-history.md) に短くまとめている。
@@ -51,11 +51,20 @@ OFF にすれば普通の音楽プレイヤーとして使える。
 ## 技術的なところ
 
 - **Expo SDK 57 / React Native 0.86**（New Architecture）
-- **再生層は自作の Expo モジュール**（Kotlin + Media3）。既存ライブラリでは
-  通知・イヤホンからの「次の曲」を満たせなかったため（詳細は要件定義書 13.2）
-- 区間の切り出しは `MediaItem.ClippingConfiguration` に委ね、ExoPlayer 自身に
-  サンプル単位で切らせている
-- Android / iOS対応。再生対象は端末内のローカル音楽
+- **再生層は自作の Expo モジュール** — Android: Kotlin + Media3、iOS: Swift +
+  `AVPlayer`/`MPMediaQuery`。区間再生（RUSH）や一巡するシャッフルを前提にした
+  既製プレイヤーはそもそも無く、Androidに限っても既存のクロスプラットフォーム
+  ライブラリでは通知・イヤホンからの「次の曲」を満たせなかった：`expo-audio`
+  はこれらのMediaSessionコマンドを明示的に無効化しており、
+  `react-native-track-player` v4はRN 0.85でのブリッジ互換レイヤー削除以降
+  動作せず、v5は商用ライセンス（詳細は要件定義書 13.2）
+- （Android）区間の切り出しは `MediaItem.ClippingConfiguration` に委ね、ExoPlayer
+  自身にサンプル単位で切らせている。フェードは音声の書き込み先行分を補正する
+  必要があり、`player.volume` は今まさに聴こえている位置ではなくこれから
+  書き込まれるサンプルに効くため、少し先読みした位置からゲインを計算している
+- （iOS）`AVPlayer.addPeriodicTimeObserver`（50ms間隔）で再生位置を監視し、
+  区間の終了とフェードを制御している
+- 再生対象は端末内のローカル音楽のみ
 
 ## 開発
 
@@ -64,15 +73,18 @@ OFF にすれば普通の音楽プレイヤーとして使える。
 ```bash
 npm install
 
-# Android SDK が必要（ANDROID_HOME を通しておく）
+# Android: Android SDK が必要（ANDROID_HOME を通しておく）
 npx expo run:android
+
+# iOS: Xcode が必要
+npx expo run:ios
 ```
 
 ### 構成
 
 | | |
 |---|---|
-| `modules/retracks-player/` | 再生層。ExoPlayer + MediaSessionService |
+| `modules/retracks-player/` | 再生層。Android: ExoPlayer + MediaSessionService。iOS: AVPlayer + MPNowPlayingInfoCenter/MPRemoteCommandCenter |
 | `src/rush.ts` | 区間設定の解決（境界処理とフェードのクランプ） |
 | `src/shuffle.ts` | シャッフルの順列と1巡状態の永続化 |
 | `src/library.ts` | 曲一覧の走査とキャッシュ |
@@ -85,7 +97,7 @@ npx expo run:android
 | 用途 | 名前 |
 |---|---|
 | ブランド | RE:TR4CKS |
-| ストア名候補 | RE:TR4CKS Music Player |
+| ストア名 | RE:TR4CKS Music Player |
 | 体験コンセプト | RUSH |
 | リポジトリ / 内部識別子 | retracks |
 

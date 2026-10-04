@@ -16,7 +16,7 @@ Offline music player for rediscovering your local music.
   <a href="https://play.google.com/store/apps/details?id=com.yskms.retracks"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" height="60" alt="Get it on Google Play" align="middle" /></a>
 </p>
 
-## What is this
+## About
 
 A music player for local files already on your Android or iOS device.
 It exists to solve one problem: you own thousands of tracks but keep hearing the same few.
@@ -43,7 +43,7 @@ reached yet, so they surface without waiting for a full cycle.
 
 ## Status
 
-**Android 1.1.0 is released. The iOS release is also available and actively maintained.**
+**Available on Android and iOS.**
 
 Design decisions and the reasoning behind them live in the
 [requirements document](docs/requirements.md) (Japanese).
@@ -54,16 +54,21 @@ See the [privacy policy](docs/privacy-policy.md) for privacy details.
 ## Technical notes
 
 - **Expo SDK 57 / React Native 0.86** (New Architecture)
-- **The playback layer is a custom Expo module** (Kotlin + Media3). No existing library
-  could satisfy "skip to next track from the notification and from headset controls" —
-  `expo-audio` explicitly removes those MediaSession commands, `react-native-track-player`
-  v4 predates the bridge removal in RN 0.85, and v5 is commercially licensed
-- Segments are cut by `MediaItem.ClippingConfiguration`, letting ExoPlayer itself end each
-  item sample-accurately rather than polling the playback position
-- Fades compensate for the audio write-ahead: `player.volume` applies to samples about to
-  be written, not to what is currently audible, so the gain is computed from a
-  look-ahead position
-- Android and iOS. Playback is limited to local music on the device
+- **The playback layer is a custom Expo module** — Android: Kotlin + Media3, iOS: Swift +
+  `AVPlayer`/`MPMediaQuery`. No off-the-shelf player assumes segment playback (RUSH) or a
+  persistent shuffle cycle in the first place, and on Android, existing cross-platform
+  libraries couldn't even satisfy "skip to next track from the notification and from headset
+  controls": `expo-audio` explicitly removes those MediaSession commands,
+  `react-native-track-player` v4 predates the bridge removal in RN 0.85, and v5 is
+  commercially licensed
+- (Android) Segments are cut by `MediaItem.ClippingConfiguration`, letting ExoPlayer itself
+  end each item sample-accurately rather than polling the playback position. Fades
+  compensate for the audio write-ahead: `player.volume` applies to samples about to be
+  written, not to what is currently audible, so the gain is computed from a look-ahead
+  position
+- (iOS) Segments and fades are driven by a 50 ms `AVPlayer.addPeriodicTimeObserver` tick
+  that watches the playback position
+- Playback is limited to local music already on the device
 
 ## Development
 
@@ -72,15 +77,18 @@ The app contains native code, so **it does not run in Expo Go**. A local build i
 ```bash
 npm install
 
-# Requires the Android SDK (set ANDROID_HOME)
+# Android: requires the Android SDK (set ANDROID_HOME)
 npx expo run:android
+
+# iOS: requires Xcode
+npx expo run:ios
 ```
 
 ### Layout
 
 | | |
 |---|---|
-| `modules/retracks-player/` | Playback layer. ExoPlayer + MediaSessionService |
+| `modules/retracks-player/` | Playback layer. Android: ExoPlayer + MediaSessionService. iOS: AVPlayer + MPNowPlayingInfoCenter/MPRemoteCommandCenter |
 | `src/rush.ts` | Segment resolution (boundary handling and fade clamping) |
 | `src/shuffle.ts` | Shuffle permutation and cycle persistence |
 | `src/library.ts` | Library scanning and caching |
@@ -93,7 +101,7 @@ npx expo run:android
 | Purpose | Name |
 |---|---|
 | Brand | RE:TR4CKS |
-| Store name (candidate) | RE:TR4CKS Music Player |
+| Store name | RE:TR4CKS Music Player |
 | Experience concept | RUSH |
 | Repository / internal identifier | retracks |
 
