@@ -23,7 +23,7 @@ Offline music player for rediscovering your local music.
 
 軸になる体験は2つ。
 
-### RUSH
+### メドレー
 
 曲の一部だけを次々に再生して、忘れていた曲に出会い直すモード。
 再生開始位置・再生時間・フェードを指定でき、区間が終わると自動で次の曲へ送る。
@@ -52,7 +52,7 @@ OFF にすれば普通の音楽プレイヤーとして使える。
 
 - **Expo SDK 57 / React Native 0.86**（New Architecture）
 - **再生層は自作の Expo モジュール** — Android: Kotlin + Media3、iOS: Swift +
-  `AVPlayer`/`MPMediaQuery`。区間再生（RUSH）や一巡するシャッフルを前提にした
+  `AVPlayer`/`MPMediaQuery`。区間再生（メドレー）や一巡するシャッフルを前提にした
   既製プレイヤーはそもそも無く、Androidに限っても既存のクロスプラットフォーム
   ライブラリでは通知・イヤホンからの「次の曲」を満たせなかった：`expo-audio`
   はこれらのMediaSessionコマンドを明示的に無効化しており、
@@ -85,7 +85,7 @@ npx expo run:ios
 | | |
 |---|---|
 | `modules/retracks-player/` | 再生層。Android: ExoPlayer + MediaSessionService。iOS: AVPlayer + MPNowPlayingInfoCenter/MPRemoteCommandCenter |
-| `src/rush.ts` | 区間設定の解決（境界処理とフェードのクランプ） |
+| `src/rush.ts` | メドレーの区間設定の解決（境界処理とフェードのクランプ） |
 | `src/shuffle.ts` | シャッフルの順列と1巡状態の永続化 |
 | `src/library.ts` | 曲一覧の走査とキャッシュ |
 | `docs/requirements.md` | 要件定義書 |
@@ -98,7 +98,7 @@ npx expo run:ios
 |---|---|
 | ブランド | RE:TR4CKS |
 | ストア名 | RE:TR4CKS Music Player |
-| 体験コンセプト | RUSH |
+| 体験コンセプト | メドレー |
 | リポジトリ / 内部識別子 | retracks |
 
 ## ライセンス

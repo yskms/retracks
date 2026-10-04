@@ -23,7 +23,7 @@ It exists to solve one problem: you own thousands of tracks but keep hearing the
 
 Two ideas carry the app.
 
-### RUSH
+### Medley
 
 A mode that plays only a slice of each track, then moves on — so you keep running into
 songs you had forgotten about. You choose the start offset, the length, and the fades.
@@ -55,7 +55,7 @@ See the [privacy policy](docs/privacy-policy.md) for privacy details.
 
 - **Expo SDK 57 / React Native 0.86** (New Architecture)
 - **The playback layer is a custom Expo module** — Android: Kotlin + Media3, iOS: Swift +
-  `AVPlayer`/`MPMediaQuery`. No off-the-shelf player assumes segment playback (RUSH) or a
+  `AVPlayer`/`MPMediaQuery`. No off-the-shelf player assumes segment playback (Medley) or a
   persistent shuffle cycle in the first place, and on Android, existing cross-platform
   libraries couldn't even satisfy "skip to next track from the notification and from headset
   controls": `expo-audio` explicitly removes those MediaSession commands,
@@ -89,7 +89,7 @@ npx expo run:ios
 | | |
 |---|---|
 | `modules/retracks-player/` | Playback layer. Android: ExoPlayer + MediaSessionService. iOS: AVPlayer + MPNowPlayingInfoCenter/MPRemoteCommandCenter |
-| `src/rush.ts` | Segment resolution (boundary handling and fade clamping) |
+| `src/rush.ts` | Medley segment resolution (boundary handling and fade clamping) |
 | `src/shuffle.ts` | Shuffle permutation and cycle persistence |
 | `src/library.ts` | Library scanning and caching |
 | `docs/requirements.md` | Requirements document (Japanese) |
@@ -102,7 +102,7 @@ npx expo run:ios
 |---|---|
 | Brand | RE:TR4CKS |
 | Store name | RE:TR4CKS Music Player |
-| Experience concept | RUSH |
+| Experience concept | Medley |
 | Repository / internal identifier | retracks |
 
 ## License
