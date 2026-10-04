@@ -1388,6 +1388,57 @@ crash無し、dev-client経由でMetroからJSバンドルを読み込みアプ�
 - 既存のdebug鍵インストールをアンインストールしてから`app-release.apk`を
   実機にインストールし、起動・権限ダイアログ・ライブラリ走査（992曲）・
   区間再生（メドレー）・キュー表示まで一通り動作することを確認
+- （2026-10-04追記）iOS審査対応（`fix/ios-review-rejection-eula-and-permission-locale`）
+  のコードレビューで、`android/app/release.jks`・`android/keystore.properties`が
+  既に存在せず`build.gradle`もdebug署名に戻っていることを指摘された。この
+  セッション内で実行した`expo prebuild --platform android`より前の時点で
+  既に無かったことを確認済みで、2026-10-03〜04の`fix/repeat-button-latency`
+  （Android実機でのネイティブ修正確認）での`prebuild`／`expo run:android`
+  実行時に消えたと見られる。`~/Downloads`に保管されていたバックアップから
+  復元し、SHA-256（`52f31b98bd4aede0673a9dcd950609e5cb9234731dc5bd261648057c0b3bd63a`）が
+  `docs/private/release-1.0.0.md`記載の値と完全一致することを確認（＝1.0.0公開時と
+  同じ鍵）。`./gradlew assembleRelease`・`apksigner verify --print-certs`で
+  再度署名を確認後、検証用APKは削除（ビルド成果物の後片付け方針、`CLAUDE.md`参照）。
+  **`~/Downloads`は恒久的なバックアップ置き場として脆弱**（誤って消去・整理
+  されやすい）なので、より安全な場所への移動を推奨として伝達済み
+  （実際に移動したかは未確認、次回この節を読む際に要確認）。
+  このとき`build.gradle`への実際の配線コードが本書のどこにも残っておらず
+  手探りで再構成する羽目になったため、再発防止として以下に実コードを残す
+  （`jscFlavor`の定義の直後、`android {`ブロックの手前に置く）。
+
+  ```groovy
+  def keystorePropertiesFile = rootProject.file("keystore.properties")
+  def keystoreProperties = new Properties()
+  def hasReleaseKeystore = keystorePropertiesFile.exists()
+  if (hasReleaseKeystore) {
+      keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+  } else {
+      logger.warn("keystore.properties が見つからないため、release ビルドも debug 鍵で署名します")
+  }
+  ```
+
+  `signingConfigs`ブロック内、`debug {...}`の直後に追加:
+
+  ```groovy
+  if (hasReleaseKeystore) {
+      release {
+          storeFile file(keystoreProperties['RELEASE_STORE_FILE'])
+          storePassword keystoreProperties['RELEASE_STORE_PASSWORD']
+          keyAlias keystoreProperties['RELEASE_KEY_ALIAS']
+          keyPassword keystoreProperties['RELEASE_KEY_PASSWORD']
+      }
+  }
+  ```
+
+  `buildTypes.release`内の`signingConfig signingConfigs.debug`を置き換え:
+
+  ```groovy
+  signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
+  ```
+
+  `keystore.properties`のキー名は`RELEASE_STORE_FILE`（`release.jks`という
+  ファイル名のみ、`android/`直下からの相対パス）・`RELEASE_STORE_PASSWORD`・
+  `RELEASE_KEY_ALIAS`・`RELEASE_KEY_PASSWORD`の4つ
 
 **2. JSのエラーバウンダリ**（2026-09-11・対応済み）
 
