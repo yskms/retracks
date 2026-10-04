@@ -11,6 +11,8 @@
 /**
  * Appleの標準EULA。独自のEULAを用意していないため標準を使う。
  * ※ 独自EULAに切り替える場合は App Store Connect 側にも登録が必要。
+ * Apple固有の文書（Google Playの購読には適用されない）のため、参照元
+ * （`app/pro.tsx`）ではiOS限定で表示すること。
  */
 export const TERMS_OF_USE_URL = 'https://www.apple.com/legal/internet-services/itunes/dev/stdeula/';
 

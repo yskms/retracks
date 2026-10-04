@@ -73,12 +73,18 @@ Android限定の機能のため、引き続き掲載文へ含めない。
        リンクを置いていなかった（filtoの`constants/legalUrls.ts`が既に同種の指摘を
        受けて対応済みだったパターンと同一）。
     - 対応: `app.json`にトップレベル`locales`（Expo標準の多言語Info.plist機構、
-      `ios-locales/en.json`・`ios-locales/ja.json`）を追加し、英語・日本語それぞれの
-      `InfoPlist.strings`を生成するように修正。ベースの`infoPlist`の文言も英語へ
-      変更（アプリの`detectLanguage()`の最終フォールバックが`en`のため、未対応言語の
-      端末でも整合）。`app/pro.tsx`に`TERMS_OF_USE_URL`（Appleの標準EULA）への
-      リンクをプライバシーポリシーと並べて追加（`src/legalUrls.ts`）。
-      いずれもコード変更のため**新しいビルドが必要**（`fix/ios-review-rejection-eula-and-permission-locale`）。
+      `ios-locales/en.json`・`ios-locales/ja.json`。各JSONは`{"ios": {...}}`で
+      ネストし、Android側（`AndroidConfig.Locales.withLocales`が同じ`locales`設定を
+      共有しているため、ネストしないとAndroidにも不要な文字列リソースが漏れる）へ
+      影響しないようにした）を追加し、英語・日本語それぞれの`InfoPlist.strings`を
+      生成するように修正。ベースの`infoPlist`の文言も英語へ変更（アプリの
+      `detectLanguage()`の最終フォールバックが`en`のため、未対応言語の端末でも整合）。
+      `app/pro.tsx`に`TERMS_OF_USE_URL`（Appleの標準EULA）へのリンクをプライバシー
+      ポリシーと並べて追加（`src/legalUrls.ts`。Google Playの購読には適用されない
+      文書のためiOS限定で表示）。Simulatorでシステム言語を一時的に英語へ切り替えた
+      dev-clientビルドで、権限ダイアログの英語表示とEULAリンクの動作を確認済み
+      （署名付きの次ビルドでの確認はまだ）。いずれもコード変更のため
+      **新しいビルドが必要**（`fix/ios-review-rejection-eula-and-permission-locale`）。
 - 前回申請（1.0.0・ビルド7）: 申請済み・承認済み（2026-09-15）
 
 ## English (U.S.)

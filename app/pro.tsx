@@ -206,16 +206,19 @@ export default function ProScreen() {
                 iOSでGoogle Playの解約導線を案内すると審査に通らない）。
                 利用規約（EULA）へのリンクは、ストアメタデータへの記載だけでは
                 App Store Reviewガイドライン3.1.2(c)を満たさず、アプリ本体にも
-                必要（`src/legalUrls.ts`参照） */}
+                必要（`src/legalUrls.ts`参照）。TERMS_OF_USE_URLはAppleの標準EULAで
+                Google Playの購読には適用されないため、iOS限定で表示する */}
             <View style={styles.legalBlock}>
               <Text style={styles.legalTitle}>{t('pro.subscriptionTermsTitle')}</Text>
               <Text style={styles.legalText}>
                 {t('pro.subscriptionTerms', { store: Platform.OS === 'ios' ? 'App Store' : 'Google Play' })}
               </Text>
               <View style={styles.legalLinks}>
-                <Pressable onPress={() => openLink(TERMS_OF_USE_URL)}>
-                  <Text style={styles.legalLink}>{t('pro.termsOfUse')}</Text>
-                </Pressable>
+                {Platform.OS === 'ios' && (
+                  <Pressable onPress={() => openLink(TERMS_OF_USE_URL)}>
+                    <Text style={styles.legalLink}>{t('pro.termsOfUse')}</Text>
+                  </Pressable>
+                )}
                 <Pressable onPress={() => openLink(PRIVACY_POLICY_URL)}>
                   <Text style={styles.legalLink}>{t('pro.privacyPolicy')}</Text>
                 </Pressable>
