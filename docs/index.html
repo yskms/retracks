@@ -37,7 +37,7 @@
 
       .hero {
         display: grid;
-        grid-template-columns: 132px 1fr;
+        grid-template-columns: minmax(0, 1fr) 132px;
         gap: 32px;
         align-items: center;
         margin-bottom: 56px;
@@ -108,8 +108,9 @@
 
       @media (max-width: 640px) {
         main { padding-top: 40px; }
-        .hero { grid-template-columns: 84px 1fr; gap: 20px; }
-        .icon { width: 84px; height: 84px; border-radius: 20px; }
+        .hero { grid-template-columns: minmax(0, 1fr); gap: 20px; text-align: center; }
+        .icon { width: 84px; height: 84px; border-radius: 20px; margin: 0 auto; }
+        .actions { justify-content: center; }
         .grid { grid-template-columns: 1fr; }
       }
     </style>
@@ -117,7 +118,6 @@
   <body>
     <main>
       <header class="hero">
-        <img class="icon" src="google-play-assets/app-icon-512.png" alt="RE:TR4CKS app icon">
         <div>
           <h1>RE:TR4CKS</h1>
           <p class="tagline">Rediscover the music you already own.</p>
@@ -131,6 +131,7 @@
             <a class="button" href="privacy-policy.html">Privacy Policy / プライバシーポリシー</a>
           </nav>
         </div>
+        <img class="icon" src="google-play-assets/app-icon-512.png" alt="RE:TR4CKS app icon">
       </header>
 
       <section class="grid" aria-label="App information">
