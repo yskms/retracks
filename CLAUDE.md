@@ -1,3 +1,14 @@
+## ドキュメント運用
+
+- `docs/requirements.md`の履歴ログ（`| vX.XX | 日付 | ... |`の表）にリリース関連の
+  作業（バージョン更新、ビルド、実機確認、ストア提出等）を追記したら、同じタイミングで
+  `docs/development-history.md`の「現在地」表・「マイルストーン」表も更新すること。
+  `requirements.md`側だけ更新して`development-history.md`側を忘れる、ということが
+  実際に起きた（2026-10-04、Android 1.1.1のリリース作業で発覚。「マイルストーン」が
+  数日分古いままになっていた）。両ファイルは役割が違う（`requirements.md`は詳細な
+  作業ログ、`development-history.md`は俯瞰用の現在地・マイルストーン）ため、片方の
+  更新がもう片方に自動で反映されるわけではない。
+
 ## RevenueCat / AdMob（Android/iOS共通）
 
 - RevenueCat（`react-native-purchases`）とAdMob（`react-native-google-mobile-ads`）は
