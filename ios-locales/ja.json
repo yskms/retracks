@@ -1,0 +1,4 @@
+{
+  "NSAppleMusicUsageDescription": "端末内の音楽を表示・再生するために、メディアライブラリへのアクセスを使用します。",
+  "NSPhotoLibraryUsageDescription": "端末内の音楽に関連するアートワークを表示するために、写真ライブラリへのアクセスを使用します。"
+}

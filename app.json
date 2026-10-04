@@ -27,12 +27,17 @@
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "NSAppleMusicUsageDescription": "端末内の音楽を表示・再生するために、メディアライブラリへのアクセスを使用します。",
-        "NSPhotoLibraryUsageDescription": "端末内の音楽に関連するアートワークを表示するために、写真ライブラリへのアクセスを使用します。",
+        "CFBundleLocalizations": ["en", "ja"],
+        "NSAppleMusicUsageDescription": "Used to access your media library to show and play music stored on your device.",
+        "NSPhotoLibraryUsageDescription": "Used to access your photo library to show artwork associated with your music.",
         "UIBackgroundModes": [
           "audio"
         ]
       }
+    },
+    "locales": {
+      "en": "./ios-locales/en.json",
+      "ja": "./ios-locales/ja.json"
     },
     "plugins": [
       "./plugins/with-ios-app-delegate-fix",

@@ -60,7 +60,25 @@ Android限定の機能のため、引き続き掲載文へ含めない。
     追記して対応。App Store ConnectでApp Descriptionを編集後、新しいビルドの
     再送信ではなく「App Review」ページから同じビルド（17）を再送信すればよい
     （異議申し立てではなく通常の再送信）。→ English/日本語Description双方へ
-    追記し、2026-10-03に同ビルドを再送信済み。結果待ち。
+    追記し、2026-10-03に同ビルドを再送信済み。
+  - **2026-10-04の差し戻し内容（実機審査、ビルド17のまま）**: 2件。
+    1. Guideline 4 Design: 権限リクエストのダイアログ文言がアプリのローカライズ
+       言語と一致していない。`app.json`の`NSAppleMusicUsageDescription`・
+       `NSPhotoLibraryUsageDescription`が日本語の単一文言のみで、`CFBundleLocalizations`・
+       言語別の`InfoPlist.strings`が無かったため、審査機がどの言語でも常に日本語の
+       ダイアログを見ていたのが原因（レビュー機は英語環境と推測）。
+    2. Guideline 3.1.2(c): 自動更新サブスクリプションに必要な情報（EULAへの
+       機能するリンク）が**アプリ本体**に無い、という指摘。2026-10-03に対応したのは
+       ストアメタデータ（App Description）側のリンクで、アプリ内（`app/pro.tsx`）には
+       リンクを置いていなかった（filtoの`constants/legalUrls.ts`が既に同種の指摘を
+       受けて対応済みだったパターンと同一）。
+    - 対応: `app.json`にトップレベル`locales`（Expo標準の多言語Info.plist機構、
+      `ios-locales/en.json`・`ios-locales/ja.json`）を追加し、英語・日本語それぞれの
+      `InfoPlist.strings`を生成するように修正。ベースの`infoPlist`の文言も英語へ
+      変更（アプリの`detectLanguage()`の最終フォールバックが`en`のため、未対応言語の
+      端末でも整合）。`app/pro.tsx`に`TERMS_OF_USE_URL`（Appleの標準EULA）への
+      リンクをプライバシーポリシーと並べて追加（`src/legalUrls.ts`）。
+      いずれもコード変更のため**新しいビルドが必要**（`fix/ios-review-rejection-eula-and-permission-locale`）。
 - 前回申請（1.0.0・ビルド7）: 申請済み・承認済み（2026-09-15）
 
 ## English (U.S.)

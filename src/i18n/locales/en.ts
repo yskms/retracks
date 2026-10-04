@@ -147,6 +147,7 @@ export default {
     alreadyProDescription: 'Thanks for subscribing. All ads are hidden.',
     subscriptionTermsTitle: 'Subscription terms',
     subscriptionTerms: 'The monthly plan renews automatically. You can cancel anytime from {{store}} subscriptions.',
+    termsOfUse: 'Terms of Use (EULA)',
     privacyPolicy: 'Privacy policy',
   },
   debug: {

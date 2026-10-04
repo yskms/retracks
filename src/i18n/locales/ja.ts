@@ -155,6 +155,7 @@ export default {
     alreadyProDescription: 'ご購読ありがとうございます。すべての広告が非表示になっています。',
     subscriptionTermsTitle: '購読について',
     subscriptionTerms: '月額プランは自動更新されます。解約は{{store}}の「定期購入」からいつでも行えます。',
+    termsOfUse: '利用規約（EULA）',
     privacyPolicy: 'プライバシーポリシー',
   },
   debug: {

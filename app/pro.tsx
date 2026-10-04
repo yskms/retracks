@@ -12,7 +12,7 @@ import { useTranslation } from 'react-i18next';
 
 import { colors } from '../src/theme';
 import { getIsPro, getMonthlyPriceString, purchaseMonthly, restorePurchases } from '../src/purchases';
-import { PRIVACY_POLICY_URL } from '../src/legalUrls';
+import { PRIVACY_POLICY_URL, TERMS_OF_USE_URL } from '../src/legalUrls';
 
 /** 価格取得の自動リトライ回数（初回を除く）と、その待ち時間（回を追うごとに伸ばす） */
 const PRICE_FETCH_RETRIES = 2;
@@ -203,15 +203,23 @@ export default function ProScreen() {
                 必要がある。価格は上のpriceString（ストアのローカライズ済みの値）が
                 担うため、ここに金額を直書きしない ―― 通貨・地域ごとに嘘になる。
                 解約先のストア名はAndroid/iOSで異なる（Appleの審査ガイドライン上、
-                iOSでGoogle Playの解約導線を案内すると審査に通らない） */}
+                iOSでGoogle Playの解約導線を案内すると審査に通らない）。
+                利用規約（EULA）へのリンクは、ストアメタデータへの記載だけでは
+                App Store Reviewガイドライン3.1.2(c)を満たさず、アプリ本体にも
+                必要（`src/legalUrls.ts`参照） */}
             <View style={styles.legalBlock}>
               <Text style={styles.legalTitle}>{t('pro.subscriptionTermsTitle')}</Text>
               <Text style={styles.legalText}>
                 {t('pro.subscriptionTerms', { store: Platform.OS === 'ios' ? 'App Store' : 'Google Play' })}
               </Text>
-              <Pressable onPress={() => openLink(PRIVACY_POLICY_URL)}>
-                <Text style={styles.legalLink}>{t('pro.privacyPolicy')}</Text>
-              </Pressable>
+              <View style={styles.legalLinks}>
+                <Pressable onPress={() => openLink(TERMS_OF_USE_URL)}>
+                  <Text style={styles.legalLink}>{t('pro.termsOfUse')}</Text>
+                </Pressable>
+                <Pressable onPress={() => openLink(PRIVACY_POLICY_URL)}>
+                  <Text style={styles.legalLink}>{t('pro.privacyPolicy')}</Text>
+                </Pressable>
+              </View>
             </View>
           </>
         )}
@@ -269,5 +277,6 @@ const styles = StyleSheet.create({
   legalBlock: { width: '100%', marginTop: 24, gap: 8 },
   legalTitle: { color: colors.textDim, fontSize: 12, fontWeight: '600' },
   legalText: { color: colors.textDim, fontSize: 11, lineHeight: 16 },
-  legalLink: { color: colors.accent, fontSize: 12, fontWeight: '500', marginTop: 4 },
+  legalLinks: { flexDirection: 'row', flexWrap: 'wrap', gap: 16, marginTop: 4 },
+  legalLink: { color: colors.accent, fontSize: 12, fontWeight: '500' },
 });
