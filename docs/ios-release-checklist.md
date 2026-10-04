@@ -139,6 +139,10 @@ AdMobバナー広告とRevenueCatによるPro月額購読をAndroidに続いてi
       作成・App Store Connectへアップロード完了（2026-10-04、詳細は
       `docs/requirements.md` v2.38・v2.39）
 - [ ] ビルド18をTestFlightで実機（iPhone 8）確認
+- [x] 却下メッセージ（Guideline 3.1.2(c)）が求めていたスクリーンレコーディングを
+      添えてApp Reviewへ返信（2026-10-04、詳細は`docs/requirements.md` v2.40）。
+      併せてプライバシーポリシー（`docs/privacy-policy.md`）の表示順を
+      日本語→英語から英語→日本語に変更
 - [ ] ビルド18を審査へ再提出（審査メモに差し戻し対応内容を追記）
 
 ## App Store Connect
