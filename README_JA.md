@@ -2,7 +2,7 @@
 
 ![RE:TR4CKS](docs/google-play-assets/feature-graphic-1024x500.png)
 
-Offline music player for rediscovering your local music.
+手持ちの音楽を、もう一度見つけるためのオフライン音楽プレイヤー。
 
 > Remember. Replay. Rediscover. Revisit.
 
@@ -16,7 +16,7 @@ Offline music player for rediscovering your local music.
   <a href="https://play.google.com/store/apps/details?id=com.yskms.retracks"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" height="60" alt="Get it on Google Play" align="middle" /></a>
 </p>
 
-## これは何
+## RE:TR4CKSとは
 
 端末内のローカル音楽を対象にした Android / iOS 向け音楽プレイヤー。
 「大量に持っているのに、いつも同じ曲しか聴いていない」を解きほぐすことを狙っている。
