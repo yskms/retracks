@@ -8,21 +8,17 @@ RE:TR4CKS Music Player
 
 ### 簡単な説明
 
-端末内の音楽を次々と短く再生。忘れていた曲にもう一度出会えるオフライン音楽プレイヤー。
+手持ちの音楽を、メドレーでもう一度。忘れていた曲と出会えるオフライン音楽プレイヤー。
 
 ### 詳細な説明
 
-スマホの中に、しばらく聴いていない曲はありませんか？
+手持ちの音楽を、メドレーでもう一度。
+
+RE:TR4CKSは、曲の好きな部分を一定時間ずつ次々と再生する「メドレー」機能で、忘れていた音楽との再会を楽しむオフライン音楽プレイヤーです。
 
 昔よく聴いたアルバムの一曲、好きだったアーティストの隠れた曲、存在すら忘れていた曲。たくさんの音楽を持っていても、いつの間にか聴く曲はいつも同じになりがちです。
 
-RE:TR4CKSは、そんな手元の音楽にもう一度出会うためのオフライン音楽プレイヤーです。
-
-特徴は、曲の一部分だけを聴いて次々と曲を切り替えていく「メドレー」機能。たとえば「20秒から60秒間」のように再生する位置と長さを指定し、シャッフルした曲をテンポよく聴いていけます。
-
-一曲を最初から最後まで聴く時間がなくても、たくさんの曲に触れられる。「これ懐かしい」「こんな曲も持っていたな」と思ったら、その曲を通常再生でじっくり聴くこともできます。
-
-RE:TR4CKSは、新しい音楽を探すためではなく、すでに持っている音楽をもう一度楽しむためのプレイヤーです。
+メドレーでは、「20秒から60秒間」のように再生する位置と長さを指定し、シャッフルした曲をテンポよく聴いていけます。
 
 主な機能
 
@@ -34,14 +30,14 @@ RE:TR4CKSは、新しい音楽を探すためではなく、すでに持って�
 ・楽曲、アーティスト、アルバムから検索・再生
 ・並べ替え、短い曲や音楽以外のファイル、指定フォルダの除外
 ・バックグラウンド再生、通知、ロック画面、イヤホン操作
-・ホーム画面ウィジェット
+・再生/一時停止・前後の曲・リピート操作ができるホーム画面ウィジェット
 ・日本語／英語表示
 
-音楽ライブラリは端末内で完結
+すべて端末内で完結
 
-音楽ファイルや再生履歴を外部へ送信することはありません。アカウント登録、クラウド同期は不要です。
+音楽や再生状況を端末の外部へ送信することはありません。アカウント登録、アクセス解析、トラッキング、クラウド同期はなく、すべて端末内で動作します。
 
-Android版は無料でご利用いただけます（バナー広告表示）。Pro（月額購読）で広告を非表示にできます。
+本アプリは無料でご利用いただけます（バナー広告表示）。Pro（月額購読）で広告を非表示にできます。
 
 本アプリに音楽は含まれません。ユーザー自身が端末に保存し、再生する権利を持つ音楽ファイルが必要です。
 
@@ -74,19 +70,19 @@ RE:TR4CKS Music Player
 
 ### Short description
 
-Rediscover forgotten music with medley playback and a non-repeating shuffle.
+Rediscover your music with Medley playback and a non-repeating shuffle.
 
 ### Full description
 
-Rediscover the music you already own.
+Rediscover your music with Medley playback.
+
+RE:TR4CKS is an offline music player that plays selected portions of your tracks one after another, helping you quickly rediscover forgotten music already in your library.
 
 Old favorites. Deep cuts from albums you used to love. Tracks you forgot were even in your library. Even with a large music collection, it's easy to end up listening to the same familiar songs again and again.
 
-RE:TR4CKS is an offline music player built to bring those forgotten tracks back into rotation.
+With Medley mode, you choose where playback starts and how long each track plays. RE:TR4CKS then moves through your shuffled music automatically, letting you revisit more of your collection in less time.
 
-Its signature feature is Medley mode, which plays a selected portion of each track before automatically moving on to the next. Set where playback starts and how long each track plays, then move through your shuffled music at a faster pace.
-
-Even when you don't have time to listen to every song from beginning to end, you can quickly revisit more of your collection. When something catches your attention — an old favorite or a track you had completely forgotten — switch to normal playback and enjoy the full song.
+When something catches your attention, switch to normal playback and enjoy the full song.
 
 RE:TR4CKS isn't about finding new music. It's about rediscovering the music you already have.
 
@@ -100,14 +96,14 @@ Key features
 • Browse and search by song, artist, and album
 • Sorting and filters for short tracks, non-music audio, and selected folders
 • Background playback and controls from notifications, the lock screen, and headsets
-• Home-screen widget
+• Home-screen widget with play/pause, skip, and repeat controls
 • Japanese and English interface
 
-Your music library stays on your device
+Everything stays on your device
 
-Your music files and listening activity are never sent off your device. No account registration or cloud sync required.
+Your music and listening activity are never sent off your device. RE:TR4CKS has no account registration, analytics, tracking, or cloud synchronization. Everything runs locally on your device.
 
-The Android app is free to use, with a banner ad shown in the free tier. Pro (monthly subscription) removes ads.
+The app is free to use, with a banner ad shown in the free tier. Pro (monthly subscription) removes ads.
 
 Music is not included. You need music files stored on your device that you have the right to play.
 
