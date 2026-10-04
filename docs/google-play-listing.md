@@ -60,6 +60,12 @@ RE:TR4CKS 1.0.0 初回リリース
 ・無料版にバナー広告を追加しました
 ・Pro（月額購読）で広告を非表示にできるようになりました
 
+### 1.1.1 リリースノート
+
+・3ボタンナビゲーション端末で広告バナーがナビゲーションバーと重なる不具合を修正しました
+・再生/一時停止・リピートボタンの反応とアイコン表示を改善しました
+・起動時のスプラッシュ画面の見た目を調整しました
+
 ## English (default, en-US)
 
 ### App name
@@ -119,3 +125,9 @@ Initial release of RE:TR4CKS 1.0.0.
 
 • Added a banner ad in the free tier
 • Pro (monthly subscription) now removes ads
+
+### 1.1.1 release notes
+
+• Fixed an issue where the ad banner could overlap the navigation bar on devices using 3-button navigation
+• Improved the responsiveness and accuracy of the play/pause and repeat buttons
+• Adjusted the splash screen appearance

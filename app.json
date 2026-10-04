@@ -8,7 +8,7 @@
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.yskms.retracks",
-      "versionCode": 3,
+      "versionCode": 4,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "com.google.android.gms.permission.AD_ID"
