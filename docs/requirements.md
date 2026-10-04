@@ -1410,6 +1410,16 @@ crash無し、dev-client経由でMetroからJSバンドルを読み込みアプ�
     （debugビルド・`expo run:android`は従来どおり通る。`--dry-run`で
     3パターン：鍵無しでのassembleRelease失敗／assembleDebug成功／鍵を
     戻した後のassembleRelease成功、を確認済み）
+  - 当初は`assembleRelease`・`bundleRelease`の2タスク名だけを直接
+    チェックしていたが、`installRelease`はこの2つを経由せず`packageRelease`
+    （実際にAPKへ署名するタスク）を直接依存に持つため素通りする、という
+    指摘を受けた。タスク名が`Release`で終わり、かつ`assemble`・`bundle`・
+    `package`・`install`のいずれかで始まるものをまとめて止める形に修正し、
+    鍵無しでの`packageRelease --dry-run`・`installRelease --dry-run`が
+    いずれも失敗すること、`assembleDebug --dry-run`は引き続き成功することを
+    確認済み。なお`eas build --local`は`android/`をEAS側の一時ディレクトリで
+    作り直して独自の鍵で署名するため、このチェックの対象外（ローカルの
+    `./gradlew`実行時にのみ効く）
 
   ```groovy
   def keystorePropertiesFile = rootProject.file("keystore.properties")
@@ -1418,9 +1428,13 @@ crash無し、dev-client経由でMetroからJSバンドルを読み込みアプ�
   if (hasReleaseKeystore) {
       keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
   } else {
-      def releaseTaskNames = ['assembleRelease', 'bundleRelease']
       gradle.taskGraph.whenReady { taskGraph ->
-          def blocked = taskGraph.allTasks.find { it.project == project && releaseTaskNames.contains(it.name) }
+          def blocked = taskGraph.allTasks.find { task ->
+              task.project == project &&
+                  task.name.endsWith('Release') &&
+                  (task.name.startsWith('assemble') || task.name.startsWith('bundle') ||
+                      task.name.startsWith('package') || task.name.startsWith('install'))
+          }
           if (blocked) {
               throw new GradleException(
                   "android/keystore.properties / android/app/release.jks が見つからないため ${blocked.name} を実行できません。" +
