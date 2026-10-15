@@ -169,6 +169,39 @@ async function waitForConnection(timeoutMs = 1500) {
 }
 
 /**
+ * キューを積んだ直後に、保存してあった再生位置へ seekTo する。
+ *
+ * setQueue() は prepare() を呼ぶだけで、曲の読み込みを待たずに返る。読み込み前
+ * （status の durationMs が 0）に送った seekTo は無視され、頭から再生されて
+ * しまう。1247曲のキューで確認した（4曲のキューは読み込みが速く、間に合って
+ * いた）。そのため、積んだキューの長さと位置が status に反映され、曲の長さが
+ * 判るまで待ってから送る。古いキューの status が残っているだけのときに早く
+ * 抜けないよう、キューの長さと位置も見る。時間切れでも送るだけは送る。
+ */
+async function seekWhenLoaded(
+  positionMs: number,
+  queueSize: number,
+  index: number,
+  timeoutMs = 3000
+) {
+  const started = Date.now();
+  for (;;) {
+    const status = RetracksPlayer.getStatus();
+    if (
+      status?.connected &&
+      status.queueSize === queueSize &&
+      status.index === index &&
+      status.durationMs > 0
+    ) {
+      break;
+    }
+    if (Date.now() - started > timeoutMs) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  await RetracksPlayer.seekTo(positionMs);
+}
+
+/**
  * RetracksPlayer.getStatus() は中身が同じでも呼ぶたびに新しいオブジェクトを
  * 返す。ポーリングのたびに素直に setStatus すると、一時停止中で値が1つも
  * 変わっていなくても PlaybackStatusContext の購読者（MiniPlayer・プレイヤー
@@ -698,7 +731,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
       if (resumed) {
         if (typeof savedPosition === 'number' && savedPosition > 1000) {
-          await RetracksPlayer.seekTo(savedPosition);
+          await seekWhenLoaded(savedPosition, ordered.length, state.cursor);
         }
       }
 
