@@ -374,21 +374,31 @@ export function compareByTrackOrder(a: Track, b: Track): number {
 }
 
 /**
- * アーティスト名ごとの代表ジャケットを選ぶ。
+ * アーティストID（artistId||artist）ごとの代表ジャケットを選ぶ。
  *
- * MediaStore はアーティストの写真を持っていないため、そのアーティストのアルバムの
- * ジャケットを流用する。リリース年が分かるものは最も新しいアルバムを使い、
- * 年が入っていない場合は最初に見つかったものを使う。
+ * MediaStore はアーティストの写真を持っていないため、そのアーティストの曲が
+ * 属するアルバムのジャケットを流用する。リリース年が分かるものは最も新しい
+ * アルバムを使い、年が入っていない場合は最初に見つかったものを使う。
+ *
+ * deriveArtists() と同じ artistId||artist をキーにするため、album.artist
+ * 名ではなく曲一覧を直接走査する（1アルバムに複数アーティスト名義が混在する
+ * ケース（コンピレーションやfeat.曲）で、先に見つかった名義以外のジャケットが
+ * 引けなくなるのを避けるため。どの曲から見ても同じアルバムのジャケットなので、
+ * album の artworkUri/year はそのまま流用できる）。
  */
-export function artworkByArtist(albums: Album[]): Map<string, string> {
+export function artworkByArtist(tracks: Track[], albums: Album[]): Map<string, string> {
+  const albumsById = new Map(albums.map((a) => [a.id, a]));
   const best = new Map<string, { uri: string; year: number }>();
 
-  for (const album of albums) {
-    if (!album.artworkUri) continue;
+  for (const t of tracks) {
+    if (!t.album) continue;
+    const album = albumsById.get(t.albumId || t.album);
+    if (!album?.artworkUri) continue;
+    const artistKey = t.artistId || t.artist;
     const year = album.year ?? 0;
-    const current = best.get(album.artist);
+    const current = best.get(artistKey);
     if (!current || year > current.year) {
-      best.set(album.artist, { uri: album.artworkUri, year });
+      best.set(artistKey, { uri: album.artworkUri, year });
     }
   }
 
@@ -396,14 +406,22 @@ export function artworkByArtist(albums: Album[]): Map<string, string> {
 }
 
 /**
- * アーティスト名ごとのアルバム数を数える。
- * MediaStore がアーティストのアルバム数を返さないため、アルバム一覧から求める。
- * コンピレーションなどアルバム側のアーティスト名が異なる場合は数えられない。
+ * アーティストID（artistId||artist）ごとのアルバム数を数える。
+ * MediaStore がアーティストのアルバム数を返さないため、曲一覧から求める
+ * （理由は artworkByArtist() と同じ。album.artist 名で数えると、1アルバムに
+ * 複数アーティスト名義が混在するケースで数えられないアーティストが出る）。
  */
-export function countAlbumsByArtist(albums: Album[]): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const album of albums) {
-    counts.set(album.artist, (counts.get(album.artist) ?? 0) + 1);
+export function countAlbumsByArtist(tracks: Track[]): Map<string, number> {
+  const albumIdsByArtist = new Map<string, Set<string>>();
+
+  for (const t of tracks) {
+    if (!t.album) continue;
+    const albumId = t.albumId || t.album;
+    const artistKey = t.artistId || t.artist;
+    const ids = albumIdsByArtist.get(artistKey) ?? new Set<string>();
+    ids.add(albumId);
+    albumIdsByArtist.set(artistKey, ids);
   }
-  return counts;
+
+  return new Map([...albumIdsByArtist].map(([artist, ids]) => [artist, ids.size]));
 }

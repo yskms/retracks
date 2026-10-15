@@ -194,9 +194,9 @@ export default function LibraryScreen() {
     [albums, sortOrders.albums, articleOptions]
   );
 
-  const albumCounts = useMemo(() => countAlbumsByArtist(albums), [albums]);
+  const albumCounts = useMemo(() => countAlbumsByArtist(tracks), [tracks]);
   // アーティストの写真は持っていないので、そのアーティストのアルバムから流用する
-  const artistArtwork = useMemo(() => artworkByArtist(albums), [albums]);
+  const artistArtwork = useMemo(() => artworkByArtist(tracks, albums), [tracks, albums]);
 
   // 下線はページのスクロール量に追従させる。onPageSelected だけだと
   // 指を離してから動くため、一覧より遅れて見える。

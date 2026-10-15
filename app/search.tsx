@@ -84,7 +84,7 @@ export default function SearchScreen() {
   const trimmed = useMemo(() => normalizeForSearch(query.trim()), [query]);
   const hasQuery = trimmed.length > 0;
 
-  const artistArtwork = useMemo(() => artworkByArtist(albums), [albums]);
+  const artistArtwork = useMemo(() => artworkByArtist(tracks, albums), [tracks, albums]);
 
   // 1キーストロークごとに全件を正規化し直さないよう、元データが変わったときだけ作る。
   const artistIndex = useMemo<Indexed<Artist>[]>(
@@ -199,7 +199,7 @@ export default function SearchScreen() {
                       <Tile
                         key={item.id}
                         title={item.name}
-                        artworkUri={artistArtwork.get(item.name) ?? null}
+                        artworkUri={artistArtwork.get(item.id) ?? null}
                         size={TILE_SIZE}
                         onPress={() =>
                           router.push({

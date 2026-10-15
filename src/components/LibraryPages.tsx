@@ -150,8 +150,8 @@ export function ArtistsPage({
           layout !== 'list' ? (
             <Tile
               title={item.name}
-              subtitle={subtitleForArtist(t, albumCounts.get(item.name), item.trackCount)}
-              artworkUri={artistArtwork.get(item.name) ?? null}
+              subtitle={subtitleForArtist(t, albumCounts.get(item.id), item.trackCount)}
+              artworkUri={artistArtwork.get(item.id) ?? null}
               size={tileSizeFor(layout)}
               selected={isSelected('artists', item.id)}
               onPress={() => {
@@ -166,8 +166,8 @@ export function ArtistsPage({
           ) : (
             <Row
               title={item.name}
-              subtitle={subtitleForArtist(t, albumCounts.get(item.name), item.trackCount)}
-              artworkUri={artistArtwork.get(item.name) ?? null}
+              subtitle={subtitleForArtist(t, albumCounts.get(item.id), item.trackCount)}
+              artworkUri={artistArtwork.get(item.id) ?? null}
               chevron
               selected={isSelected('artists', item.id)}
               onPress={() => {
