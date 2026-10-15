@@ -38,6 +38,10 @@ export default function AlbumScreen() {
     [allTracks, id]
   );
 
+  // このアルバムからの再生は、曲の増減があっても、キュータブでは1つの項目に保つ
+  // （→ buildOriginKey）。
+  const albumOrigin = useMemo(() => ({ kind: 'album' as const, id }), [id]);
+
   // このアルバムの曲を全削除すると tracks が 0 になる。空の詳細画面が
   // 残り続けるのを避けるため自動で戻る（→ app/artist/[id].tsx の同コメント）。
   // isFocused を見ているのは、このスタック下に積まれた状態（他の画面へ進んだ
@@ -167,7 +171,7 @@ export default function AlbumScreen() {
                 <Pressable
                   style={styles.action}
                   onPress={async () => {
-                    await playFrom(tracks, 0);
+                    await playFrom(tracks, 0, { origin: albumOrigin });
                     router.push('/player');
                   }}
                 >
@@ -197,7 +201,7 @@ export default function AlbumScreen() {
             selected={isSelected('songs', item.id)}
             playing={currentTrack?.id === item.id}
             onPress={() =>
-              inSelection ? toggle('songs', item.id) : void playFrom(tracks, index)
+              inSelection ? toggle('songs', item.id) : void playFrom(tracks, index, { origin: albumOrigin })
             }
             onLongPress={() => toggle('songs', item.id)}
           />

@@ -62,9 +62,6 @@ export default function ArtistScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
-  // キュータブの見出し。1枚だけのアーティストでも、アルバム名でなくアーティスト名を出す
-  // （曲の並びからの推測は、アルバムを優先する）。name は経路によっては無い。
-  const queueNames = name ? [name] : undefined;
   const {
     tracks: allTracks,
     albums: allAlbums,
@@ -99,6 +96,16 @@ export default function ArtistScreen() {
     () => allTracks.filter((t) => (t.artistId || t.artist) === id),
     [allTracks, id]
   );
+
+  // キュータブの見出し。1枚だけのアーティストでも、アルバム名でなくアーティスト名を出す
+  // （曲の並びからの推測は、アルバムを優先する）。name が空の経路でも、曲のアーティスト名で補う。
+  const queueNames = useMemo(() => {
+    const artistName = name || tracks[0]?.artist;
+    return artistName ? [artistName] : undefined;
+  }, [name, tracks]);
+  // このアーティストからの再生は、並べ替えや曲の増減があっても、キュータブでは1つの項目に
+  // 保つ（→ buildOriginKey）。
+  const playOrigin = useMemo(() => ({ kind: 'artist' as const, id }), [id]);
 
   // このアーティストの曲を全削除すると tracks が 0 になる。空の詳細画面が
   // 残り続けるのを避けるため自動で戻る。ただし「まだ一度も曲が入っていない」
@@ -175,12 +182,12 @@ export default function ArtistScreen() {
       const picked = sortedTracks.filter((t) => ids.includes(t.id));
 
       if (shuffled) await playTracks('songs', ids, picked);
-      else await playFrom(picked, 0);
+      else await playFrom(picked, 0, { names: queueNames });
 
       clear();
       router.push('/player');
     },
-    [selection, sortedTracks, playTracks, playFrom, clear, router]
+    [selection, sortedTracks, playTracks, playFrom, queueNames, clear, router]
   );
 
   /** 選択した曲を端末から削除する（Android 10 以降のみ。→ src/useDeleteTracks.ts）。 */
@@ -269,7 +276,7 @@ export default function ArtistScreen() {
                   <Pressable
                     style={styles.action}
                     onPress={async () => {
-                      await playFrom(sortedTracks, 0, { names: queueNames });
+                      await playFrom(sortedTracks, 0, { names: queueNames, origin: playOrigin });
                       router.push('/player');
                     }}
                   >
@@ -352,7 +359,7 @@ export default function ArtistScreen() {
             playing={currentTrack?.id === item.id}
             // 曲を直接タップしたときは画面を移さない
             onPress={() =>
-              inSelection ? toggle('songs', item.id) : void playFrom(sortedTracks, index, { names: queueNames })
+              inSelection ? toggle('songs', item.id) : void playFrom(sortedTracks, index, { names: queueNames, origin: playOrigin })
             }
             onLongPress={() => toggle('songs', item.id)}
           />

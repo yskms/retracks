@@ -303,14 +303,17 @@ export default function LibraryScreen() {
       else {
         // 見出しは選んだ名前にする（無いと、先頭の曲名＋曲数になる）
         const names = namesForSources('artist', ids, picked);
-        await playFrom(picked, 0, { names });
+        // 1件だけ選んだときは、アーティスト詳細からの再生と同じ項目にする
+        const origin = ids.length === 1 ? { kind: 'artist' as const, id: ids[0] } : undefined;
+        await playFrom(picked, 0, { names, origin });
       }
     } else {
       const picked = tracksForSelection(tracks, 'albums', ids);
       if (shuffled) await playTracks('album', ids, picked);
       else {
         const names = namesForSources('album', ids, picked);
-        await playFrom(picked, 0, { names });
+        const origin = ids.length === 1 ? { kind: 'album' as const, id: ids[0] } : undefined;
+        await playFrom(picked, 0, { names, origin });
       }
     }
 

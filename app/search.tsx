@@ -265,7 +265,9 @@ export default function SearchScreen() {
             subtitle={item.artist}
             trailing={formatDuration(item.durationMs)}
             artworkUri={item.artworkUri}
-            onPress={() => void playFrom(filteredTracks, index)}
+            // 検索結果は検索語ごとに一覧が違い、毎回新しい項目になって、アーティスト／
+            // アルバム詳細の途中経過を押し出す。その場で選んで聴く使い方なので保存しない。
+            onPress={() => void playFrom(filteredTracks, index, { remember: false })}
           />
         )}
       />

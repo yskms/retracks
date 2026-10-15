@@ -43,6 +43,7 @@ import { sortByField } from './sorting';
 import {
   buildMeta,
   buildOrderedKey,
+  buildOriginKey,
   buildQueueKey,
   isOrderedKey,
   kindOfKey,
@@ -150,17 +151,23 @@ type PlaybackValue = {
    * 再生した、その途中までも残したいので、行のタップでも保存する。
    *
    * **保存しないのは remember: false を渡した、曲タブを複数選択なしでタップした
-   * 再生だけ**（利用者の指示）。曲タブは一覧を見ながら次々にタップする使い方で、
-   * そのたびに全曲ぶんの並びを書き込んだ項目が増えるうえ、続きから再生する価値も無い。
+   * 再生と、検索結果のタップだけ**（利用者の指示）。どちらも一覧を見ながら（検索語を
+   * 変えながら）その場で選んで聴く使い方で、そのたびに項目が増えるうえ、保存の10件枠から
+   * アーティスト／アルバムの途中経過を押し出し、続きから再生する価値も無い。
    * 新しい呼び出し元を足すときは、この例外に当たるかを考えてから決めること。
    *
-   * names は、キュータブの見出しに使う名前（複数のアーティスト／アルバムを選んだとき）。
-   * 省略すると、曲の並びから推測する（1枚のアルバム・1人のアーティストなら、その名前）。
+   * names は、キュータブの見出しに使う名前（複数のアーティスト／アルバムを選んだとき、
+   * アーティスト詳細など）。省略すると、曲の並びから推測する（1枚のアルバム・1人の
+   * アーティストなら、その名前）。
+   *
+   * origin は、アーティスト／アルバムの詳細（と1件だけ選んだ「順番に」）からの再生で渡す。
+   * キーが並びのハッシュでなく出所のIDになり、並べ替えや曲の増減があっても、同じ出所は
+   * 1つの項目のまま、並びと位置が上書きされる（→ buildOriginKey）。
    */
   playFrom: (
     source: Track[],
     index: number,
-    options?: { remember?: boolean; names?: string[] }
+    options?: PlayFromOptions
   ) => Promise<void>;
 
   /**
@@ -190,6 +197,15 @@ type PlaybackValue = {
  * アプリを開くたびに走らせると無駄なので、前回からこれだけ経っていたら行う。
  */
 const RESCAN_AFTER_MS = 5 * 60 * 1000;
+
+export type PlayFromOptions = {
+  /** false なら、続きから再生するキューとして保存しない（既定は保存する）。 */
+  remember?: boolean;
+  /** キュータブの見出しに使う名前。 */
+  names?: string[];
+  /** アーティスト／アルバムの詳細からの再生。キューを「出所のID」で識別する。 */
+  origin?: { kind: 'artist' | 'album'; id: string };
+};
 
 /**
  * 順番再生（playFrom）を、キュータブから続きを再生できるように保存する最小の曲数。
@@ -903,7 +919,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     async (
       source: Track[],
       index: number,
-      options?: { remember?: boolean; names?: string[] }
+      options?: PlayFromOptions
     ) => {
       if (!ready || source.length === 0) return;
 
@@ -919,7 +935,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // 並びと位置を seq: のキューとして保存する（キュータブから続きを再生できる）。
         // 保存は再生の開始を待たせない。
         const ids = source.map((t) => t.id);
-        const key = buildOrderedKey(ids);
+        const key = options?.origin
+          ? buildOriginKey(options.origin.kind, options.origin.id)
+          : buildOrderedKey(ids);
         queueKeyRef.current = key;
         orderedLiveRef.current = true;
         setActiveQueueKey(key);

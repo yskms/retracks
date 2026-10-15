@@ -11,8 +11,11 @@
  *   artist:<ID,ID,...>      アーティスト（複数選択可）のシャッフル。IDは並べ替えて連結
  *   album:<ID,ID,...>       アルバム（複数選択可）のシャッフル。同上
  *   songs:<hash>-<件数>     曲を選んでのシャッフル（以前は保存しない selection:）
- *   seq:<hash>-<件数>       シャッフルしない再生（曲タップ・「順番に再生」）。並びの
- *                           ハッシュなので、同じ並びなら同じキーになる
+ *   seq:<hash>-<件数>       シャッフルしない再生。並びのハッシュなので、同じ並びなら
+ *                           同じキーになる（複数選択の「順番に」など、一度きりの用途）
+ *   seq:artist:<hash>       アーティスト／アルバムの詳細（と、1件だけ選んだ「順番に」）
+ *   seq:album:<hash>        からの順番再生。「どこから再生したか」で決めるので、並べ替えや
+ *                           曲の増減で並びが変わっても、1つの出所は1つのキューのまま
  *
  * **キーを分解して意味を取り出してはいけない。** MediaStore がIDを持たない曲は
  * アーティスト名・アルバム名がIDの代わりに入るため（→ library.ts の deriveArtists）、
@@ -67,6 +70,18 @@ export function buildQueueKey(mode: QueueMode, ids: string[] = []): string {
 /** シャッフルしない再生のキー。選択順・一覧の並び順が違えば別のキューになる。 */
 export function buildOrderedKey(orderedIds: string[]): string {
   return `seq:${hashIds(orderedIds)}`;
+}
+
+/**
+ * アーティスト／アルバムの詳細からの順番再生のキー。並びのハッシュ（buildOrderedKey）に
+ * すると、詳細画面の並べ替えを変えただけ、曲を1つ足した・消しただけで別のキューになり、
+ * 同じアーティストの項目が増えていく（順番再生の保存は10件までなので、残したい別の
+ * アーティストの途中経過が押し出される）。出所のIDで決めれば、1つの出所は1項目のままで、
+ * 別の曲をタップするとその項目の並びと位置を上書きする。
+ * 並び自体は、キーに関係なく ordered: に保存する。
+ */
+export function buildOriginKey(kind: 'artist' | 'album', id: string): string {
+  return `seq:${kind}:${cyrb53(id).toString(36)}`;
 }
 
 export function kindOfKey(key: string): QueueKind {
