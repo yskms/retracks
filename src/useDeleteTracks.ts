@@ -17,7 +17,7 @@ export const CAN_DELETE_TRACKS =
   Platform.OS === 'android' && typeof Platform.Version === 'number' && Platform.Version >= 29;
 
 /**
- * 選択した曲を端末から削除する確認フロー（Android のみ呼ばれる想定。
+ * 選択した曲を端末から削除する確認フロー（Android 10 以降でのみ呼ばれる想定。
  * → app/index.tsx・app/artist/[id].tsx・app/album/[id].tsx で共通利用）。
  *
  * 確認ダイアログ・ネイティブ呼び出し・再走査の要否をここへ集約する。

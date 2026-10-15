@@ -180,7 +180,7 @@ export default function ArtistScreen() {
     [selection, sortedTracks, playTracks, playFrom, clear, router]
   );
 
-  /** 選択した曲を端末から削除する（Android のみ。→ src/useDeleteTracks.ts）。 */
+  /** 選択した曲を端末から削除する（Android 10 以降のみ。→ src/useDeleteTracks.ts）。 */
   const deleteSelection = useCallback(() => {
     if (!selection) return;
     const picked = tracksForSelection(tracks, 'songs', selection.ids);
