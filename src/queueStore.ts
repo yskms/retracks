@@ -28,6 +28,29 @@ const MAX_KEPT_ORDERED = 10;
 type Index = Record<string, number>;
 type MetaMap = Record<string, QueueMeta>;
 
+/**
+ * 保存の処理を1本ずつ順に実行する。
+ *
+ * 一覧（shuffleIndex）とメタデータは「読んで、書き換えて、書き戻す」ので、2つの
+ * 処理が重なると、後から書いた方が先の更新を消す。再生の開始は保存の完了を待たない
+ * （曲タップで再生を遅らせないため）ので、別の再生をすぐ始めると実際に重なる
+ * （同時に12件保存して一覧に1件しか残らないことを確認した）。一覧から消えた
+ * キューのメタデータは touchQueue() が捨てるので、名前の情報まで一緒に失われる。
+ * カーソルの書き込みも同じ列に並べ、保存（saveOrdered）より前の古い位置が
+ * 後から書き戻されないようにする。
+ *
+ * 列の中で、別の列入りの関数を待たないこと（自分で自分を待って止まる）。
+ * 内側で使うのは下の *Unlocked だけ。
+ */
+let chain: Promise<unknown> = Promise.resolve();
+
+function serialized<T>(task: () => Promise<T>): Promise<T> {
+  const run = chain.then(task, task);
+  // 1つ失敗しても、後続の保存は続ける
+  chain = run.catch(() => undefined);
+  return run;
+}
+
 async function readIndex(): Promise<Index> {
   const index = await readJson<Index>(StorageKeys.shuffleIndex);
   return index && typeof index === 'object' && !Array.isArray(index) ? index : {};
@@ -48,7 +71,11 @@ async function removeQueueFiles(queueKey: string): Promise<void> {
 }
 
 /** キューを使い始めたことを記録し、あふれた古いものを捨てる。 */
-export async function touchQueue(queueKey: string): Promise<void> {
+export function touchQueue(queueKey: string): Promise<void> {
+  return serialized(() => touchQueueUnlocked(queueKey));
+}
+
+async function touchQueueUnlocked(queueKey: string): Promise<void> {
   const index = await readIndex();
   index[queueKey] = Date.now();
 
@@ -83,25 +110,31 @@ export async function touchQueue(queueKey: string): Promise<void> {
 }
 
 /** キュータブの「削除」。全曲は消せない（呼び出し側でも弾く）。 */
-export async function removeQueue(queueKey: string): Promise<void> {
-  if (queueKey === ALL_KEY) return;
-  await removeQueueFiles(queueKey);
+export function removeQueue(queueKey: string): Promise<void> {
+  if (queueKey === ALL_KEY) return Promise.resolve();
+  return serialized(async () => {
+    await removeQueueFiles(queueKey);
 
-  const index = await readIndex();
-  delete index[queueKey];
-  await writeJson(StorageKeys.shuffleIndex, index);
+    const index = await readIndex();
+    delete index[queueKey];
+    await writeJson(StorageKeys.shuffleIndex, index);
 
-  const meta = await readMeta();
-  if (queueKey in meta) {
-    delete meta[queueKey];
-    await writeJson(StorageKeys.queueMeta, meta);
-  }
+    const meta = await readMeta();
+    if (queueKey in meta) {
+      delete meta[queueKey];
+      await writeJson(StorageKeys.queueMeta, meta);
+    }
+  });
 }
 
-export async function saveQueueMeta(queueKey: string, meta: QueueMeta): Promise<void> {
+async function saveQueueMetaUnlocked(queueKey: string, meta: QueueMeta): Promise<void> {
   const all = await readMeta();
   all[queueKey] = meta;
   await writeJson(StorageKeys.queueMeta, all);
+}
+
+export function saveQueueMeta(queueKey: string, meta: QueueMeta): Promise<void> {
+  return serialized(() => saveQueueMetaUnlocked(queueKey, meta));
 }
 
 export async function loadQueueMeta(queueKey: string): Promise<QueueMeta | null> {
@@ -115,17 +148,19 @@ export async function loadQueueMeta(queueKey: string): Promise<QueueMeta | null>
  * ライブラリに曲が増えても足さない（シャッフルの reconcile() とは違う）。
  * 利用者が「この並びで流した」ものを残すため。消えた曲は再開時に詰める。
  */
-export async function saveOrdered(
+export function saveOrdered(
   queueKey: string,
   orderedIds: string[],
   cursor: number,
   /** 省略すると、保存済みのメタデータには触れない（続きからの再生で並びを詰め直すとき）。 */
   meta?: QueueMeta
 ): Promise<void> {
-  await writeJson(StorageKeys.ordered(queueKey), orderedIds);
-  await writeJson(StorageKeys.orderedCursor(queueKey), cursor);
-  await touchQueue(queueKey);
-  if (meta) await saveQueueMeta(queueKey, meta);
+  return serialized(async () => {
+    await writeJson(StorageKeys.ordered(queueKey), orderedIds);
+    await writeJson(StorageKeys.orderedCursor(queueKey), cursor);
+    await touchQueueUnlocked(queueKey);
+    if (meta) await saveQueueMetaUnlocked(queueKey, meta);
+  });
 }
 
 export async function loadOrdered(
@@ -139,8 +174,8 @@ export async function loadOrdered(
 }
 
 /** 曲が変わるたびに呼ぶ。並び本体は書き直さない（→ shuffle.ts の saveCursor）。 */
-export async function saveOrderedCursor(queueKey: string, cursor: number): Promise<void> {
-  await writeJson(StorageKeys.orderedCursor(queueKey), cursor);
+export function saveOrderedCursor(queueKey: string, cursor: number): Promise<void> {
+  return serialized(() => writeJson(StorageKeys.orderedCursor(queueKey), cursor));
 }
 
 // ---- キュータブ向けの一覧 ------------------------------------------------
