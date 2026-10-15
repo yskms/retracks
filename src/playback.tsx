@@ -176,7 +176,11 @@ async function waitForConnection(timeoutMs = 1500) {
  * しまう。1247曲のキューで確認した（4曲のキューは読み込みが速く、間に合って
  * いた）。そのため、積んだキューの長さと位置が status に反映され、曲の長さが
  * 判るまで待ってから送る。古いキューの status が残っているだけのときに早く
- * 抜けないよう、キューの長さと位置も見る。時間切れでも送るだけは送る。
+ * 抜けないよう、キューの長さと位置も見る。
+ *
+ * 時間切れでも、曲がまだ読み込み中なら送るだけは送る。ただし、待つ間に再開位置の
+ * 曲が読めずに飛ばされ（要件 7.4）、プレイヤーが別の曲に移っていたら送らない
+ * （別の曲を、前の曲の位置から鳴らしてしまう）。
  */
 async function seekWhenLoaded(
   positionMs: number,
@@ -198,6 +202,8 @@ async function seekWhenLoaded(
     if (Date.now() - started > timeoutMs) break;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
+  const status = RetracksPlayer.getStatus();
+  if (status?.queueSize === queueSize && status.index !== index && status.durationMs > 0) return;
   await RetracksPlayer.seekTo(positionMs);
 }
 
