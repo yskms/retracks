@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { usePlayback } from '../../src/playback';
+import { albumOriginId } from '../../src/queueKeys';
 import { compareByTrackOrder, tracksForSelection } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
@@ -39,8 +40,12 @@ export default function AlbumScreen() {
   );
 
   // このアルバムからの再生は、曲の増減があっても、キュータブでは1つの項目に保つ
-  // （→ buildOriginKey）。
-  const albumOrigin = useMemo(() => ({ kind: 'album' as const, id }), [id]);
+  // （→ buildOriginKey）。id は開いた経路で別の値になる（プレイヤー画面はアルバム名、
+  // ほかは albumId）ので、曲から求めた値にそろえる（→ albumOriginId）。
+  const albumOrigin = useMemo(
+    () => ({ kind: 'album' as const, id: albumOriginId(tracks, id) }),
+    [tracks, id]
+  );
 
   // このアルバムの曲を全削除すると tracks が 0 になる。空の詳細画面が
   // 残り続けるのを避けるため自動で戻る（→ app/artist/[id].tsx の同コメント）。

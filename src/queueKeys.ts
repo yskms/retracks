@@ -84,6 +84,23 @@ export function buildOriginKey(kind: 'artist' | 'album', id: string): string {
   return `seq:${kind}:${cyrb53(id).toString(36)}`;
 }
 
+/**
+ * アルバム詳細の「出所のID」。アルバム詳細は、開いた経路によって別の値を `id` に受け取る
+ * （アルバムタブ・アーティスト詳細・検索は deriveAlbums() のID = albumId || アルバム名、
+ * プレイヤー画面はアルバム名）。そのまま出所にすると、同じアルバムでも経路で
+ * キュータブの項目が分かれるので、曲から deriveAlbums() と同じ規則（albumId || album）で
+ * 求めたIDにそろえる。
+ *
+ * 曲が1種類のアルバムに揃わないとき（同じ名前の別のアルバムが、名前で引いて混ざった
+ * 場合）や、曲がまだ読み込まれていないときは、勝手に決めず渡されたIDのまま使う。
+ */
+export function albumOriginId(tracks: Track[], routeId: string): string {
+  const ids = new Set(tracks.map((t) => t.albumId || t.album || ''));
+  if (ids.size !== 1) return routeId;
+  const [only] = ids;
+  return only || routeId;
+}
+
 export function kindOfKey(key: string): QueueKind {
   if (key === 'all') return 'all';
   if (key.startsWith('artist:')) return 'artist';
