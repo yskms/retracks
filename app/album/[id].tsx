@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,7 +15,7 @@ import { compareByTrackOrder, tracksForSelection } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
 import { useSelection } from '../../src/useSelection';
-import { useDeleteTracks } from '../../src/useDeleteTracks';
+import { CAN_DELETE_TRACKS, useDeleteTracks } from '../../src/useDeleteTracks';
 
 export default function AlbumScreen() {
   const { t } = useTranslation();
@@ -98,7 +98,7 @@ export default function AlbumScreen() {
               <Ionicons name="shuffle-outline" size={14} color="#1a1206" />
               <Text style={styles.actionPrimaryText}>{t('common.shufflePlay')}</Text>
             </Pressable>
-            {Platform.OS === 'android' && (
+            {CAN_DELETE_TRACKS && (
               <Pressable
                 hitSlop={10}
                 disabled={deleting}

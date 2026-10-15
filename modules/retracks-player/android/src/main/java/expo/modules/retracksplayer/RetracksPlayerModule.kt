@@ -221,12 +221,13 @@ class RetracksPlayerModule : Module() {
   /**
    * MediaStore の行ID（Track.id）から content:// URI を組み立てる。
    *
-   * JS 側の Track.uri はそのまま使わない。expo-music-library は Android 9 (API 28)
-   * 以前で file:// URI を返す（AssetUtils.kt、DATA 列から Uri.fromFile() で組み立て）
-   * ため、それを ContentResolver.delete() に渡すと（file:// には content provider の
-   * authority が無く）IllegalArgumentException になる。削除では常にこちらで
-   * content:// を組み立て直すことで、uri の由来（legacy file / content）を
-   * 意識せずに済む。
+   * JS から URI 文字列は受け取らず、ID だけを渡す契約にして、URI の形式を
+   * ネイティブ側に閉じ込めている。Track.uri をそのまま渡す設計にしなかったのは、
+   * expo-music-library が Android 9 (API 28) 以前で file:// URI を返す
+   * （AssetUtils.kt、DATA 列から Uri.fromFile() で組み立て）ためで、それを
+   * ContentResolver.delete() に渡すと失敗するから。削除自体は API 29 以降のみ
+   * 対応（→ deleteTracksAsync）なので現状その差は表に出ないが、この契約を
+   * 変えて URI を渡す形に戻さないこと。
    */
   private fun contentUriFor(id: String): Uri =
     android.content.ContentUris.withAppendedId(
@@ -682,13 +683,22 @@ class RetracksPlayerModule : Module() {
      * 無い）ため、複数曲を渡すと曲数分の確認ダイアログが出ることがある
      * （スコープドストレージの制約そのものであり、実装の簡略化ではない）。
      *
-     * Android 9 (API 28) 以前はスコープドストレージの対象外なので、確認
-     * ダイアログを経由せず直接 delete() する。
+     * Android 9 (API 28) 以前は非対応で、呼ばれたら reject する（JS 側は
+     * この範囲では削除ボタン自体を出さない。→ src/useDeleteTracks.ts の
+     * CAN_DELETE_TRACKS）。この範囲の delete() には WRITE_EXTERNAL_STORAGE の
+     * 実行時許可が要るが、expo-music-library が要求するのは
+     * READ_EXTERNAL_STORAGE だけで、target 26 以上は同一グループの権限が
+     * 暗黙には付与されない（Android 8.0 の変更）ため、許可が取れず常に
+     * SecurityException になる可能性が高い。実機を持たず検証できない権限要求
+     * コードを足すより、非対応と割り切った（2026-10）。
      *
-     * 戻り値は実際に削除できた件数。ユーザーが確認ダイアログをすべて拒否
-     * した場合は 0 を返す（エラーではない）。例外で reject するのは、
-     * 削除フロー自体が成立しなかったとき（Activity が取得できない、
-     * 確認ダイアログを表示できない等）だけにする。
+     * 戻り値は実際に削除できた件数。
+     * - ユーザーが確認ダイアログを拒否した場合は、その時点までに削除できた件数
+     *   （0 を含む。エラーではない）。Android 11+ は承認/拒否の2択で全件か0件、
+     *   Android 10 は1件拒否した時点で打ち切る
+     * - 次の場合は reject する。削除フロー自体が成立しなかった（Activity が
+     *   取得できない、確認ダイアログを表示できない、id が不正、API 28 以下）、
+     *   または Android 10 で全件が delete() の例外で失敗した
      */
     AsyncFunction("deleteTracksAsync") { ids: List<String>, promise: Promise ->
       onMain {
@@ -716,27 +726,8 @@ class RetracksPlayerModule : Module() {
           }
           Build.VERSION.SDK_INT == Build.VERSION_CODES.Q ->
             deleteOneByOneWithConsent(context, uris, 0, 0, false, promise)
-          else -> {
-            var deletedCount = 0
-            var hadError = false
-            for (uri in uris) {
-              try {
-                context.contentResolver.delete(uri, null, null)
-                deletedCount++
-              } catch (e: Exception) {
-                // この1件だけ諦めて残りを続ける（部分削除を取りこぼさないため）
-                hadError = true
-              }
-            }
-            // 全件が失敗したときだけ reject する。0 を黙って resolve すると、
-            // Q 経路でユーザーが拒否したときと見分けがつかなくなる
-            // （2026-10、レビュー指摘）。
-            if (deletedCount == 0 && hadError) {
-              promise.reject(CodedException("Failed to delete any track"))
-            } else {
-              promise.resolve(deletedCount)
-            }
-          }
+          else ->
+            promise.reject(CodedException("Deleting tracks requires Android 10 or later"))
         }
       }
     }

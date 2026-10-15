@@ -7,7 +7,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -34,7 +33,7 @@ import {
   type SortFieldLabelKey,
 } from '../../src/sortOrder';
 import { useSelection } from '../../src/useSelection';
-import { useDeleteTracks } from '../../src/useDeleteTracks';
+import { CAN_DELETE_TRACKS, useDeleteTracks } from '../../src/useDeleteTracks';
 
 const ARTIST_TRACK_FIELD_OPTIONS: { value: ArtistTrackSortField; labelKey: SortFieldLabelKey }[] = [
   { value: 'title', labelKey: 'library.sortFieldTitle' },
@@ -209,7 +208,7 @@ export default function ArtistScreen() {
               <Ionicons name="shuffle-outline" size={14} color="#1a1206" />
               <Text style={styles.actionPrimaryText}>{t('common.shufflePlay')}</Text>
             </Pressable>
-            {Platform.OS === 'android' && (
+            {CAN_DELETE_TRACKS && (
               <Pressable
                 hitSlop={10}
                 disabled={deleting}

@@ -39,12 +39,21 @@ declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
    */
   getTrackFolders(): Promise<TrackFolders>;
   /**
-   * 端末から曲を削除する（Android のみ）。ids は削除したい曲の Track.id
+   * 端末から曲を削除する（Android 10 以降のみ）。ids は削除したい曲の Track.id
    * （URI はネイティブ側で id から組み立てる。→ RetracksPlayerModule.kt の
-   * contentUriFor()）。戻り値は実際に削除できた件数。ユーザーが OS の確認
-   * ダイアログを一部・全部拒否した場合もエラーではなく、その分少ない件数
-   * （0 を含む）が返る。iOS はミュージックライブラリから曲を削除する公開
-   * API が無いため常に 0 を返す。
+   * contentUriFor()）。
+   *
+   * 戻り値は実際に削除できた件数。ユーザーが OS の確認ダイアログを拒否した
+   * 場合はエラーではなく、その時点までに削除できた件数（0 を含む）が返る
+   * （Android 11+ は全件か0件、Android 10 は1件拒否した時点で打ち切り）。
+   *
+   * 次の場合は reject する。削除フロー自体が成立しなかった（Activity が
+   * 取得できない・確認ダイアログを表示できない・id が不正）、Android 10 で
+   * 全件が delete() の例外で失敗した、Android 9 以前（非対応）。
+   *
+   * iOS はミュージックライブラリから曲を削除する公開 API が無いため、
+   * reject せず常に 0 を返す。呼ぶ前に useDeleteTracks の CAN_DELETE_TRACKS
+   * で対応環境か確認すること。
    */
   deleteTracksAsync(ids: string[]): Promise<number>;
   /**

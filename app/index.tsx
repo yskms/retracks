@@ -9,7 +9,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Linking,
-  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -34,7 +33,7 @@ import {
   SongsPage,
 } from '../src/components/LibraryPages';
 import { useSelection } from '../src/useSelection';
-import { useDeleteTracks } from '../src/useDeleteTracks';
+import { CAN_DELETE_TRACKS, useDeleteTracks } from '../src/useDeleteTracks';
 import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
 import { TAB_LABEL_KEY, TAB_LAYOUT_KEY, TAB_SORT_KEY, type TabId } from '../src/tabs';
 import { useSettings } from '../src/settings';
@@ -332,9 +331,8 @@ export default function LibraryScreen() {
               <Ionicons name="shuffle-outline" size={14} color="#1a1206" />
               <Text style={styles.headerActionPrimaryText}>{t('common.shufflePlay')}</Text>
             </Pressable>
-            {/* 端末からの削除は Android のみ（iOS はミュージックライブラリから
-                曲を削除する公開APIが無い → RetracksPlayerModule.swift）。 */}
-            {Platform.OS === 'android' && (
+            {/* 端末からの削除は Android 10 以降のみ（→ CAN_DELETE_TRACKS）。 */}
+            {CAN_DELETE_TRACKS && (
               <Pressable
                 hitSlop={10}
                 disabled={deleting}
