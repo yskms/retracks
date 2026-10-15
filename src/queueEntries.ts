@@ -20,8 +20,6 @@ export type QueueEntry = {
   names: string[];
   /** names が空のときの代わり。キューの先頭の曲（ライブラリに無ければ null）。 */
   leadTrack: Track | null;
-  /** 順番再生で、ライブラリ全体を並べたキュー（見出しを「全曲」にする）。 */
-  wholeLibrary: boolean;
   /** 「ほか N件」の N の元になる数。names があればその件数、無ければ曲数。 */
   count: number;
   /** 何曲目か（1始まり）と、全部で何曲か。 */
@@ -94,7 +92,6 @@ export function buildQueueEntries(
       kind,
       names,
       leadTrack,
-      wholeLibrary: kind === 'seq' && meta?.wholeLibrary === true,
       count: names.length > 0 ? names.length : total,
       played: Math.min(played, total),
       total,

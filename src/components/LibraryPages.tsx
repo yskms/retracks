@@ -269,7 +269,7 @@ const QUEUE_MODE_KEY = {
 } as const satisfies Record<QueueEntry['kind'], string>;
 
 function queueTitle(t: TFunction, entry: QueueEntry): string {
-  if (entry.kind === 'all' || entry.wholeLibrary) return t('queues.titleAll');
+  if (entry.kind === 'all') return t('queues.titleAll');
   const lead = entry.names[0] ?? entry.leadTrack?.title;
   if (!lead) return t('queues.unknown');
   // count は名前の件数（無ければ曲数）。先頭の1件を除いた残りが「ほか」

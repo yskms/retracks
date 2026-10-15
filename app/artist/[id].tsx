@@ -172,7 +172,7 @@ export default function ArtistScreen() {
       const picked = sortedTracks.filter((t) => ids.includes(t.id));
 
       if (shuffled) await playTracks('songs', ids, picked);
-      else await playFrom(picked, 0);
+      else await playFrom(picked, 0, { remember: true });
 
       clear();
       router.push('/player');
@@ -266,7 +266,7 @@ export default function ArtistScreen() {
                   <Pressable
                     style={styles.action}
                     onPress={async () => {
-                      await playFrom(sortedTracks, 0);
+                      await playFrom(sortedTracks, 0, { remember: true });
                       router.push('/player');
                     }}
                   >

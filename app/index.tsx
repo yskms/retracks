@@ -41,6 +41,7 @@ import {
   SongsPage,
 } from '../src/components/LibraryPages';
 import { buildQueueEntries, type QueueEntry } from '../src/queueEntries';
+import { namesForSources } from '../src/queueKeys';
 import { useSelection } from '../src/useSelection';
 import { CAN_DELETE_TRACKS, useDeleteTracks } from '../src/useDeleteTracks';
 import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
@@ -290,7 +291,7 @@ export default function LibraryScreen() {
     if (kind === 'songs' && !shuffled) {
       // 一覧の並び順のまま先頭から（曲タブの並べ替えを反映した順）
       const picked = sortedTracks.filter((t) => ids.includes(t.id));
-      await playFrom(picked, 0);
+      await playFrom(picked, 0, { remember: true });
     } else if (kind === 'songs') {
       const byId = new Map(tracks.map((t) => [t.id, t]));
       const picked = ids.map((id) => byId.get(id)).filter((t): t is Track => t != null);
@@ -299,11 +300,18 @@ export default function LibraryScreen() {
     } else if (kind === 'artists') {
       const picked = tracksForSelection(tracks, 'artists', ids);
       if (shuffled) await playTracks('artist', ids, picked);
-      else await playFrom(picked, 0);
+      else {
+        // 見出しは選んだ名前にする（無いと、先頭の曲名＋曲数になる）
+        const names = namesForSources('artist', ids, picked);
+        await playFrom(picked, 0, { remember: true, names });
+      }
     } else {
       const picked = tracksForSelection(tracks, 'albums', ids);
       if (shuffled) await playTracks('album', ids, picked);
-      else await playFrom(picked, 0);
+      else {
+        const names = namesForSources('album', ids, picked);
+        await playFrom(picked, 0, { remember: true, names });
+      }
     }
 
     clear();

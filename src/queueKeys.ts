@@ -93,12 +93,6 @@ export function isOrderedKey(key: string): boolean {
 export type QueueMeta = {
   srcIds: string[];
   names: string[];
-  /**
-   * 順番再生で、ライブラリ全体をそのまま並べたキューか（曲タブから曲をタップした
-   * とき）。そうなら見出しを「全曲」にする。曲数の比較で決めて保存しておく。
-   * 表示のたびに現在の曲数と比べると、曲が1つ増えただけで見出しが変わってしまう。
-   */
-  wholeLibrary?: boolean;
 };
 
 /** 選んだアーティスト／アルバムの表示名を、選んだ順で返す。 */
@@ -135,18 +129,12 @@ export function summarizeTracks(tracks: Track[]): string[] {
 export function buildMeta(
   kind: 'artist' | 'album' | 'songs' | 'seq',
   ids: string[],
-  source: Track[],
-  /** ライブラリ全体の曲数（順番再生が全体かどうかの判定用）。 */
-  librarySize?: number
+  source: Track[]
 ): QueueMeta {
   if (kind === 'artist' || kind === 'album') {
     return { srcIds: [...ids], names: namesForSources(kind, ids, source) };
   }
-  const meta: QueueMeta = { srcIds: [], names: summarizeTracks(source) };
-  if (kind === 'seq' && librarySize != null && librarySize > 0 && source.length === librarySize) {
-    meta.wholeLibrary = true;
-  }
-  return meta;
+  return { srcIds: [], names: summarizeTracks(source) };
 }
 
 /**

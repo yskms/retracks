@@ -144,9 +144,21 @@ type PlaybackValue = {
   /**
    * 一覧の並び順のまま、指定した位置から再生する（要件 10.4）。
    * 曲をタップしたときの挙動。シャッフルの1巡管理は使わない。
-   * 2曲以上なら並びと位置を seq: のキューとして保存する（→ src/queueStore.ts）。
+   *
+   * remember: true のときだけ、2曲以上なら並びと位置を seq: のキューとして保存する
+   * （→ src/queueStore.ts。キュータブから続きを再生できる）。複数選択の「順番に」や、
+   * アルバム／アーティスト詳細の「順番に」ボタンのように、利用者が「この集まりを
+   * 流す」と決めた操作で指定する。**一覧の行をタップしただけの再生は指定しない**
+   * （曲タブで次々にタップするだけで、全曲ぶんの並びを書き込んだ項目が増える
+   * うえ、続きから再生する価値も無い）。
+   * names は、キュータブの見出しに使う名前（複数のアーティスト／アルバムを選んだとき）。
+   * 省略すると、曲の並びから推測する（1枚のアルバム・1人のアーティストなら、その名前）。
    */
-  playFrom: (source: Track[], index: number) => Promise<void>;
+  playFrom: (
+    source: Track[],
+    index: number,
+    options?: { remember?: boolean; names?: string[] }
+  ) => Promise<void>;
 
   /**
    * リピートを OFF → 全曲 → 1曲 → OFF の順に切り替える。
@@ -885,7 +897,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [playTracks]);
 
   const playFrom = useCallback(
-    async (source: Track[], index: number) => {
+    async (
+      source: Track[],
+      index: number,
+      options?: { remember?: boolean; names?: string[] }
+    ) => {
       if (!ready || source.length === 0) return;
 
       // 一覧をそのままキューにする。順列の1巡管理からは外れるので、
@@ -896,7 +912,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
       const start = Math.max(0, index);
 
-      if (source.length >= MIN_PERSISTED_ORDERED_TRACKS) {
+      if (options?.remember && source.length >= MIN_PERSISTED_ORDERED_TRACKS) {
         // 並びと位置を seq: のキューとして保存する（キュータブから続きを再生できる）。
         // 保存は再生の開始を待たせない。
         const ids = source.map((t) => t.id);
@@ -905,7 +921,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         orderedLiveRef.current = true;
         setActiveQueueKey(key);
 
-        const persisted = saveOrdered(key, ids, start, buildMeta('seq', [], source, tracksRef.current.length))
+        const persisted = saveOrdered(
+          key,
+          ids,
+          start,
+          options.names?.length ? { srcIds: [], names: options.names } : buildMeta('seq', [], source)
+        )
           .then(() => writeJson(StorageKeys.playbackPosition(key), 0))
           .catch(() => {
             // 保存に失敗しても再生は続けられる（キュータブに載らないだけ）
@@ -915,8 +936,8 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         // 呼び出し側（画面遷移）を保存の完了まで待たせない。一覧は保存が済んでから読み直す
         void persisted.then(refreshQueueSnapshots);
       } else {
-        // 1曲だけのキューは保存しない（続きから再生する価値が無く、一覧を埋めるだけ）。
-        // 順列も保存しないので識別子は空にする。これを残すと、次回の起動で
+        // 行をタップしただけの再生と、1曲だけのキューは保存しない（続きから再生する
+        // 価値が無く、一覧を埋めるだけ）。順列も保存しないので識別子は空にする。これを残すと、次回の起動で
         // 別のキューの順列を拾ってしまう。
         orderedLiveRef.current = false;
         setActiveQueueKey(null);
