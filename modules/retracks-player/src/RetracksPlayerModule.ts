@@ -39,6 +39,13 @@ declare class RetracksPlayerModule extends NativeModule<RetracksPlayerEvents> {
    */
   getTrackFolders(): Promise<TrackFolders>;
   /**
+   * 端末から曲を削除する（Android のみ）。uris は削除したい曲の URI。
+   * 戻り値は削除できたかどうか。ユーザーが OS の確認ダイアログを拒否した
+   * 場合は false（エラーではない）。iOS はミュージックライブラリから曲を
+   * 削除する公開 API が無いため常に false を返す。
+   */
+  deleteTracksAsync(uris: string[]): Promise<boolean>;
+  /**
    * プロセスが前回どう終わったかの履歴。新しい順に最大10件。
    * 再生が勝手に止まる症状の原因調査に使う。
    */

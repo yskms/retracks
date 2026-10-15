@@ -7,8 +7,10 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Linking,
+  Platform,
   Pressable,
   RefreshControl,
   StyleSheet,
@@ -22,6 +24,7 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
+import { RetracksPlayer } from '../modules/retracks-player/src';
 import { usePlayback } from '../src/playback';
 import { artworkByArtist, countAlbumsByArtist, type Track } from '../src/library';
 import { colors } from '../src/theme';
@@ -117,6 +120,7 @@ export default function LibraryScreen() {
     permissionDenied,
     retryPermission,
   } = usePlayback();
+  const [deleting, setDeleting] = useState(false);
   const { selection, active: inSelection, toggle, clear, isSelected } =
     useSelection<TabId>();
 
@@ -262,6 +266,48 @@ export default function LibraryScreen() {
     router.push('/player');
   }, [selection, tracks, sortedTracks, playTracks, playFrom, clear, router]);
 
+  /**
+   * 選択した曲・アルバムを端末から削除する（要件: 端末からの削除、Android のみ）。
+   * ネイティブ側が false を返すのは OS の確認ダイアログをユーザーが拒否した
+   * 場合で、エラーではないので何もしない（選択状態はそのまま残し、やり直せる
+   * ようにする）。例外（本当の失敗）だけアラートで知らせる。
+   */
+  const deleteSelection = useCallback(async () => {
+    if (!selection || selection.kind === 'artists' || deleting) return;
+    const { kind, ids } = selection;
+    const picked =
+      kind === 'songs'
+        ? tracks.filter((t) => ids.includes(t.id))
+        : tracks.filter((t) => ids.includes(t.albumId || t.album || ''));
+    if (picked.length === 0) return;
+
+    Alert.alert(
+      t('library.deleteConfirmTitle'),
+      t('library.deleteConfirmMessage', { count: picked.length }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              const deleted = await RetracksPlayer.deleteTracksAsync(picked.map((t) => t.uri));
+              if (deleted) {
+                clear();
+                await rescan();
+              }
+            } catch {
+              Alert.alert(t('library.deleteFailedTitle'), t('library.deleteFailedMessage'));
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [selection, tracks, deleting, clear, rescan, t]);
+
   // 並べ替えメニューの中身は、今表示しているタブ（sortKeyForActiveTab）で
   // 出し分ける。軸の並びは Row の項目数がそこまで多くないため、useMemo に
   // せず毎レンダー組み立てる（layoutKeyForActiveTab と同じ扱い）。
@@ -317,6 +363,22 @@ export default function LibraryScreen() {
               <Ionicons name="shuffle-outline" size={14} color="#1a1206" />
               <Text style={styles.headerActionPrimaryText}>{t('common.shufflePlay')}</Text>
             </Pressable>
+            {/* 端末からの削除は Android のみ（iOS はミュージックライブラリから
+                曲を削除する公開APIが無い → RetracksPlayerModule.swift）。 */}
+            {Platform.OS === 'android' && selection?.kind !== 'artists' && (
+              <Pressable
+                hitSlop={10}
+                disabled={deleting}
+                onPress={() => void deleteSelection()}
+                accessibilityLabel={t('library.deleteA11y')}
+              >
+                <Ionicons
+                  name="trash-outline"
+                  size={20}
+                  color={deleting ? colors.textDim : colors.text}
+                />
+              </Pressable>
+            )}
           </View>
         </View>
       ) : (
@@ -508,7 +570,7 @@ const styles = StyleSheet.create({
   brand: { color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 20 },
   headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  headerActions: { flexDirection: 'row', gap: 8 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerAction: {
     flexDirection: 'row',
     alignItems: 'center',

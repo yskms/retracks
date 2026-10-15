@@ -1,11 +1,15 @@
 package expo.modules.retracksplayer
 
 import android.Manifest
+import android.app.Activity
+import android.app.RecoverableSecurityException
 import android.content.ComponentName
+import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import java.io.File
 import androidx.annotation.OptIn
 import androidx.media3.common.MediaItem
@@ -76,11 +80,19 @@ class RetracksPlayerModule : Module() {
 
   companion object {
     private const val SNAPSHOT_INTERVAL_MS = 200L
+    private const val DELETE_REQUEST_CODE = 48291
   }
 
   private val mainHandler = Handler(Looper.getMainLooper())
   private var controller: MediaController? = null
   private var polling = false
+
+  /**
+   * MediaStore 削除のシステム確認ダイアログ（createDeleteRequest / Q の
+   * RecoverableSecurityException）の結果を受け取るコールバック。
+   * 一度に1件しか同時に実行しない前提（JS 側は削除中はボタンを無効化する）。
+   */
+  private var pendingDeleteResolution: ((Boolean) -> Unit)? = null
 
   /** 区間設定を変えたときに MediaItem を組み直せるよう、投入した曲を保持しておく。 */
   private var tracks: List<TrackInput> = emptyList()
@@ -204,6 +216,61 @@ class RetracksPlayerModule : Module() {
   /** メインスレッドで実行する。既にメインスレッドならそのまま走らせる。 */
   private fun onMain(block: () -> Unit) {
     if (Looper.myLooper() == Looper.getMainLooper()) block() else mainHandler.post(block)
+  }
+
+  /**
+   * MediaStore 削除の確認ダイアログ（IntentSender）を起動し、結果を
+   * OnActivityResult（definition() 内）経由で受け取って promise を解決する。
+   */
+  private fun launchDeleteConfirmation(intentSender: android.content.IntentSender, promise: Promise) {
+    val activity = appContext.currentActivity
+    if (activity == null) {
+      promise.reject(CodedException("Activity is not available"))
+      return
+    }
+    pendingDeleteResolution = { approved -> promise.resolve(approved) }
+    activity.startIntentSenderForResult(intentSender, DELETE_REQUEST_CODE, null, 0, 0, 0)
+  }
+
+  /**
+   * Android 10 (Q) 専用。delete() を1件ずつ試し、RecoverableSecurityException
+   * が出たらその確認ダイアログを起こし、承認後に同じ URI へ delete() を
+   * リトライする（Q の承認は「次の delete() を1回だけ許可する」という
+   * 事前許可であり、承認＝削除完了ではない点が Android 11+ の
+   * createDeleteRequest と異なる）。
+   */
+  private fun deleteOneByOneWithConsent(context: Context, uris: List<Uri>, index: Int, promise: Promise) {
+    if (index >= uris.size) {
+      promise.resolve(true)
+      return
+    }
+    try {
+      context.contentResolver.delete(uris[index], null, null)
+      deleteOneByOneWithConsent(context, uris, index + 1, promise)
+    } catch (e: RecoverableSecurityException) {
+      val activity = appContext.currentActivity
+      if (activity == null) {
+        promise.reject(CodedException("Activity is not available"))
+        return
+      }
+      pendingDeleteResolution = { approved ->
+        if (approved) {
+          onMain { deleteOneByOneWithConsent(context, uris, index, promise) }
+        } else {
+          promise.resolve(false)
+        }
+      }
+      activity.startIntentSenderForResult(
+        e.userAction.actionIntent.intentSender,
+        DELETE_REQUEST_CODE,
+        null,
+        0,
+        0,
+        0
+      )
+    } catch (e: Exception) {
+      promise.reject(CodedException("Failed to delete track", e))
+    }
   }
 
   private fun isControllerConnected(): Boolean {
@@ -549,6 +616,58 @@ class RetracksPlayerModule : Module() {
     }
 
     /**
+     * 端末から曲を削除する。uris は MediaStore の content:// URI（複数可。
+     * アルバムを削除するときは、そのアルバムの全曲分を一度に渡す）。
+     *
+     * Android 11 (R / API 30) 以降は MediaStore.createDeleteRequest() で、
+     * 複数曲まとめて1回のシステム確認ダイアログにできる。承認されると削除
+     * 自体もシステムが行うため、ここで delete() を呼び直す必要はない。
+     *
+     * Android 10 (Q / API 29) には createDeleteRequest が無く、自分が作成
+     * していないファイルへの delete() は RecoverableSecurityException を
+     * 投げる。この例外は1件ずつしか扱えない（OS側にまとめて確認する手段が
+     * 無い）ため、複数曲を渡すと曲数分の確認ダイアログが出ることがある
+     * （スコープドストレージの制約そのものであり、実装の簡略化ではない）。
+     *
+     * Android 9 (API 28) 以前はスコープドストレージの対象外なので、確認
+     * ダイアログを経由せず直接 delete() する。
+     *
+     * 戻り値は「削除できたか」。ユーザーが確認ダイアログを拒否した場合は
+     * false を返す（エラーではない）。例外で reject するのは、本当に
+     * 削除処理自体が失敗したとき（権限不足・I/O エラー等）だけにする。
+     */
+    AsyncFunction("deleteTracksAsync") { uriStrings: List<String>, promise: Promise ->
+      onMain {
+        val context = appContext.reactContext
+        if (context == null) {
+          promise.reject(CodedException("React context is not available"))
+          return@onMain
+        }
+        val uris = uriStrings.map(Uri::parse)
+        when {
+          Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+            try {
+              val pendingIntent = MediaStore.createDeleteRequest(context.contentResolver, uris)
+              launchDeleteConfirmation(pendingIntent.intentSender, promise)
+            } catch (e: Exception) {
+              promise.reject(CodedException("Failed to create delete request", e))
+            }
+          }
+          Build.VERSION.SDK_INT == Build.VERSION_CODES.Q ->
+            deleteOneByOneWithConsent(context, uris, 0, promise)
+          else -> {
+            try {
+              uris.forEach { context.contentResolver.delete(it, null, null) }
+              promise.resolve(true)
+            } catch (e: Exception) {
+              promise.reject(CodedException("Failed to delete track", e))
+            }
+          }
+        }
+      }
+    }
+
+    /**
      * アルバムごとのリリース年。
      *
      * expo-music-library は MediaStore の YEAR 系カラムを一切公開していないため、
@@ -757,8 +876,21 @@ class RetracksPlayerModule : Module() {
     /** メインスレッドで更新済みのスナップショットを返す（コントローラには触らない）。 */
     Function("getStatus") { snapshot }
 
+    /**
+     * startIntentSenderForResult() の結果はホストの Activity の
+     * onActivityResult 経由でここに届く（→ deleteTracksAsync）。
+     */
+    OnActivityResult { _, payload ->
+      if (payload.requestCode == DELETE_REQUEST_CODE) {
+        val resolve = pendingDeleteResolution
+        pendingDeleteResolution = null
+        resolve?.invoke(payload.resultCode == Activity.RESULT_OK)
+      }
+    }
+
     OnDestroy {
       polling = false
+      pendingDeleteResolution = null
       onMain {
         mainHandler.removeCallbacks(snapshotRunnable)
         controller?.removeListener(playerListener)

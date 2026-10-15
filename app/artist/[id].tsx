@@ -5,12 +5,22 @@
  */
 
 import { useCallback, useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import {
+  Alert,
+  FlatList,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
+import { RetracksPlayer } from '../../modules/retracks-player/src';
 import { usePlayback } from '../../src/playback';
 import { useSettings } from '../../src/settings';
 import { deriveAlbums, type Album, type Track } from '../../src/library';
@@ -60,6 +70,7 @@ export default function ArtistScreen() {
     playFrom,
     playTracks,
     currentTrack,
+    rescan,
   } = usePlayback();
   const {
     selection,
@@ -71,6 +82,7 @@ export default function ArtistScreen() {
     areAllSelected,
   } = useSelection<Kind>();
   const { articleOptions } = useSettings();
+  const [deleting, setDeleting] = useState(false);
 
   const { layouts, cycle } = useLayouts();
   const albumLayout = layouts.artistAlbums;
@@ -152,6 +164,39 @@ export default function ArtistScreen() {
     [selection, sortedTracks, playTracks, playFrom, clear, router]
   );
 
+  /** 選択した曲を端末から削除する（Android のみ。→ app/index.tsx の同名処理）。 */
+  const deleteSelection = useCallback(async () => {
+    if (!selection || deleting) return;
+    const picked = tracks.filter((t) => selection.ids.includes(t.id));
+    if (picked.length === 0) return;
+
+    Alert.alert(
+      t('library.deleteConfirmTitle'),
+      t('library.deleteConfirmMessage', { count: picked.length }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              const deleted = await RetracksPlayer.deleteTracksAsync(picked.map((t) => t.uri));
+              if (deleted) {
+                clear();
+                await rescan();
+              }
+            } catch {
+              Alert.alert(t('library.deleteFailedTitle'), t('library.deleteFailedMessage'));
+            } finally {
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [selection, tracks, deleting, clear, rescan, t]);
+
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
       {inSelection ? (
@@ -173,6 +218,20 @@ export default function ArtistScreen() {
               <Ionicons name="shuffle-outline" size={14} color="#1a1206" />
               <Text style={styles.actionPrimaryText}>{t('common.shufflePlay')}</Text>
             </Pressable>
+            {Platform.OS === 'android' && (
+              <Pressable
+                hitSlop={10}
+                disabled={deleting}
+                onPress={() => void deleteSelection()}
+                accessibilityLabel={t('library.deleteA11y')}
+              >
+                <Ionicons
+                  name="trash-outline"
+                  size={20}
+                  color={deleting ? colors.textDim : colors.text}
+                />
+              </Pressable>
+            )}
           </View>
         </View>
       ) : (
@@ -340,7 +399,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   summary: { color: colors.textDim, fontSize: 12 },
-  actions: { flexDirection: 'row', gap: 8 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   action: {
     flexDirection: 'row',
     alignItems: 'center',
