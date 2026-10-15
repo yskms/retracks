@@ -663,6 +663,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (source.length === 0) return addLog('対象の曲がありません');
 
       const key = buildQueueKey(mode, mode === 'all' ? [] : ids);
+
+      // 保存してある再生位置は、キューを切り替える前に読む。setQueue() が出す
+      // onTrackChange のハンドラが「曲が変わった」として位置を 0 に書き戻すため、
+      // setQueue() のあとに読むと 0 になり、保存した位置まで戻れなかった
+      // （2026-10-15、Pixel 11 で再生を一時停止して保存位置を固定し、別のキュー
+      // を挟んで戻る手順で確認。61404ms を保存 → 再開は頭から、ログは
+      // onTrackChange の1ms後の読み出しが 0）。切り替え前に読めば、旧キューの
+      // 遅れて届くイベントが新しいキューの位置を書き潰すこともない。
+      const savedPosition = await readJson<number>(StorageKeys.playbackPosition(key));
+
       queueKeyRef.current = key;
 
       const { state, resumed } = await prepareShuffle(
@@ -687,7 +697,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       await RetracksPlayer.setQueue(ordered, state.cursor, key);
 
       if (resumed) {
-        const savedPosition = await readJson<number>(StorageKeys.playbackPosition(key));
         if (typeof savedPosition === 'number' && savedPosition > 1000) {
           await RetracksPlayer.seekTo(savedPosition);
         }
