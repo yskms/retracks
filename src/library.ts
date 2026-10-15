@@ -279,6 +279,25 @@ export async function refreshLibrary(previous: Track[]): Promise<RefreshResult> 
   };
 }
 
+/**
+ * 複数選択（曲・アルバム・アーティスト）が指す Track[] を解決する。
+ *
+ * ライブラリ画面の「再生」と「削除」で同じ絞り込みを別々に書いていたところ、
+ * 片方だけ直すともう一方とズレる危険があると指摘された（2026-10、レビュー）。
+ * 両方からこの関数を呼ぶことで絞り込み規則を1箇所にする。
+ */
+export type SelectionKind = 'songs' | 'albums' | 'artists';
+
+export function tracksForSelection(
+  tracks: Track[],
+  kind: SelectionKind,
+  ids: string[]
+): Track[] {
+  if (kind === 'songs') return tracks.filter((t) => ids.includes(t.id));
+  if (kind === 'albums') return tracks.filter((t) => ids.includes(t.albumId || t.album || ''));
+  return tracks.filter((t) => ids.includes(t.artistId || t.artist));
+}
+
 // ---- アーティスト / アルバム -------------------------------------------
 
 export type Artist = {

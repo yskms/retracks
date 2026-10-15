@@ -3,19 +3,19 @@
  * 長押しで複数選択に入り、まとめて再生・削除できる。
  */
 
-import { useCallback, useMemo, useState } from 'react';
-import { Alert, FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { FlatList, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
-import { RetracksPlayer } from '../../modules/retracks-player/src';
 import { usePlayback } from '../../src/playback';
-import { compareByTrackOrder } from '../../src/library';
+import { compareByTrackOrder, tracksForSelection } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
 import { useSelection } from '../../src/useSelection';
+import { useDeleteTracks } from '../../src/useDeleteTracks';
 
 export default function AlbumScreen() {
   const { t } = useTranslation();
@@ -28,7 +28,7 @@ export default function AlbumScreen() {
   }>();
   const { tracks: allTracks, playFrom, playTracks, currentTrack, rescan } = usePlayback();
   const { selection, active: inSelection, toggle, clear, isSelected } = useSelection<'songs'>();
-  const [deleting, setDeleting] = useState(false);
+  const { deleting, confirmAndDelete } = useDeleteTracks(rescan);
 
   // id はアルバムの実ID、またはそれを持たない曲向けのアルバム名のどちらか
   // （→ deriveAlbums()）。プレイヤー画面からはアルバムIDを持たず名前だけで
@@ -38,38 +38,28 @@ export default function AlbumScreen() {
     [allTracks, id]
   );
 
-  /** 選択した曲を端末から削除する（Android のみ。→ app/index.tsx の同名処理）。 */
-  const deleteSelection = useCallback(async () => {
-    if (!selection || deleting) return;
-    const picked = tracks.filter((t) => selection.ids.includes(t.id));
-    if (picked.length === 0) return;
+  // このアルバムの曲を全削除すると tracks が 0 になる。空の詳細画面が
+  // 残り続けるのを避けるため自動で戻る（→ app/artist/[id].tsx の同コメント）。
+  // isFocused を見ているのは、このスタック下に積まれた状態（他の画面へ進んだ
+  // 後ろで、ここの tracks が裏の再走査などで 0 になった場合）で発火すると、
+  // router.back() が自分ではなく今まさに見ている画面を閉じてしまうため
+  // （2026-10、レビュー指摘）。
+  const isFocused = useIsFocused();
+  const hadTracksRef = useRef(false);
+  useEffect(() => {
+    if (tracks.length > 0) {
+      hadTracksRef.current = true;
+      return;
+    }
+    if (hadTracksRef.current && isFocused) router.back();
+  }, [tracks.length, isFocused, router]);
 
-    Alert.alert(
-      t('library.deleteConfirmTitle'),
-      t('library.deleteConfirmMessage', { count: picked.length }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              const deleted = await RetracksPlayer.deleteTracksAsync(picked.map((t) => t.uri));
-              if (deleted) {
-                clear();
-                await rescan();
-              }
-            } catch {
-              Alert.alert(t('library.deleteFailedTitle'), t('library.deleteFailedMessage'));
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
-  }, [selection, tracks, deleting, clear, rescan, t]);
+  /** 選択した曲を端末から削除する（Android のみ。→ src/useDeleteTracks.ts）。 */
+  const deleteSelection = useCallback(() => {
+    if (!selection) return;
+    const picked = tracksForSelection(tracks, 'songs', selection.ids);
+    confirmAndDelete(picked, clear);
+  }, [selection, tracks, confirmAndDelete, clear]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -78,7 +68,7 @@ export default function AlbumScreen() {
           <Pressable hitSlop={12} onPress={clear}>
             <Ionicons name="close-outline" size={22} color={colors.text} />
           </Pressable>
-          <Text style={[styles.headerTitle, styles.headerTitleFlex]}>
+          <Text style={[styles.headerTitle, styles.headerTitleFlex]} numberOfLines={1}>
             {t('album.selectedCount', { count: selection?.ids.length ?? 0 })}
           </Text>
           <View style={styles.actions}>
@@ -86,7 +76,7 @@ export default function AlbumScreen() {
               style={styles.action}
               onPress={async () => {
                 if (!selection) return;
-                const picked = tracks.filter((t) => selection.ids.includes(t.id));
+                const picked = tracksForSelection(tracks, 'songs', selection.ids);
                 clear();
                 await playFrom(picked, 0);
                 router.push('/player');
@@ -99,7 +89,7 @@ export default function AlbumScreen() {
               onPress={async () => {
                 if (!selection) return;
                 const ids = selection.ids;
-                const picked = tracks.filter((t) => ids.includes(t.id));
+                const picked = tracksForSelection(tracks, 'songs', ids);
                 clear();
                 await playTracks('selection', ids, picked);
                 router.push('/player');
@@ -112,7 +102,7 @@ export default function AlbumScreen() {
               <Pressable
                 hitSlop={10}
                 disabled={deleting}
-                onPress={() => void deleteSelection()}
+                onPress={deleteSelection}
                 accessibilityLabel={t('library.deleteA11y')}
               >
                 <Ionicons
@@ -166,9 +156,13 @@ export default function AlbumScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         ListHeaderComponent={
-          inSelection ? null : (
-            <View style={styles.summaryRow}>
-              <Text style={styles.summary}>{t('common.songCount', { count: tracks.length })}</Text>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summary}>{t('common.songCount', { count: tracks.length })}</Text>
+            {/* 選択中はヘッダー側に再生/削除操作が出るので、こちらは隠す。
+                ListHeaderComponent ごと null にすると、長押しした行の位置が
+                指の下からずれて跳ねる（2026-10、レビュー指摘）。行の形は
+                保ったままボタンだけ消す（→ app/artist/[id].tsx と同じ扱い）。 */}
+            {!inSelection && (
               <View style={styles.actions}>
                 <Pressable
                   style={styles.action}
@@ -190,8 +184,8 @@ export default function AlbumScreen() {
                   <Text style={styles.actionPrimaryText}>{t('common.shufflePlay')}</Text>
                 </Pressable>
               </View>
-            </View>
-          )
+            )}
+          </View>
         }
         renderItem={({ item, index }) => (
           <Row
@@ -235,7 +229,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   summary: { color: colors.textDim, fontSize: 12 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // gap はゴミ箱アイコンの hitSlop（10）以上にする（→ app/index.tsx の同注記）。
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   action: {
     flexDirection: 'row',
     alignItems: 'center',

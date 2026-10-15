@@ -4,9 +4,8 @@
  * 長押しで複数選択に入り、まとめて再生できる。
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Platform,
   Pressable,
@@ -16,14 +15,13 @@ import {
   View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
-import { RetracksPlayer } from '../../modules/retracks-player/src';
 import { usePlayback } from '../../src/playback';
 import { useSettings } from '../../src/settings';
-import { deriveAlbums, type Album, type Track } from '../../src/library';
+import { deriveAlbums, tracksForSelection, type Album, type Track } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
 import { Tile } from '../../src/components/Tile';
@@ -36,6 +34,7 @@ import {
   type SortFieldLabelKey,
 } from '../../src/sortOrder';
 import { useSelection } from '../../src/useSelection';
+import { useDeleteTracks } from '../../src/useDeleteTracks';
 
 const ARTIST_TRACK_FIELD_OPTIONS: { value: ArtistTrackSortField; labelKey: SortFieldLabelKey }[] = [
   { value: 'title', labelKey: 'library.sortFieldTitle' },
@@ -82,7 +81,7 @@ export default function ArtistScreen() {
     areAllSelected,
   } = useSelection<Kind>();
   const { articleOptions } = useSettings();
-  const [deleting, setDeleting] = useState(false);
+  const { deleting, confirmAndDelete } = useDeleteTracks(rescan);
 
   const { layouts, cycle } = useLayouts();
   const albumLayout = layouts.artistAlbums;
@@ -98,6 +97,24 @@ export default function ArtistScreen() {
     () => allTracks.filter((t) => (t.artistId || t.artist) === id),
     [allTracks, id]
   );
+
+  // このアーティストの曲を全削除すると tracks が 0 になる。空の詳細画面が
+  // 残り続けるのを避けるため自動で戻る。ただし「まだ一度も曲が入っていない」
+  // 初回ロード中の一瞬を誤って戻らないよう、一度でも曲があったことを
+  // hadTracksRef で確認してから発火する（2026-10、レビュー指摘）。isFocused を
+  // 見ているのは、このスタック下に積まれた状態（他の画面へ進んだ後ろで、
+  // ここの tracks が裏の再走査などで 0 になった場合）で発火すると、
+  // router.back() が自分ではなく今まさに見ている画面を閉じてしまうため
+  // （→ app/album/[id].tsx の同コメント）。
+  const isFocused = useIsFocused();
+  const hadTracksRef = useRef(false);
+  useEffect(() => {
+    if (tracks.length > 0) {
+      hadTracksRef.current = true;
+      return;
+    }
+    if (hadTracksRef.current && isFocused) router.back();
+  }, [tracks.length, isFocused, router]);
 
   // アルバムの年は曲単位では持っていないため、全体のアルバム一覧
   // （年計算済み）から albumId ごとに引く。
@@ -164,38 +181,12 @@ export default function ArtistScreen() {
     [selection, sortedTracks, playTracks, playFrom, clear, router]
   );
 
-  /** 選択した曲を端末から削除する（Android のみ。→ app/index.tsx の同名処理）。 */
-  const deleteSelection = useCallback(async () => {
-    if (!selection || deleting) return;
-    const picked = tracks.filter((t) => selection.ids.includes(t.id));
-    if (picked.length === 0) return;
-
-    Alert.alert(
-      t('library.deleteConfirmTitle'),
-      t('library.deleteConfirmMessage', { count: picked.length }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              const deleted = await RetracksPlayer.deleteTracksAsync(picked.map((t) => t.uri));
-              if (deleted) {
-                clear();
-                await rescan();
-              }
-            } catch {
-              Alert.alert(t('library.deleteFailedTitle'), t('library.deleteFailedMessage'));
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
-  }, [selection, tracks, deleting, clear, rescan, t]);
+  /** 選択した曲を端末から削除する（Android のみ。→ src/useDeleteTracks.ts）。 */
+  const deleteSelection = useCallback(() => {
+    if (!selection) return;
+    const picked = tracksForSelection(tracks, 'songs', selection.ids);
+    confirmAndDelete(picked, clear);
+  }, [selection, tracks, confirmAndDelete, clear]);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -204,7 +195,7 @@ export default function ArtistScreen() {
           <Pressable hitSlop={12} onPress={clear}>
             <Ionicons name="close-outline" size={22} color={colors.text} />
           </Pressable>
-          <Text style={styles.headerTitle}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
             {t('artist.selectedCount', { count: selection?.ids.length ?? 0 })}
           </Text>
           <View style={styles.actions}>
@@ -222,7 +213,7 @@ export default function ArtistScreen() {
               <Pressable
                 hitSlop={10}
                 disabled={deleting}
-                onPress={() => void deleteSelection()}
+                onPress={deleteSelection}
                 accessibilityLabel={t('library.deleteA11y')}
               >
                 <Ionicons
@@ -399,7 +390,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   summary: { color: colors.textDim, fontSize: 12 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // gap はゴミ箱アイコンの hitSlop（10）以上にする（→ app/index.tsx の同注記）。
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   action: {
     flexDirection: 'row',
     alignItems: 'center',

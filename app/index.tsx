@@ -7,7 +7,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Alert,
   Animated,
   Linking,
   Platform,
@@ -24,9 +23,8 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
-import { RetracksPlayer } from '../modules/retracks-player/src';
 import { usePlayback } from '../src/playback';
-import { artworkByArtist, countAlbumsByArtist, type Track } from '../src/library';
+import { artworkByArtist, countAlbumsByArtist, tracksForSelection, type Track } from '../src/library';
 import { colors } from '../src/theme';
 import {
   AlbumsPage,
@@ -36,6 +34,7 @@ import {
   SongsPage,
 } from '../src/components/LibraryPages';
 import { useSelection } from '../src/useSelection';
+import { useDeleteTracks } from '../src/useDeleteTracks';
 import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
 import { TAB_LABEL_KEY, TAB_LAYOUT_KEY, TAB_SORT_KEY, type TabId } from '../src/tabs';
 import { useSettings } from '../src/settings';
@@ -120,9 +119,9 @@ export default function LibraryScreen() {
     permissionDenied,
     retryPermission,
   } = usePlayback();
-  const [deleting, setDeleting] = useState(false);
   const { selection, active: inSelection, toggle, clear, isSelected } =
     useSelection<TabId>();
+  const { deleting, confirmAndDelete } = useDeleteTracks(rescan);
 
   const pagerRef = useRef<PagerView>(null);
   // page はここから導出する値であって、真実の情報源ではない。タブの並びや
@@ -251,13 +250,11 @@ export default function LibraryScreen() {
       // 'all' を使うと全曲シャッフルの1巡状態を上書きしてしまうため専用のキーにする
       await playTracks('selection', ids, picked);
     } else if (kind === 'artists') {
-      // artists/albums の id は artistId||artist（→ deriveArtists()）と同じ
-      // キーなので、tracks を直接絞り込める
-      const picked = tracks.filter((t) => ids.includes(t.artistId || t.artist));
+      const picked = tracksForSelection(tracks, 'artists', ids);
       if (shuffled) await playTracks('artist', ids, picked);
       else await playFrom(picked, 0);
     } else {
-      const picked = tracks.filter((t) => ids.includes(t.albumId || t.album || ''));
+      const picked = tracksForSelection(tracks, 'albums', ids);
       if (shuffled) await playTracks('album', ids, picked);
       else await playFrom(picked, 0);
     }
@@ -269,48 +266,16 @@ export default function LibraryScreen() {
   /**
    * 選択した曲・アルバム・アーティストを端末から削除する（要件: 端末からの
    * 削除、Android のみ）。アーティストを選んだ場合はそのアーティストの全曲が
-   * 対象になる（playSelection() の artists 分岐と同じ絞り込み）。
-   * ネイティブ側が false を返すのは OS の確認ダイアログをユーザーが拒否した
-   * 場合で、エラーではないので何もしない（選択状態はそのまま残し、やり直せる
-   * ようにする）。例外（本当の失敗）だけアラートで知らせる。
+   * 対象になる。絞り込みは playSelection() と同じ tracksForSelection() を使う
+   * （→ src/library.ts。別々に書くと片方だけ直してズレる事故があったため
+   * 共通化、2026-10）。確認ダイアログ・ネイティブ呼び出し・再走査の判断は
+   * useDeleteTracks() に集約している（→ src/useDeleteTracks.ts）。
    */
-  const deleteSelection = useCallback(async () => {
-    if (!selection || deleting) return;
-    const { kind, ids } = selection;
-    const picked =
-      kind === 'songs'
-        ? tracks.filter((t) => ids.includes(t.id))
-        : kind === 'albums'
-          ? tracks.filter((t) => ids.includes(t.albumId || t.album || ''))
-          : tracks.filter((t) => ids.includes(t.artistId || t.artist));
-    if (picked.length === 0) return;
-
-    Alert.alert(
-      t('library.deleteConfirmTitle'),
-      t('library.deleteConfirmMessage', { count: picked.length }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              const deleted = await RetracksPlayer.deleteTracksAsync(picked.map((t) => t.uri));
-              if (deleted) {
-                clear();
-                await rescan();
-              }
-            } catch {
-              Alert.alert(t('library.deleteFailedTitle'), t('library.deleteFailedMessage'));
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
-  }, [selection, tracks, deleting, clear, rescan, t]);
+  const deleteSelection = useCallback(() => {
+    if (!selection) return;
+    const picked = tracksForSelection(tracks, selection.kind, selection.ids);
+    confirmAndDelete(picked, clear);
+  }, [selection, tracks, confirmAndDelete, clear]);
 
   // 並べ替えメニューの中身は、今表示しているタブ（sortKeyForActiveTab）で
   // 出し分ける。軸の並びは Row の項目数がそこまで多くないため、useMemo に
@@ -353,7 +318,7 @@ export default function LibraryScreen() {
           <Pressable hitSlop={10} onPress={clear}>
             <Ionicons name="close-outline" size={22} color={colors.text} />
           </Pressable>
-          <Text style={styles.headerTitle}>
+          <Text style={styles.headerTitle} numberOfLines={1}>
             {t('library.selectedCount', { count: selection?.ids.length ?? 0 })}
           </Text>
           <View style={styles.headerActions}>
@@ -373,7 +338,7 @@ export default function LibraryScreen() {
               <Pressable
                 hitSlop={10}
                 disabled={deleting}
-                onPress={() => void deleteSelection()}
+                onPress={deleteSelection}
                 accessibilityLabel={t('library.deleteA11y')}
               >
                 <Ionicons
@@ -573,8 +538,10 @@ const styles = StyleSheet.create({
   },
   brand: { color: colors.text, fontSize: 18, fontWeight: '700', letterSpacing: 1 },
   headerRight: { flexDirection: 'row', alignItems: 'center', gap: 20 },
-  headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600' },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerTitle: { color: colors.text, fontSize: 16, fontWeight: '600', flex: 1 },
+  // gap はゴミ箱アイコンの hitSlop（10）以上にする。狭いと、隣のシャッフル
+  // ボタンとヒット領域が重なり、破壊的操作である削除を誤タップしかねない。
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerAction: {
     flexDirection: 'row',
     alignItems: 'center',

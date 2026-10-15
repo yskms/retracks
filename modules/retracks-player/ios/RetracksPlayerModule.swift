@@ -159,8 +159,8 @@ public final class RetracksPlayerModule: Module {
     AsyncFunction("getExitReasons") { () -> [[String: Any]] in [] }
 
     // ミュージックライブラリから曲を削除する公開APIをAppleが提供していないため、
-    // iOSでは常にfalse（未対応）を返す。JS側はAndroidでのみ削除UIを出す。
-    AsyncFunction("deleteTracksAsync") { (uris: [String]) -> Bool in false }
+    // iOSでは常に0件（未対応）を返す。JS側はAndroidでのみ削除UIを出す。
+    AsyncFunction("deleteTracksAsync") { (ids: [String]) -> Int in 0 }
 
     Function("playCurrentFromStart") {
       DispatchQueue.main.async {

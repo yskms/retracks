@@ -219,57 +219,107 @@ class RetracksPlayerModule : Module() {
   }
 
   /**
-   * MediaStore 削除の確認ダイアログ（IntentSender）を起動し、結果を
-   * OnActivityResult（definition() 内）経由で受け取って promise を解決する。
+   * MediaStore の行ID（Track.id）から content:// URI を組み立てる。
+   *
+   * JS 側の Track.uri はそのまま使わない。expo-music-library は Android 9 (API 28)
+   * 以前で file:// URI を返す（AssetUtils.kt、DATA 列から Uri.fromFile() で組み立て）
+   * ため、それを ContentResolver.delete() に渡すと（file:// には content provider の
+   * authority が無く）IllegalArgumentException になる。削除では常にこちらで
+   * content:// を組み立て直すことで、uri の由来（legacy file / content）を
+   * 意識せずに済む。
    */
-  private fun launchDeleteConfirmation(intentSender: android.content.IntentSender, promise: Promise) {
+  private fun contentUriFor(id: String): Uri =
+    android.content.ContentUris.withAppendedId(
+      android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+      id.toLong()
+    )
+
+  /**
+   * MediaStore 削除の確認ダイアログ（IntentSender）を起動し、結果を
+   * OnActivityResult（definition() 内）経由で onResult へ渡す。
+   *
+   * startIntentSenderForResult 自体が例外を投げることがある（ダイアログを
+   * 表示できない等）。ここで必ず拾って reject することで、呼び出し元（特に
+   * deleteOneByOneWithConsent の catch 節の中）から例外が漏れて
+   * メインスレッドで未捕捉のままアプリごと落ちるのを防ぐ。
+   */
+  private fun launchDeleteConfirmation(
+    intentSender: android.content.IntentSender,
+    promise: Promise,
+    onResult: (Boolean) -> Unit
+  ) {
     val activity = appContext.currentActivity
     if (activity == null) {
       promise.reject(CodedException("Activity is not available"))
       return
     }
-    pendingDeleteResolution = { approved -> promise.resolve(approved) }
-    activity.startIntentSenderForResult(intentSender, DELETE_REQUEST_CODE, null, 0, 0, 0)
+    try {
+      pendingDeleteResolution = onResult
+      activity.startIntentSenderForResult(intentSender, DELETE_REQUEST_CODE, null, 0, 0, 0)
+    } catch (e: Exception) {
+      pendingDeleteResolution = null
+      promise.reject(CodedException("Failed to show delete confirmation", e))
+    }
   }
 
   /**
-   * Android 10 (Q) 専用。delete() を1件ずつ試し、RecoverableSecurityException
-   * が出たらその確認ダイアログを起こし、承認後に同じ URI へ delete() を
-   * リトライする（Q の承認は「次の delete() を1回だけ許可する」という
-   * 事前許可であり、承認＝削除完了ではない点が Android 11+ の
-   * createDeleteRequest と異なる）。
+   * Android 10 (Q) 専用。delete() を1件ずつ試す。RecoverableSecurityException が
+   * 出たらその確認ダイアログを起こし、承認後に同じ URI へ delete() をリトライする
+   * （Q の承認は「次の delete() を1回だけ許可する」という事前許可であり、承認＝
+   * 削除完了ではない点が Android 11+ の createDeleteRequest と異なる）。
+   *
+   * ユーザーが確認ダイアログを1件でも拒否したら、そこで打ち切る（残りの確認
+   * ダイアログは出さない）。「この1件はやめる」ではなく「この操作全体をやめる」
+   * という意思表示として扱う。これを継続扱いにすると、拒否するたびに次の曲の
+   * ダイアログが出てしまい、50曲のアルバムなら最大50回拒否しないと終われない
+   * （2026-10、レビュー指摘）。
+   *
+   * 拒否ではない genuine な失敗（delete() 自体の例外）は1件ごとに諦めて残りを
+   * 続ける。ただし全件がこの失敗だった場合（deletedCount が 0 かつ1件以上の
+   * 失敗があった場合）は reject する。0 を黙って返すと、ユーザーが拒否した
+   * ときと見分けがつかず、ボタンを押しても何も起きないように見える
+   * （2026-10、レビュー指摘）。
+   *
+   * deletedCount は実際に削除できた件数。全曲拒否なら 0 を resolve する
+   * （エラーではない）。呼び出し元はこれを見て、1件でも消えていれば選択解除・
+   * 再走査する。
    */
-  private fun deleteOneByOneWithConsent(context: Context, uris: List<Uri>, index: Int, promise: Promise) {
+  private fun deleteOneByOneWithConsent(
+    context: Context,
+    uris: List<Uri>,
+    index: Int,
+    deletedCount: Int,
+    hadError: Boolean,
+    promise: Promise
+  ) {
     if (index >= uris.size) {
-      promise.resolve(true)
+      if (deletedCount == 0 && hadError) {
+        promise.reject(CodedException("Failed to delete any track"))
+      } else {
+        promise.resolve(deletedCount)
+      }
       return
     }
     try {
       context.contentResolver.delete(uris[index], null, null)
-      deleteOneByOneWithConsent(context, uris, index + 1, promise)
+      deleteOneByOneWithConsent(context, uris, index + 1, deletedCount + 1, hadError, promise)
     } catch (e: RecoverableSecurityException) {
-      val activity = appContext.currentActivity
-      if (activity == null) {
-        promise.reject(CodedException("Activity is not available"))
-        return
-      }
-      pendingDeleteResolution = { approved ->
-        if (approved) {
-          onMain { deleteOneByOneWithConsent(context, uris, index, promise) }
-        } else {
-          promise.resolve(false)
+      launchDeleteConfirmation(e.userAction.actionIntent.intentSender, promise) { approved ->
+        if (!approved) {
+          promise.resolve(deletedCount)
+          return@launchDeleteConfirmation
+        }
+        onMain {
+          try {
+            context.contentResolver.delete(uris[index], null, null)
+            deleteOneByOneWithConsent(context, uris, index + 1, deletedCount + 1, hadError, promise)
+          } catch (e: Exception) {
+            deleteOneByOneWithConsent(context, uris, index + 1, deletedCount, true, promise)
+          }
         }
       }
-      activity.startIntentSenderForResult(
-        e.userAction.actionIntent.intentSender,
-        DELETE_REQUEST_CODE,
-        null,
-        0,
-        0,
-        0
-      )
     } catch (e: Exception) {
-      promise.reject(CodedException("Failed to delete track", e))
+      deleteOneByOneWithConsent(context, uris, index + 1, deletedCount, true, promise)
     }
   }
 
@@ -616,12 +666,15 @@ class RetracksPlayerModule : Module() {
     }
 
     /**
-     * 端末から曲を削除する。uris は MediaStore の content:// URI（複数可。
-     * アルバムを削除するときは、そのアルバムの全曲分を一度に渡す）。
+     * 端末から曲を削除する。ids は Track.id（MediaStore の行ID）。複数可。
+     * アルバム・アーティストを削除するときは、その収録曲全部のIDを一度に渡す。
+     * URI は JS から受け取らず、ここで id から content:// を組み立てる
+     * （→ contentUriFor() のコメント）。
      *
      * Android 11 (R / API 30) 以降は MediaStore.createDeleteRequest() で、
-     * 複数曲まとめて1回のシステム確認ダイアログにできる。承認されると削除
-     * 自体もシステムが行うため、ここで delete() を呼び直す必要はない。
+     * 複数曲まとめて1回のシステム確認ダイアログにできる（承認/拒否のみで
+     * 部分承認は無い）。承認されると削除自体もシステムが行うため、ここで
+     * delete() を呼び直す必要はない。
      *
      * Android 10 (Q / API 29) には createDeleteRequest が無く、自分が作成
      * していないファイルへの delete() は RecoverableSecurityException を
@@ -632,35 +685,56 @@ class RetracksPlayerModule : Module() {
      * Android 9 (API 28) 以前はスコープドストレージの対象外なので、確認
      * ダイアログを経由せず直接 delete() する。
      *
-     * 戻り値は「削除できたか」。ユーザーが確認ダイアログを拒否した場合は
-     * false を返す（エラーではない）。例外で reject するのは、本当に
-     * 削除処理自体が失敗したとき（権限不足・I/O エラー等）だけにする。
+     * 戻り値は実際に削除できた件数。ユーザーが確認ダイアログをすべて拒否
+     * した場合は 0 を返す（エラーではない）。例外で reject するのは、
+     * 削除フロー自体が成立しなかったとき（Activity が取得できない、
+     * 確認ダイアログを表示できない等）だけにする。
      */
-    AsyncFunction("deleteTracksAsync") { uriStrings: List<String>, promise: Promise ->
+    AsyncFunction("deleteTracksAsync") { ids: List<String>, promise: Promise ->
       onMain {
         val context = appContext.reactContext
         if (context == null) {
           promise.reject(CodedException("React context is not available"))
           return@onMain
         }
-        val uris = uriStrings.map(Uri::parse)
+        val uris = try {
+          ids.map(::contentUriFor)
+        } catch (e: Exception) {
+          promise.reject(CodedException("Invalid track id", e))
+          return@onMain
+        }
         when {
           Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
             try {
               val pendingIntent = MediaStore.createDeleteRequest(context.contentResolver, uris)
-              launchDeleteConfirmation(pendingIntent.intentSender, promise)
+              launchDeleteConfirmation(pendingIntent.intentSender, promise) { approved ->
+                promise.resolve(if (approved) uris.size else 0)
+              }
             } catch (e: Exception) {
               promise.reject(CodedException("Failed to create delete request", e))
             }
           }
           Build.VERSION.SDK_INT == Build.VERSION_CODES.Q ->
-            deleteOneByOneWithConsent(context, uris, 0, promise)
+            deleteOneByOneWithConsent(context, uris, 0, 0, false, promise)
           else -> {
-            try {
-              uris.forEach { context.contentResolver.delete(it, null, null) }
-              promise.resolve(true)
-            } catch (e: Exception) {
-              promise.reject(CodedException("Failed to delete track", e))
+            var deletedCount = 0
+            var hadError = false
+            for (uri in uris) {
+              try {
+                context.contentResolver.delete(uri, null, null)
+                deletedCount++
+              } catch (e: Exception) {
+                // この1件だけ諦めて残りを続ける（部分削除を取りこぼさないため）
+                hadError = true
+              }
+            }
+            // 全件が失敗したときだけ reject する。0 を黙って resolve すると、
+            // Q 経路でユーザーが拒否したときと見分けがつかなくなる
+            // （2026-10、レビュー指摘）。
+            if (deletedCount == 0 && hadError) {
+              promise.reject(CodedException("Failed to delete any track"))
+            } else {
+              promise.resolve(deletedCount)
             }
           }
         }
