@@ -12,9 +12,13 @@ export type TabId = 'songs' | 'artists' | 'albums' | 'queues';
 
 /**
  * 'queues' は、再生を始めたキュー（全曲・アーティスト・アルバム・選んだ曲・
- * 順番再生）を並べて、続きから再生するタブ。要件定義書 10.4 の「プレイリスト」
- * （自動プレイリスト／ユーザー作成。未実装）とは別物なので、TabId に playlists
- * を使わない。
+ * 順番再生）を並べて、続きから再生するタブ（ラベルは「続きから」/ "Resume"）。
+ * 要件定義書 10.4 の「プレイリスト」（自動プレイリスト／ユーザー作成。未実装）とは
+ * 別物なので、TabId に playlists を使わない。
+ *
+ * **この ID は変えない。** normalizeTabs() は未知の ID を捨てるため、リリース後に
+ * 変えると、利用者が設定したこのタブの並び順・表示設定が黙って初期化される。
+ * 表示名だけを変えるなら、ラベル（i18n の library.tabQueues）を直す。
  */
 export const TAB_IDS: readonly TabId[] = ['songs', 'artists', 'albums', 'queues'] as const;
 

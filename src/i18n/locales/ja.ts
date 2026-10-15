@@ -24,7 +24,7 @@ export default {
     tabSongs: '楽曲',
     tabArtists: 'アーティスト',
     tabAlbums: 'アルバム',
-    tabQueues: 'キュー',
+    tabQueues: '続きから',
     selectedCount_one: '{{count}}件選択',
     selectedCount_other: '{{count}}件選択',
     continueFrom: '全曲シャッフル再開 {{played}}/{{total}}',

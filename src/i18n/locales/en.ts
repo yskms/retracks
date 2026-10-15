@@ -16,7 +16,7 @@ export default {
     tabSongs: 'Songs',
     tabArtists: 'Artists',
     tabAlbums: 'Albums',
-    tabQueues: 'Queues',
+    tabQueues: 'Resume',
     selectedCount_one: '{{count}} selected',
     selectedCount_other: '{{count}} selected',
     continueFrom: 'Shuffle all · {{played}}/{{total}}',
