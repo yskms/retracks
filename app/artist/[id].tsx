@@ -62,6 +62,9 @@ export default function ArtistScreen() {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { id, name } = useLocalSearchParams<{ id: string; name?: string }>();
+  // キュータブの見出し。1枚だけのアーティストでも、アルバム名でなくアーティスト名を出す
+  // （曲の並びからの推測は、アルバムを優先する）。name は経路によっては無い。
+  const queueNames = name ? [name] : undefined;
   const {
     tracks: allTracks,
     albums: allAlbums,
@@ -172,7 +175,7 @@ export default function ArtistScreen() {
       const picked = sortedTracks.filter((t) => ids.includes(t.id));
 
       if (shuffled) await playTracks('songs', ids, picked);
-      else await playFrom(picked, 0, { remember: true });
+      else await playFrom(picked, 0);
 
       clear();
       router.push('/player');
@@ -266,7 +269,7 @@ export default function ArtistScreen() {
                   <Pressable
                     style={styles.action}
                     onPress={async () => {
-                      await playFrom(sortedTracks, 0, { remember: true });
+                      await playFrom(sortedTracks, 0, { names: queueNames });
                       router.push('/player');
                     }}
                   >
@@ -349,7 +352,7 @@ export default function ArtistScreen() {
             playing={currentTrack?.id === item.id}
             // 曲を直接タップしたときは画面を移さない
             onPress={() =>
-              inSelection ? toggle('songs', item.id) : void playFrom(sortedTracks, index)
+              inSelection ? toggle('songs', item.id) : void playFrom(sortedTracks, index, { names: queueNames })
             }
             onLongPress={() => toggle('songs', item.id)}
           />

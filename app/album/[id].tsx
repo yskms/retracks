@@ -78,7 +78,7 @@ export default function AlbumScreen() {
                 if (!selection) return;
                 const picked = tracksForSelection(tracks, 'songs', selection.ids);
                 clear();
-                await playFrom(picked, 0, { remember: true });
+                await playFrom(picked, 0);
                 router.push('/player');
               }}
             >
@@ -167,7 +167,7 @@ export default function AlbumScreen() {
                 <Pressable
                   style={styles.action}
                   onPress={async () => {
-                    await playFrom(tracks, 0, { remember: true });
+                    await playFrom(tracks, 0);
                     router.push('/player');
                   }}
                 >

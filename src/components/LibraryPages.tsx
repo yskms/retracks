@@ -67,7 +67,11 @@ export function SongsPage({
   tracks: Track[];
   loaded: boolean;
   currentTrack: { id: string } | null;
-  playFrom: (tracks: Track[], index: number) => Promise<void>;
+  playFrom: (
+    tracks: Track[],
+    index: number,
+    options?: { remember?: boolean }
+  ) => Promise<void>;
   refreshControl: ReactElement<RefreshControlProps>;
 }) {
   return (
@@ -102,7 +106,9 @@ export function SongsPage({
                 if (inSelection) return toggle('songs', item.id);
                 // 曲を直接タップしたときは画面を移さない。
                 // 一覧を見ながら次々選べるようにするため。
-                await playFrom(tracks, index);
+                // 複数選択なしのタップは、続きから再生するキューとして保存しない
+                // （次々にタップするだけで、全曲ぶんの並びの項目が増える。→ playFrom）。
+                await playFrom(tracks, index, { remember: false });
               }}
               onLongPress={() => toggle('songs', item.id)}
             />

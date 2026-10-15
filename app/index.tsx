@@ -291,7 +291,7 @@ export default function LibraryScreen() {
     if (kind === 'songs' && !shuffled) {
       // 一覧の並び順のまま先頭から（曲タブの並べ替えを反映した順）
       const picked = sortedTracks.filter((t) => ids.includes(t.id));
-      await playFrom(picked, 0, { remember: true });
+      await playFrom(picked, 0);
     } else if (kind === 'songs') {
       const byId = new Map(tracks.map((t) => [t.id, t]));
       const picked = ids.map((id) => byId.get(id)).filter((t): t is Track => t != null);
@@ -303,14 +303,14 @@ export default function LibraryScreen() {
       else {
         // 見出しは選んだ名前にする（無いと、先頭の曲名＋曲数になる）
         const names = namesForSources('artist', ids, picked);
-        await playFrom(picked, 0, { remember: true, names });
+        await playFrom(picked, 0, { names });
       }
     } else {
       const picked = tracksForSelection(tracks, 'albums', ids);
       if (shuffled) await playTracks('album', ids, picked);
       else {
         const names = namesForSources('album', ids, picked);
-        await playFrom(picked, 0, { remember: true, names });
+        await playFrom(picked, 0, { names });
       }
     }
 
