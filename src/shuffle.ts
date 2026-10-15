@@ -133,7 +133,7 @@ const MAX_KEPT_QUEUES = 20;
  * 1巡の続きを保存しておく価値がない。キー自体も選んだ曲のIDを全部繋げたもので
  * 長くなるため、保存の対象から外す。
  */
-function isEphemeral(queueKey: string): boolean {
+export function isEphemeral(queueKey: string): boolean {
   return queueKey.startsWith('selection:');
 }
 

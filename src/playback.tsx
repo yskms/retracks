@@ -41,6 +41,7 @@ import { useSettings } from './settings';
 import { sortByField } from './sorting';
 import {
   buildQueueKey,
+  isEphemeral,
   loadShuffle,
   prepareShuffle,
   progressOf,
@@ -513,7 +514,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       applyShuffle(updated);
       if (queueKeyRef.current === ALL_KEY) setAllProgress(progressOf(updated));
       void saveCursor(queueKeyRef.current, event.index);
-      void writeJson(StorageKeys.playbackPosition(queueKeyRef.current), 0);
+      // saveCursor() と同じく、保存しないキュー（selection:）の位置は書かない。
+      // 書くと、選んだ全曲のIDを連結した巨大な名前のキーが、選択シャッフルの
+      // たびに溜まる（touchQueue() の対象外なので LRU でも消えない）。
+      if (!isEphemeral(queueKeyRef.current)) {
+        void writeJson(StorageKeys.playbackPosition(queueKeyRef.current), 0);
+      }
     });
 
     // リピート設定の変更通知。cycleRepeat() 側では以前、変更直後に
@@ -570,6 +576,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
     // 再生位置を定期保存。サービスごと終了した場合に途中から再開できる。
     const saver = setInterval(() => {
+      // 順列を持たないキュー（playFrom、シャッフル状態が null）は、
+      // queueKeyRef が 'all' のままになっている。そのまま書くと、全曲シャッフル
+      // の再生位置（position:all）を別のキューの位置で上書きし、次に FAB の
+      // 「続きから」を押したとき、全曲側の現在曲がその位置まで seek されてしまう。
+      // 保存しないキュー（selection:）も同様に書かない（→ onTrackChange 側の同コメント）。
+      if (!shuffleRef.current || isEphemeral(queueKeyRef.current)) return;
       const current = RetracksPlayer.getStatus();
       if (current?.isPlaying && current.positionMs > 0) {
         void writeJson(
