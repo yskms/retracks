@@ -267,18 +267,22 @@ export default function LibraryScreen() {
   }, [selection, tracks, sortedTracks, playTracks, playFrom, clear, router]);
 
   /**
-   * 選択した曲・アルバムを端末から削除する（要件: 端末からの削除、Android のみ）。
+   * 選択した曲・アルバム・アーティストを端末から削除する（要件: 端末からの
+   * 削除、Android のみ）。アーティストを選んだ場合はそのアーティストの全曲が
+   * 対象になる（playSelection() の artists 分岐と同じ絞り込み）。
    * ネイティブ側が false を返すのは OS の確認ダイアログをユーザーが拒否した
    * 場合で、エラーではないので何もしない（選択状態はそのまま残し、やり直せる
    * ようにする）。例外（本当の失敗）だけアラートで知らせる。
    */
   const deleteSelection = useCallback(async () => {
-    if (!selection || selection.kind === 'artists' || deleting) return;
+    if (!selection || deleting) return;
     const { kind, ids } = selection;
     const picked =
       kind === 'songs'
         ? tracks.filter((t) => ids.includes(t.id))
-        : tracks.filter((t) => ids.includes(t.albumId || t.album || ''));
+        : kind === 'albums'
+          ? tracks.filter((t) => ids.includes(t.albumId || t.album || ''))
+          : tracks.filter((t) => ids.includes(t.artistId || t.artist));
     if (picked.length === 0) return;
 
     Alert.alert(
@@ -365,7 +369,7 @@ export default function LibraryScreen() {
             </Pressable>
             {/* 端末からの削除は Android のみ（iOS はミュージックライブラリから
                 曲を削除する公開APIが無い → RetracksPlayerModule.swift）。 */}
-            {Platform.OS === 'android' && selection?.kind !== 'artists' && (
+            {Platform.OS === 'android' && (
               <Pressable
                 hitSlop={10}
                 disabled={deleting}
