@@ -7,6 +7,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Linking,
   Pressable,
@@ -23,15 +24,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { usePlayback } from '../src/playback';
-import { artworkByArtist, countAlbumsByArtist, tracksForSelection, type Track } from '../src/library';
+import {
+  artworkByArtist,
+  countAlbumsByArtist,
+  tracksForSelection,
+  type SelectionKind,
+  type Track,
+} from '../src/library';
 import { colors } from '../src/theme';
 import {
   AlbumsPage,
   ArtistsPage,
   FAB_BOTTOM_OFFSET,
   FAB_HEIGHT,
+  QueuesPage,
   SongsPage,
 } from '../src/components/LibraryPages';
+import { buildQueueEntries, type QueueEntry } from '../src/queueEntries';
 import { useSelection } from '../src/useSelection';
 import { CAN_DELETE_TRACKS, useDeleteTracks } from '../src/useDeleteTracks';
 import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
@@ -114,12 +123,19 @@ export default function LibraryScreen() {
     playAll,
     currentTrack,
     allProgress,
+    queue,
+    queueSnapshots,
+    activeQueueKey,
+    activeIndex,
+    resumeQueue,
+    removeQueue,
     rescan,
     permissionDenied,
     retryPermission,
   } = usePlayback();
+  // 選択の種類はタブIDとは別物（キュータブには選択モードが無い）
   const { selection, active: inSelection, toggle, clear, isSelected } =
-    useSelection<TabId>();
+    useSelection<SelectionKind>();
   const { deleting, confirmAndDelete } = useDeleteTracks(rescan);
 
   const pagerRef = useRef<PagerView>(null);
@@ -196,6 +212,38 @@ export default function LibraryScreen() {
     [albums, sortOrders.albums, articleOptions]
   );
 
+  const queueEntries = useMemo(
+    () =>
+      queueSnapshots
+        ? buildQueueEntries(queueSnapshots, {
+            tracks,
+            artists,
+            albums,
+            activeKey: activeQueueKey,
+            activeIndex,
+            activeQueueLength: queue.length,
+            activeTrack: currentTrack,
+          })
+        : null,
+    [queueSnapshots, tracks, artists, albums, activeQueueKey, activeIndex, queue, currentTrack]
+  );
+
+  /** キュータブの行をタップ。保存してあるキューを続きから再生してプレイヤー画面へ。 */
+  const openQueue = useCallback(
+    async (entry: QueueEntry) => {
+      // 鳴っているキューは積み直さない。積み直すと、最大5秒前に保存した位置まで
+      // 戻ってしまう。プレイヤー画面を開くだけにする。
+      if (entry.active) {
+        router.push('/player');
+        return;
+      }
+      const resumed = entry.available && (await resumeQueue(entry.key));
+      if (resumed) router.push('/player');
+      else Alert.alert(t('queues.unavailableTitle'), t('queues.unavailableMessage'));
+    },
+    [resumeQueue, router, t]
+  );
+
   const albumCounts = useMemo(() => countAlbumsByArtist(tracks), [tracks]);
   // アーティストの写真は持っていないので、そのアーティストのアルバムから流用する
   const artistArtwork = useMemo(() => artworkByArtist(tracks, albums), [tracks, albums]);
@@ -247,7 +295,7 @@ export default function LibraryScreen() {
       const byId = new Map(tracks.map((t) => [t.id, t]));
       const picked = ids.map((id) => byId.get(id)).filter((t): t is Track => t != null);
       // 'all' を使うと全曲シャッフルの1巡状態を上書きしてしまうため専用のキーにする
-      await playTracks('selection', ids, picked);
+      await playTracks('songs', ids, picked);
     } else if (kind === 'artists') {
       const picked = tracksForSelection(tracks, 'artists', ids);
       if (shuffled) await playTracks('artist', ids, picked);
@@ -470,6 +518,13 @@ export default function LibraryScreen() {
                 toggle={toggle}
                 tileSizeFor={tileSizeFor}
                 refreshControl={refreshControl}
+              />
+            )}
+            {tab.id === 'queues' && (
+              <QueuesPage
+                entries={queueEntries}
+                onOpen={openQueue}
+                onRemove={(entry) => void removeQueue(entry.key)}
               />
             )}
             {tab.id === 'albums' && (

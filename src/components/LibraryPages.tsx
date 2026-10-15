@@ -9,17 +9,21 @@
 import type { ReactElement } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Pressable,
   type RefreshControlProps,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
 import type { Album, Artist, Track } from '../library';
+import type { QueueEntry } from '../queueEntries';
 import { colors, formatDuration } from '../theme';
 import { Row } from './Row';
 import { Tile } from './Tile';
@@ -256,6 +260,106 @@ export function AlbumsPage({
   );
 }
 
+const QUEUE_MODE_KEY = {
+  all: 'queues.modeAll',
+  artist: 'queues.modeArtist',
+  album: 'queues.modeAlbum',
+  songs: 'queues.modeSongs',
+  seq: 'queues.modeOrdered',
+} as const satisfies Record<QueueEntry['kind'], string>;
+
+function queueTitle(t: TFunction, entry: QueueEntry): string {
+  if (entry.kind === 'all' || entry.wholeLibrary) return t('queues.titleAll');
+  const lead = entry.names[0] ?? entry.leadTrack?.title;
+  if (!lead) return t('queues.unknown');
+  // count は名前の件数（無ければ曲数）。先頭の1件を除いた残りが「ほか」
+  const others = entry.count - 1;
+  return others > 0 ? t('queues.nameWithMore', { name: lead, count: others }) : lead;
+}
+
+function queueSubtitle(t: TFunction, entry: QueueEntry): string {
+  if (!entry.available) return t('queues.unavailable');
+  const mode = t(QUEUE_MODE_KEY[entry.kind]);
+  return entry.currentTrack ? `${mode} · ${entry.currentTrack.title}` : mode;
+}
+
+/**
+ * キュータブ。再生を始めたことのあるキューを新しい順に並べ、タップで続きから
+ * 再生する。中身（曲の一覧）はここでは見せず、プレイヤー画面に任せる。
+ *
+ * 選択モード・並べ替え・表示形式の切り替えは持たない（長押しも使わない）。
+ * 削除は行の右端のゴミ箱。全曲と、いま鳴っているキューには出さない
+ * （→ PlaybackValue.removeQueue）。
+ */
+export function QueuesPage({
+  entries,
+  onOpen,
+  onRemove,
+}: {
+  /** null は「まだ読み込んでいない」。 */
+  entries: QueueEntry[] | null;
+  onOpen: (entry: QueueEntry) => void;
+  onRemove: (entry: QueueEntry) => void;
+}) {
+  const { t } = useTranslation();
+
+  const confirmRemove = (entry: QueueEntry) => {
+    Alert.alert(t('queues.removeConfirmTitle'), t('queues.removeConfirmMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
+      { text: t('common.delete'), style: 'destructive', onPress: () => onRemove(entry) },
+    ]);
+  };
+
+  return (
+    <View style={styles.page}>
+      {entries == null ? (
+        <Loading />
+      ) : entries.length === 0 ? (
+        <View style={styles.loading}>
+          <Text style={styles.emptyText}>{t('queues.empty')}</Text>
+          <Text style={styles.emptyHint}>{t('queues.emptyHint')}</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={entries}
+          keyExtractor={(item) => item.key}
+          contentContainerStyle={styles.listContent}
+          initialNumToRender={12}
+          windowSize={4}
+          getItemLayout={(_, index) => ({
+            length: ROW_HEIGHT,
+            offset: ROW_HEIGHT * index,
+            index,
+          })}
+          renderItem={({ item }) => (
+            <View style={item.available ? undefined : styles.dimmed}>
+              <Row
+                title={queueTitle(t, item)}
+                subtitle={queueSubtitle(t, item)}
+                trailing={`${item.played}/${item.total}`}
+                artworkUri={item.currentTrack?.artworkUri ?? item.leadTrack?.artworkUri ?? null}
+                playing={item.active}
+                onPress={() => onOpen(item)}
+                accessory={
+                  item.kind === 'all' || item.active ? undefined : (
+                    <Pressable
+                      hitSlop={10}
+                      onPress={() => confirmRemove(item)}
+                      accessibilityLabel={t('queues.removeA11y')}
+                    >
+                      <Ionicons name="trash-outline" size={18} color={colors.textDim} />
+                    </Pressable>
+                  )
+                }
+              />
+            </View>
+          )}
+        />
+      )}
+    </View>
+  );
+}
+
 /** 「アルバム数 · 曲数」のように出す。アルバム数が数えられない場合は曲数だけ。 */
 function subtitleForArtist(
   t: TFunction,
@@ -293,4 +397,12 @@ const styles = StyleSheet.create({
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: colors.textDim, fontSize: 13 },
   emptyText: { color: colors.textDim, fontSize: 14 },
+  emptyHint: {
+    color: colors.textDim,
+    fontSize: 12,
+    textAlign: 'center',
+    paddingHorizontal: 32,
+    lineHeight: 18,
+  },
+  dimmed: { opacity: 0.5 },
 });

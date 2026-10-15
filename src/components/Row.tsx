@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -13,6 +14,7 @@ export function Row({
   chevron,
   artworkUri,
   trackNumber,
+  accessory,
   onPress,
   onLongPress,
 }: {
@@ -26,6 +28,8 @@ export function Row({
   artworkUri?: string | null;
   /** 指定するとジャケットの左にトラック番号を出す（アルバム詳細用）。 */
   trackNumber?: number | null;
+  /** 行の右端に置く操作（削除ボタンなど）。行全体の onPress とは別にタップできる。 */
+  accessory?: ReactNode;
   onPress: () => void;
   onLongPress?: () => void;
 }) {
@@ -53,6 +57,7 @@ export function Row({
       {selected ? <Ionicons name="checkmark-circle" size={20} color={colors.accent} /> : null}
       {trailing ? <Text style={styles.rowTrailing}>{trailing}</Text> : null}
       {chevron && !selected ? <Text style={styles.chevron}>›</Text> : null}
+      {accessory}
     </Pressable>
   );
 }

@@ -91,7 +91,7 @@ export default function AlbumScreen() {
                 const ids = selection.ids;
                 const picked = tracksForSelection(tracks, 'songs', ids);
                 clear();
-                await playTracks('selection', ids, picked);
+                await playTracks('songs', ids, picked);
                 router.push('/player');
               }}
             >

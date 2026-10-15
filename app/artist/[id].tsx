@@ -171,7 +171,7 @@ export default function ArtistScreen() {
       // 一覧の並び順を保つため、選択順ではなく表示順（並べ替え反映後）で拾う
       const picked = sortedTracks.filter((t) => ids.includes(t.id));
 
-      if (shuffled) await playTracks('selection', ids, picked);
+      if (shuffled) await playTracks('songs', ids, picked);
       else await playFrom(picked, 0);
 
       clear();

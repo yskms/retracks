@@ -8,14 +8,21 @@
 
 import type { LayoutKey } from './layout';
 
-export type TabId = 'songs' | 'artists' | 'albums';
+export type TabId = 'songs' | 'artists' | 'albums' | 'queues';
 
-export const TAB_IDS: readonly TabId[] = ['songs', 'artists', 'albums'] as const;
+/**
+ * 'queues' は、再生を始めたキュー（全曲・アーティスト・アルバム・選んだ曲・
+ * 順番再生）を並べて、続きから再生するタブ。要件定義書 10.4 の「プレイリスト」
+ * （自動プレイリスト／ユーザー作成。未実装）とは別物なので、TabId に playlists
+ * を使わない。
+ */
+export const TAB_IDS: readonly TabId[] = ['songs', 'artists', 'albums', 'queues'] as const;
 
 export const TAB_LABEL_KEY = {
   songs: 'library.tabSongs',
   artists: 'library.tabArtists',
   albums: 'library.tabAlbums',
+  queues: 'library.tabQueues',
 } as const satisfies Record<TabId, string>;
 
 /**

@@ -37,8 +37,22 @@ export const StorageKeys = {
   sortOrder: `${PREFIX}:sort-order:v1`,
   /** 言語・並べ替え・絞り込みなど、アプリ全体の設定（要件 10.6）。 */
   appSettings: `${PREFIX}:app-settings:v1`,
-  /** 順列を保存しているキューの一覧と最終利用時刻。古いものを捨てるために使う。 */
+  /**
+   * 保存しているキュー（シャッフル・順番再生とも）の一覧と最後に再生を始めた時刻。
+   * 古いものを捨てるのと、キュータブの一覧に使う。→ queueStore.ts
+   * 名前は順番再生を足す前のまま（保存済みのデータを読み続けるため）。
+   */
   shuffleIndex: `${PREFIX}:shuffle-index:v1`,
+  /** キューごとの表示用メタデータ（選んだ名前など）。→ queueKeys.ts の QueueMeta */
+  queueMeta: `${PREFIX}:queue-meta:v1`,
+  /**
+   * 順番再生（seq:）のキューの曲IDの並び。シャッフルの順列（shuffle）とは
+   * **別の名前空間**にしている。起動時の復元（playback.tsx）はネイティブから
+   * 貰ったキーで shuffle を引いて並びが一致すれば「シャッフル中」とみなすため、
+   * 同じ場所に入れると、順番再生が1巡して先頭へ戻るたびに順列を作り直してしまう。
+   */
+  ordered: (queueKey: string) => `${PREFIX}:ordered:v1:${queueKey}`,
+  orderedCursor: (queueKey: string) => `${PREFIX}:ordered-cursor:v1:${queueKey}`,
   /** JS側の未捕捉例外の履歴。→ src/crashLog.ts、src/components/ErrorBoundary.tsx */
   crashLog: `${PREFIX}:crash-log:v1`,
 } as const;
@@ -60,6 +74,13 @@ export async function writeJson(key: string, value: unknown): Promise<void> {
 
 export async function remove(key: string): Promise<void> {
   await AsyncStorage.removeItem(key);
+}
+
+/** 指定した接頭辞で始まるキーを全部消す。 */
+export async function removeByPrefix(prefix: string): Promise<void> {
+  const keys = await AsyncStorage.getAllKeys();
+  const stale = keys.filter((k) => k.startsWith(prefix));
+  if (stale.length > 0) await AsyncStorage.multiRemove(stale);
 }
 
 /** デバッグ・動作確認用。retracks の保存内容だけを消す。 */

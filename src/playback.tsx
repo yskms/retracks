@@ -33,6 +33,7 @@ import {
   loadLibrary,
   refreshLibrary,
   requestPermission,
+  tracksForSelection,
   type Album,
   type Artist,
   type Track,
@@ -40,14 +41,33 @@ import {
 import { useSettings } from './settings';
 import { sortByField } from './sorting';
 import {
+  buildMeta,
+  buildOrderedKey,
   buildQueueKey,
-  isEphemeral,
+  isOrderedKey,
+  kindOfKey,
+  knownSourceIds,
+  legacySrcIds,
+  type QueueMeta,
+  type QueueMode,
+} from './queueKeys';
+import {
+  loadOrdered,
+  loadQueueMeta,
+  loadQueueSnapshots,
+  purgeLegacySelectionPositions,
+  removeQueue as removeStoredQueue,
+  saveOrdered,
+  saveOrderedCursor,
+  saveQueueMeta,
+  type QueueSnapshot,
+} from './queueStore';
+import {
   loadShuffle,
   prepareShuffle,
   progressOf,
   saveCursor,
   startNextCycle,
-  type QueueMode,
   type ShuffleState,
 } from './shuffle';
 import { clearAll, readJson, StorageKeys, writeJson } from './storage';
@@ -96,6 +116,27 @@ type PlaybackValue = {
   setSetting: (update: (prev: SegmentSetting) => SegmentSetting) => void;
   setRushOn: (on: boolean) => void;
 
+  /**
+   * 再生を始めたことのあるキュー（新しい順）。キュータブの元データ。表示用への
+   * 組み立ては src/queueEntries.ts。保存・捨てる規則は src/queueStore.ts。
+   */
+  queueSnapshots: QueueSnapshot[] | null;
+  /**
+   * いま鳴っているキューのキー。保存の対象外のキュー（1曲だけの順番再生、
+   * 旧版が作った識別子の無いキュー）や、保存内容と食い違っているときは null。
+   */
+  activeQueueKey: string | null;
+  /** いま鳴っている曲のキュー内の位置。 */
+  activeIndex: number;
+  /**
+   * 保存してあるキューを続きから再生する。曲が1つも見つからないなど、再生を
+   * 始められなかったときは false。再生中のキュー自体は呼び出し側で弾くこと
+   * （もう一度積み直すと、最大5秒前に保存した位置まで戻ってしまう）。
+   */
+  resumeQueue: (key: string) => Promise<boolean>;
+  /** 保存してあるキューを消す。全曲と、いま鳴っているキューは消せない（何もしない）。 */
+  removeQueue: (key: string) => Promise<void>;
+
   /** 指定した曲でキューを作って再生する。順列は生成条件ごとに永続化される。 */
   playTracks: (mode: QueueMode, ids: string[], source: Track[]) => Promise<void>;
   /** ライブラリ全曲を再生する（続きがあれば続きから）。 */
@@ -103,6 +144,7 @@ type PlaybackValue = {
   /**
    * 一覧の並び順のまま、指定した位置から再生する（要件 10.4）。
    * 曲をタップしたときの挙動。シャッフルの1巡管理は使わない。
+   * 2曲以上なら並びと位置を seq: のキューとして保存する（→ src/queueStore.ts）。
    */
   playFrom: (source: Track[], index: number) => Promise<void>;
 
@@ -133,6 +175,12 @@ type PlaybackValue = {
  * アプリを開くたびに走らせると無駄なので、前回からこれだけ経っていたら行う。
  */
 const RESCAN_AFTER_MS = 5 * 60 * 1000;
+
+/**
+ * 順番再生（playFrom）を、キュータブから続きを再生できるように保存する最小の曲数。
+ * 1曲だけのキューは続きに価値が無く、一覧を埋めるだけになる。
+ */
+const MIN_PERSISTED_ORDERED_TRACKS = 2;
 
 const PlaybackContext = createContext<PlaybackValue | null>(null);
 
@@ -259,6 +307,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     played: number;
     total: number;
   } | null>(null);
+  // null は「まだ読み込んでいない」（空配列と区別して、起動直後に空表示を出さない）
+  const [queueSnapshots, setQueueSnapshots] = useState<QueueSnapshot[] | null>(null);
+  const [activeQueueKey, setActiveQueueKey] = useState<string | null>(null);
 
   const ALL_KEY = buildQueueKey('all');
 
@@ -269,7 +320,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   /** 設定適用後（短い曲の除外・並べ替え）。再生系の処理はこちらを見る。 */
   const tracksRef = useRef<Track[]>([]);
   const shuffleRef = useRef<ShuffleState | null>(null);
+  /**
+   * いま鳴っているのが、保存している順番再生のキュー（seq:）か。
+   * シャッフルのキューは shuffleRef が null でないことで判る。曲が変わったときの
+   * カーソルと再生位置の保存先は、この2つのどちらかが立っているときだけ書く
+   * （どちらも立っていないキューのキーは 'all' のままなので、書くと全曲の
+   * 再生位置を別のキューの位置で上書きしてしまう。→ docs/requirements.md v2.48）。
+   */
+  const orderedLiveRef = useRef(false);
   const lastIndexRef = useRef(-1);
+  const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * バックグラウンドの間、位置ポーリング（1秒間隔）を止めるためのフラグ。
    * 画面が見えていない間は誰も status を見ていないので、毎秒ネイティブを
@@ -306,6 +366,29 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const stamp = new Date().toISOString().slice(14, 23);
     setLog((prev) => [`${stamp}  ${line}`, ...prev].slice(0, 80));
   }, []);
+
+  /**
+   * キュータブの元データを読み直す。曲タップのたびに呼ばれうる（順番再生を
+   * 保存するため）うえ、全キューの並びを読むので、少し待ってまとめて1回にする。
+   */
+  const refreshQueueSnapshots = useCallback(() => {
+    if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
+    snapshotTimerRef.current = setTimeout(() => {
+      snapshotTimerRef.current = null;
+      void loadQueueSnapshots()
+        .then(setQueueSnapshots)
+        .catch(() => {
+          // 一覧が出ないだけで再生には影響しない
+        });
+    }, 400);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
+    },
+    []
+  );
 
   /**
    * ライブラリの読み込みと、生きているネイティブセッションへの接続。
@@ -409,28 +492,50 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         applyQueue(nativeQueue);
         if (saved.key) queueKeyRef.current = saved.key;
 
-        // 1巡の進捗は、保存してある順列がいま鳴っているキューと
-        // 完全に同じ並びのときだけ引き継ぐ。長さだけを見ると、曲数が
-        // たまたま同じ別の順列を掴んでしまう。
-        // 識別子が無い場合（一覧からの再生、または識別子を保存する前の
-        // 古いデータ）は全曲の順列を当ててみて、一致すれば拾う。
         const nativeIds = nativeQueue.map((t) => t.id);
-        const restored = await loadShuffle(saved.key || ALL_KEY);
-        const matches =
-          restored != null &&
-          restored.order.length === nativeIds.length &&
-          restored.order.every((id, i) => id === nativeIds[i]);
+        const key = saved.key || ALL_KEY;
 
-        applyShuffle(matches ? { ...restored!, cursor: Math.max(0, current.index) } : null);
-        lastIndexRef.current = matches ? Math.max(0, current.index) : -1;
-        if (matches && !saved.key) queueKeyRef.current = ALL_KEY;
+        if (isOrderedKey(key)) {
+          // 順番再生（seq:）。シャッフルの順列は持たないので shuffle は null のまま。
+          // 保存してある並びが鳴っているキューと完全に同じときだけ、カーソルと
+          // 再生位置を書き続けてよい（シャッフルの matches と同じ考え方）。
+          const stored = await loadOrdered(key);
+          const live =
+            stored != null &&
+            stored.ids.length === nativeIds.length &&
+            stored.ids.every((id, i) => id === nativeIds[i]);
+          applyShuffle(null);
+          lastIndexRef.current = -1;
+          orderedLiveRef.current = live;
+          setActiveQueueKey(live ? key : null);
+        } else {
+          // 1巡の進捗は、保存してある順列がいま鳴っているキューと
+          // 完全に同じ並びのときだけ引き継ぐ。長さだけを見ると、曲数が
+          // たまたま同じ別の順列を掴んでしまう。
+          // 識別子が無い場合（一覧からの再生、または識別子を保存する前の
+          // 古いデータ）は全曲の順列を当ててみて、一致すれば拾う。
+          const restored = await loadShuffle(key);
+          const matches =
+            restored != null &&
+            restored.order.length === nativeIds.length &&
+            restored.order.every((id, i) => id === nativeIds[i]);
+
+          applyShuffle(matches ? { ...restored!, cursor: Math.max(0, current.index) } : null);
+          lastIndexRef.current = matches ? Math.max(0, current.index) : -1;
+          orderedLiveRef.current = false;
+          if (matches && !saved.key) queueKeyRef.current = ALL_KEY;
+          setActiveQueueKey(matches ? key : null);
+        }
       }
       addLog(`再生中のセッションに接続（${current.index + 1}/${current.queueSize}）`);
       void syncNowPlayingWidget(nativeQueue[current.index] ?? null);
     } else {
       void syncNowPlayingWidget(null);
     }
-  }, [addLog, applyShuffle, applyQueue, applyTracks]);
+
+    // 鳴っているキューの判定（上）が済んでから一覧を読む
+    refreshQueueSnapshots();
+  }, [addLog, applyShuffle, applyQueue, applyTracks, refreshQueueSnapshots]);
 
   /**
    * 権限を取り直す。許可されれば permissionDenied を解除してライブラリを
@@ -455,6 +560,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
+        // 旧版が溜めた、保存しないキューの再生位置を掃除する（失敗しても支障なし）
+        void purgeLegacySelectionPositions().catch(() => {});
+
         // 区間設定は接続前に読む。既定値のまま送ると native 側が「設定が変わった」と
         // 判定し、再生中のキューを組み直してしまう。
         const savedSetting = await readJson<SegmentSetting>(StorageKeys.settings);
@@ -511,6 +619,16 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         event.index >= 0 ? (queueRef.current[event.index] ?? null) : null
       );
 
+      // 保存している順番再生（seq:）。シャッフルの順列は無いので、1巡の管理
+      // （下）には入らず、カーソルと再生位置の保存だけを行う。
+      if (!shuffleRef.current && orderedLiveRef.current) {
+        if (event.index >= 0) {
+          void saveOrderedCursor(queueKeyRef.current, event.index);
+          void writeJson(StorageKeys.playbackPosition(queueKeyRef.current), 0);
+        }
+        return;
+      }
+
       const state = shuffleRef.current;
       if (!state || event.index < 0) return;
 
@@ -553,12 +671,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       applyShuffle(updated);
       if (queueKeyRef.current === ALL_KEY) setAllProgress(progressOf(updated));
       void saveCursor(queueKeyRef.current, event.index);
-      // saveCursor() と同じく、保存しないキュー（selection:）の位置は書かない。
-      // 書くと、選んだ全曲のIDを連結した巨大な名前のキーが、選択シャッフルの
-      // たびに溜まる（touchQueue() の対象外なので LRU でも消えない）。
-      if (!isEphemeral(queueKeyRef.current)) {
-        void writeJson(StorageKeys.playbackPosition(queueKeyRef.current), 0);
-      }
+      void writeJson(StorageKeys.playbackPosition(queueKeyRef.current), 0);
     });
 
     // リピート設定の変更通知。cycleRepeat() 側では以前、変更直後に
@@ -615,12 +728,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
     // 再生位置を定期保存。サービスごと終了した場合に途中から再開できる。
     const saver = setInterval(() => {
-      // 順列を持たないキュー（playFrom、シャッフル状態が null）は、
-      // queueKeyRef が 'all' のままになっている。そのまま書くと、全曲シャッフル
-      // の再生位置（position:all）を別のキューの位置で上書きし、次に FAB の
-      // 「続きから」を押したとき、全曲側の現在曲がその位置まで seek されてしまう。
-      // 保存しないキュー（selection:）も同様に書かない（→ onTrackChange 側の同コメント）。
-      if (!shuffleRef.current || isEphemeral(queueKeyRef.current)) return;
+      // シャッフル状態も保存中の順番再生も無いキュー（1曲だけの順番再生、
+      // 識別子を持たない旧版のキュー）は、queueKeyRef が 'all' のままになっている。
+      // そのまま書くと、全曲シャッフルの再生位置（position:all）を別のキューの
+      // 位置で上書きし、次に FAB の「続きから」を押したとき、全曲側の現在曲が
+      // その位置まで seek されてしまう（→ docs/requirements.md v2.48）。
+      if (!shuffleRef.current && !orderedLiveRef.current) return;
       const current = RetracksPlayer.getStatus();
       if (current?.isPlaying && current.positionMs > 0) {
         void writeJson(
@@ -696,13 +809,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [ready, settingsLoaded, rushOn, setting]);
 
   // ---- 操作 ------------------------------------------------------------
-  const playTracks = useCallback(
-    async (mode: QueueMode, ids: string[], source: Track[]) => {
-      if (!ready) return addLog('プレイヤーの準備ができていません');
-      if (source.length === 0) return addLog('対象の曲がありません');
-
-      const key = buildQueueKey(mode, mode === 'all' ? [] : ids);
-
+  /**
+   * シャッフルのキューを始める（新規でも、保存済みの続きでも）。
+   * key は呼び出し側が決める。続きから再生するとき、いまの曲集合から作り直した
+   * キーでは、保存したときのキーと食い違うことがある（曲が増減した、等）ため。
+   *
+   * meta が null なら、保存済みのメタデータには触れない（全曲、または続きから）。
+   */
+  const startShuffleQueue = useCallback(
+    async (key: string, source: Track[], meta: QueueMeta | null) => {
       // 保存してある再生位置は、キューを切り替える前に読む。setQueue() が出す
       // onTrackChange のハンドラが「曲が変わった」として位置を 0 に書き戻すため、
       // setQueue() のあとに読むと 0 になり、保存した位置まで戻れなかった
@@ -713,11 +828,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       const savedPosition = await readJson<number>(StorageKeys.playbackPosition(key));
 
       queueKeyRef.current = key;
+      orderedLiveRef.current = false;
+      setActiveQueueKey(key);
 
       const { state, resumed } = await prepareShuffle(
         key,
         source.map((t) => t.id)
       );
+      // prepareShuffle() が一覧への登録（と古いキューの掃除）を済ませたあとで書く
+      if (meta) await saveQueueMeta(key, meta);
       applyShuffle(state);
       // -1（未再生）にしておく。state.cursor を入れると、1曲だけの
       // キューでは cursor が「先頭かつ末尾」になり、再生開始直後の
@@ -745,8 +864,20 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       const { played, total } = progressOf(state);
       if (key === ALL_KEY) setAllProgress({ played, total });
       addLog(resumed ? `続きから再開 ${played}/${total}` : `新しい順列 ${total}曲`);
+      refreshQueueSnapshots();
     },
-    [ready, addLog, applyShuffle, applyQueue]
+    [addLog, applyShuffle, applyQueue, refreshQueueSnapshots]
+  );
+
+  const playTracks = useCallback(
+    async (mode: QueueMode, ids: string[], source: Track[]) => {
+      if (!ready) return addLog('プレイヤーの準備ができていません');
+      if (source.length === 0) return addLog('対象の曲がありません');
+
+      const key = buildQueueKey(mode, mode === 'all' ? [] : ids);
+      await startShuffleQueue(key, source, mode === 'all' ? null : buildMeta(mode, ids, source));
+    },
+    [ready, addLog, startShuffleQueue]
   );
 
   const playAll = useCallback(async () => {
@@ -763,14 +894,151 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       lastIndexRef.current = -1;
       applyQueue(source);
 
-      // 順列を持たないので識別子も空にする。これを残すと、次回の起動で
-      // 別のキューの順列を拾ってしまう。
-      queueKeyRef.current = buildQueueKey('all');
-      await RetracksPlayer.setQueue(source, Math.max(0, index), '');
-      RetracksPlayer.play();
+      const start = Math.max(0, index);
+
+      if (source.length >= MIN_PERSISTED_ORDERED_TRACKS) {
+        // 並びと位置を seq: のキューとして保存する（キュータブから続きを再生できる）。
+        // 保存は再生の開始を待たせない。
+        const ids = source.map((t) => t.id);
+        const key = buildOrderedKey(ids);
+        queueKeyRef.current = key;
+        orderedLiveRef.current = true;
+        setActiveQueueKey(key);
+
+        const persisted = saveOrdered(key, ids, start, buildMeta('seq', [], source, tracksRef.current.length))
+          .then(() => writeJson(StorageKeys.playbackPosition(key), 0))
+          .catch(() => {
+            // 保存に失敗しても再生は続けられる（キュータブに載らないだけ）
+          });
+        await RetracksPlayer.setQueue(source, start, key);
+        RetracksPlayer.play();
+        // 呼び出し側（画面遷移）を保存の完了まで待たせない。一覧は保存が済んでから読み直す
+        void persisted.then(refreshQueueSnapshots);
+      } else {
+        // 1曲だけのキューは保存しない（続きから再生する価値が無く、一覧を埋めるだけ）。
+        // 順列も保存しないので識別子は空にする。これを残すと、次回の起動で
+        // 別のキューの順列を拾ってしまう。
+        orderedLiveRef.current = false;
+        setActiveQueueKey(null);
+        queueKeyRef.current = buildQueueKey('all');
+        await RetracksPlayer.setQueue(source, start, '');
+        RetracksPlayer.play();
+      }
       addLog(`一覧から再生 ${index + 1}/${source.length}`);
     },
-    [ready, addLog, applyShuffle, applyQueue]
+    [ready, addLog, applyShuffle, applyQueue, refreshQueueSnapshots]
+  );
+
+  /**
+   * 保存してある順番再生（seq:）を続きから再生する。
+   *
+   * 並びは保存時点のスナップショットで、曲は足さない。ライブラリから消えた曲は
+   * 詰める。詰めたあとの並びと位置は保存し直す（でないと、次の起動時に鳴っている
+   * キューと保存内容が食い違い、続きの保存が止まる。→ 起動時の復元）。
+   */
+  const resumeOrdered = useCallback(
+    async (key: string): Promise<boolean> => {
+      const stored = await loadOrdered(key);
+      if (!stored) return false;
+      // 切り替え前に読む理由は startShuffleQueue() と同じ
+      const savedPosition = await readJson<number>(StorageKeys.playbackPosition(key));
+
+      const byId = new Map(tracksRef.current.map((t) => [t.id, t]));
+      const list: Track[] = [];
+      let before = 0;
+      stored.ids.forEach((id, i) => {
+        const track = byId.get(id);
+        if (!track) return;
+        if (i < stored.cursor) before += 1;
+        list.push(track);
+      });
+      if (list.length === 0) return false;
+
+      // 途中だった曲が消えていたら、その次の曲を頭から
+      const currentGone = !byId.has(stored.ids[stored.cursor]);
+      const index = Math.min(before, list.length - 1);
+
+      applyShuffle(null);
+      lastIndexRef.current = -1;
+      applyQueue(list);
+      queueKeyRef.current = key;
+      orderedLiveRef.current = true;
+      setActiveQueueKey(key);
+
+      await saveOrdered(
+        key,
+        list.map((t) => t.id),
+        index
+      );
+      if (currentGone) await writeJson(StorageKeys.playbackPosition(key), 0);
+      await RetracksPlayer.setQueue(list, index, key);
+
+      if (!currentGone) {
+        if (typeof savedPosition === 'number' && savedPosition > 1000) {
+          await seekWhenLoaded(savedPosition, list.length, index);
+        }
+      }
+
+      RetracksPlayer.play();
+      addLog(`順番再生を続きから ${index + 1}/${list.length}`);
+      refreshQueueSnapshots();
+      return true;
+    },
+    [addLog, applyShuffle, applyQueue, refreshQueueSnapshots]
+  );
+
+  const resumeQueue = useCallback(
+    async (key: string): Promise<boolean> => {
+      if (!ready) return false;
+      const kind = kindOfKey(key);
+      const library = tracksRef.current;
+
+      if (kind === 'all') {
+        if (library.length === 0) return false;
+        await playAll();
+        return true;
+      }
+      if (kind === 'seq') return resumeOrdered(key);
+      if (kind === 'unknown') return false;
+
+      let source: Track[];
+      let meta: QueueMeta | null = null;
+      if (kind === 'songs') {
+        // 曲を選んだキューは、保存してある順列そのものが「選んだ曲の集まり」
+        const saved = await loadShuffle(key);
+        if (!saved) return false;
+        const wanted = new Set(saved.order);
+        source = library.filter((t) => wanted.has(t.id));
+      } else {
+        const stored = await loadQueueMeta(key);
+        // メタデータの無い旧データは、実在するIDから組み立て直せたときだけ拾う
+        const srcIds = stored?.srcIds.length
+          ? stored.srcIds
+          : legacySrcIds(key, knownSourceIds(kind, library));
+        if (!srcIds) return false;
+        source = tracksForSelection(library, kind === 'artist' ? 'artists' : 'albums', srcIds);
+        if (!stored) meta = buildMeta(kind, srcIds, source);
+      }
+      if (source.length === 0) return false;
+
+      await startShuffleQueue(key, source, meta);
+      return true;
+    },
+    [ready, playAll, resumeOrdered, startShuffleQueue]
+  );
+
+  const removeQueue = useCallback(
+    async (key: string) => {
+      if (key === ALL_KEY) return;
+      // 鳴っているキューを消すと、曲が変わるたびにカーソルと位置が書かれ、
+      // 一覧に載らない保存内容が残ってしまう
+      if (key === queueKeyRef.current && (shuffleRef.current != null || orderedLiveRef.current)) {
+        return;
+      }
+      await removeStoredQueue(key);
+      refreshQueueSnapshots();
+    },
+    [ALL_KEY, refreshQueueSnapshots]
   );
 
   /**
@@ -822,6 +1090,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     applyShuffle(null);
     applyQueue([]);
     setAllProgress(null);
+    setQueueSnapshots([]);
+    setActiveQueueKey(null);
+    orderedLiveRef.current = false;
     lastIndexRef.current = -1;
     addLog('保存内容を消去しました');
   }, [addLog, applyShuffle, applyQueue]);
@@ -838,6 +1109,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   }, [queue, status]);
 
   const progress = useMemo(() => (shuffle ? progressOf(shuffle) : null), [shuffle]);
+
+  // プリミティブなので、曲が変わらない限り value の useMemo を作り直さない
+  // （status の参照は毎秒変わる。→ currentTrack のコメント）。
+  const activeIndex = status ? status.index : -1;
 
   // 設定（音楽以外の除外・短い曲の除外・除外フォルダ・並べ替え）を適用した
   // 公開用の一覧。走査結果そのものは rawTracks 側に残し、設定が変わっても
@@ -929,6 +1204,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       currentTrack,
       progress,
       allProgress,
+      queueSnapshots,
+      activeQueueKey,
+      activeIndex,
+      resumeQueue,
+      removeQueue,
       setting,
       rushOn,
       log,
@@ -963,6 +1243,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       currentTrack,
       progress,
       allProgress,
+      queueSnapshots,
+      activeQueueKey,
+      activeIndex,
+      resumeQueue,
+      removeQueue,
       setting,
       rushOn,
       log,
