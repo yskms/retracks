@@ -274,13 +274,11 @@ const QUEUE_MODE_KEY = {
   seq: 'queues.modeOrdered',
 } as const satisfies Record<QueueEntry['kind'], string>;
 
-/** 複数選択したものの見出しは、選んだものを全部、この区切りで連ねる（「A,B,C」）。 */
-const QUEUE_NAME_SEPARATOR = ',';
-
 function queueTitle(t: TFunction, entry: QueueEntry): string {
   if (entry.kind === 'all') return t('queues.titleAll');
   // 1行に収まらない分は、行の側が末尾を省略する（numberOfLines）
-  if (entry.names.length > 0) return entry.names.join(QUEUE_NAME_SEPARATOR);
+  // 複数選択したものは、選んだものを全部、区切り（文言 queues.nameSeparator）で連ねる
+  if (entry.names.length > 0) return entry.names.join(t('queues.nameSeparator'));
   // 名前が無い（旧データなど）ときは、先頭の曲名と曲数
   const lead = entry.leadTrack?.title;
   if (!lead) return t('queues.unknown');

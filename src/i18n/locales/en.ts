@@ -47,6 +47,8 @@ export default {
     empty: 'No queues yet',
     emptyHint: 'Play all songs, an artist, an album and more to pick up where you left off, right here',
     titleAll: 'All songs',
+    // Separator between the selected names in a multi-select title (spaces included)
+    nameSeparator: ' / ',
     unknown: 'Unknown queue',
     nameWithMore_one: '{{name}} +{{count}} more',
     nameWithMore_other: '{{name}} +{{count}} more',
@@ -60,7 +62,7 @@ export default {
     unavailableMessage: 'The songs in this queue are no longer on this device. You can delete it if you no longer need it.',
     removeA11y: 'Delete this queue',
     removeConfirmTitle: 'Delete this queue?',
-    removeConfirmMessage: 'Only this queue is removed from the list. Songs are not deleted from this device.',
+    removeConfirmMessage: 'Only this queue is removed. Songs are not deleted from this device.',
     removeAllConfirmMessage:
       'Your shuffle-all progress will be removed. The next time you shuffle all, it starts over in a new order. Songs are not deleted from this device.',
   },

@@ -55,6 +55,8 @@ export default {
     empty: 'まだキューがありません',
     emptyHint: '全曲・アーティスト・アルバムなどを再生すると、ここから続きを再生できます',
     titleAll: '全曲',
+    // 複数選択したものの見出しで、選んだ名前を連ねる区切り（前後のスペースも含む）
+    nameSeparator: ' / ',
     unknown: '不明なキュー',
     nameWithMore_one: '{{name}} ほか{{count}}件',
     nameWithMore_other: '{{name}} ほか{{count}}件',
@@ -68,7 +70,7 @@ export default {
     unavailableMessage: 'このキューの曲が端末内に見つかりません。不要であれば削除してください。',
     removeA11y: 'このキューを削除',
     removeConfirmTitle: 'キューを削除しますか？',
-    removeConfirmMessage: '再生リストだけが消えます。曲は端末から削除されません。',
+    removeConfirmMessage: 'このキューだけが消えます。曲は端末から削除されません。',
     removeAllConfirmMessage:
       '全曲シャッフルの進み具合が消えます。次に全曲シャッフルを押すと、最初から新しい順番で始まります。曲は端末から削除されません。',
   },
