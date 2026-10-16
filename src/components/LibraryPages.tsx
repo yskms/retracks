@@ -299,8 +299,8 @@ function queueSubtitle(t: TFunction, entry: QueueEntry): string {
  * 再生する。中身（曲の一覧）はここでは見せず、プレイヤー画面に任せる。
  *
  * 選択モード・並べ替え・表示形式の切り替えは持たない（長押しも使わない）。
- * 削除は行の右端のゴミ箱。全曲と、いま鳴っているキューには出さない
- * （→ PlaybackValue.removeQueue）。
+ * 削除は行の右端のゴミ箱。いま鳴っているキューには出さない（→ PlaybackValue.removeQueue）。
+ * 全曲は、常に1番上に固定され（→ buildQueueEntries）、保存上限で押し出されない。
  */
 export function QueuesPage({
   entries,
@@ -315,7 +315,10 @@ export function QueuesPage({
   const { t } = useTranslation();
 
   const confirmRemove = (entry: QueueEntry) => {
-    Alert.alert(t('queues.removeConfirmTitle'), t('queues.removeConfirmMessage'), [
+    // 全曲は、消すと1巡の進捗が消えるので、そのことを伝える
+    const message =
+      entry.kind === 'all' ? t('queues.removeAllConfirmMessage') : t('queues.removeConfirmMessage');
+    Alert.alert(t('queues.removeConfirmTitle'), message, [
       { text: t('common.cancel'), style: 'cancel' },
       { text: t('common.delete'), style: 'destructive', onPress: () => onRemove(entry) },
     ]);
@@ -352,7 +355,7 @@ export function QueuesPage({
                 playing={item.active}
                 onPress={() => onOpen(item)}
                 accessory={
-                  item.kind === 'all' || item.active ? undefined : (
+                  item.active ? undefined : (
                     <Pressable
                       hitSlop={10}
                       onPress={() => confirmRemove(item)}

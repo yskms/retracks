@@ -61,7 +61,7 @@ export function buildQueueEntries(
   const knownArtists = new Set(artistById.keys());
   const knownAlbums = new Set(albumById.keys());
 
-  return snapshots.map((snapshot): QueueEntry => {
+  const entries = snapshots.map((snapshot): QueueEntry => {
     const { key, kind, ids, cursor, meta } = snapshot;
     const active = key === context.activeKey;
 
@@ -103,4 +103,8 @@ export function buildQueueEntries(
       active,
     };
   });
+
+  // 全曲は、いつ使ったかに関わらず1番上に固定する（保存上限で押し出されないことが、
+  // 並びからも分かる）。残りは、渡された順（新しい順）のまま。
+  return [...entries.filter((e) => e.kind === 'all'), ...entries.filter((e) => e.kind !== 'all')];
 }

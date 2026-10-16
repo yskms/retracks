@@ -6,7 +6,8 @@
  * shuffleIndex に入る。キュータブ（app/index.tsx）はこの一覧を読んで並べる。
  *
  * 捨てる規則：
- * - 全曲（all）は捨てない。1巡の進捗がこのアプリの肝なので、他のキューを
+ * - 全曲（all）は、上限であふれても捨てない（利用者が削除したときだけ消える）。
+ *   1巡の進捗がこのアプリの肝なので、他のキューを
  *   たくさん再生したことで押し出されてはいけない
  * - シャッフル系は最後に再生を始めた順に20件、順番再生は10件まで残す。
  *   曲タップの再生は気軽に増えるので、数を分けて、シャッフルの進捗を
@@ -109,9 +110,11 @@ async function touchQueueUnlocked(queueKey: string): Promise<void> {
   }
 }
 
-/** キュータブの「削除」。全曲は消せない（呼び出し側でも弾く）。 */
+/**
+ * キュータブの「削除」。全曲も、利用者が選べば消せる（1巡の進捗が消える）。保存上限で
+ * 押し出されないのは変わらない（touchQueue）。鳴っているキューを消さない判断は呼び出し側。
+ */
 export function removeQueue(queueKey: string): Promise<void> {
-  if (queueKey === ALL_KEY) return Promise.resolve();
   return serialized(async () => {
     await removeQueueFiles(queueKey);
 

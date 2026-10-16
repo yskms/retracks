@@ -69,6 +69,8 @@ export default {
     removeA11y: 'このキューを削除',
     removeConfirmTitle: 'キューを削除しますか？',
     removeConfirmMessage: '再生位置の記録だけが消えます。曲は端末から削除されません。',
+    removeAllConfirmMessage:
+      '全曲シャッフルの進み具合が消えます。次に全曲シャッフルを押すと、最初から新しい順番で始まります。曲は端末から削除されません。',
   },
   player: {
     segmentStart: '開始位置',

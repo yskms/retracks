@@ -135,7 +135,10 @@ type PlaybackValue = {
    * （もう一度積み直すと、最大5秒前に保存した位置まで戻ってしまう）。
    */
   resumeQueue: (key: string) => Promise<boolean>;
-  /** 保存してあるキューを消す。全曲と、いま鳴っているキューは消せない（何もしない）。 */
+  /**
+   * 保存してあるキューを消す。全曲も消せる（1巡の進捗が消え、次に始めると新しい順列に
+   * なる）。いま鳴っているキューは消せない（何もしない）。
+   */
   removeQueue: (key: string) => Promise<void>;
 
   /** 指定した曲でキューを作って再生する。順列は生成条件ごとに永続化される。 */
@@ -1072,13 +1075,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const removeQueue = useCallback(
     async (key: string) => {
-      if (key === ALL_KEY) return;
       // 鳴っているキューを消すと、曲が変わるたびにカーソルと位置が書かれ、
       // 一覧に載らない保存内容が残ってしまう
       if (key === queueKeyRef.current && (shuffleRef.current != null || orderedLiveRef.current)) {
         return;
       }
       await removeStoredQueue(key);
+      // 全曲を消したら、画面下のボタン（「全曲シャッフル再開 N/M」）の進み具合も戻す
+      if (key === ALL_KEY) setAllProgress(null);
       refreshQueueSnapshots();
     },
     [ALL_KEY, refreshQueueSnapshots]

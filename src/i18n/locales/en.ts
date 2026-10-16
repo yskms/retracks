@@ -61,6 +61,8 @@ export default {
     removeA11y: 'Delete this queue',
     removeConfirmTitle: 'Delete this queue?',
     removeConfirmMessage: 'Only the saved position is removed. Songs are not deleted from this device.',
+    removeAllConfirmMessage:
+      'Your shuffle-all progress will be removed. The next time you shuffle all, it starts over in a new order. Songs are not deleted from this device.',
   },
   player: {
     segmentStart: 'Start',
