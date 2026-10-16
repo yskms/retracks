@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { usePlayback } from '../../src/playback';
+import { titlesOf } from '../../src/queueKeys';
 import { useSettings } from '../../src/settings';
 import { deriveAlbums, tracksForSelection, type Album, type Track } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
@@ -182,12 +183,12 @@ export default function ArtistScreen() {
       const picked = sortedTracks.filter((t) => ids.includes(t.id));
 
       if (shuffled) await playTracks('songs', ids, picked);
-      else await playFrom(picked, 0, { names: queueNames });
+      else await playFrom(picked, 0, { names: titlesOf(picked) });
 
       clear();
       router.push('/player');
     },
-    [selection, sortedTracks, playTracks, playFrom, queueNames, clear, router]
+    [selection, sortedTracks, playTracks, playFrom, clear, router]
   );
 
   /** 選択した曲を端末から削除する（Android 10 以降のみ。→ src/useDeleteTracks.ts）。 */

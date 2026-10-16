@@ -20,7 +20,10 @@ export type QueueEntry = {
   names: string[];
   /** names が空のときの代わり。キューの先頭の曲（ライブラリに無ければ null）。 */
   leadTrack: Track | null;
-  /** 「ほか N件」の N の元になる数。names があればその件数、無ければ曲数。 */
+  /**
+   * 見出しの「先頭の曲名 ほか N件」の元になる数（曲数）。名前が無いとき（旧データなど）だけ使う。
+   * 名前があれば、見出しは名前を全部連ねる（→ LibraryPages.queueTitle）。
+   */
   count: number;
   /** 何曲目か（1始まり）と、全部で何曲か。 */
   played: number;
@@ -92,7 +95,7 @@ export function buildQueueEntries(
       kind,
       names,
       leadTrack,
-      count: names.length > 0 ? names.length : total,
+      count: total,
       played: Math.min(played, total),
       total,
       currentTrack,

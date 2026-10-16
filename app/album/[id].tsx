@@ -11,7 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 
 import { usePlayback } from '../../src/playback';
-import { albumOriginId } from '../../src/queueKeys';
+import { albumOriginId, titlesOf } from '../../src/queueKeys';
 import { compareByTrackOrder, tracksForSelection } from '../../src/library';
 import { colors, formatDuration } from '../../src/theme';
 import { Row } from '../../src/components/Row';
@@ -87,7 +87,8 @@ export default function AlbumScreen() {
                 if (!selection) return;
                 const picked = tracksForSelection(tracks, 'songs', selection.ids);
                 clear();
-                await playFrom(picked, 0);
+                // 選んだ曲名を連ねた見出しにする
+                await playFrom(picked, 0, { names: titlesOf(picked) });
                 router.push('/player');
               }}
             >

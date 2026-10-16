@@ -157,6 +157,25 @@ export function summarizeTracks(tracks: Track[]): string[] {
   return [];
 }
 
+/** 見出しに連ねる曲名の上限。保存するメタデータを、選んだ曲数に比例して大きくしない。 */
+const MAX_TITLE_NAMES = 30;
+
+/**
+ * 選んだ曲の曲名を、並びの順に返す（キュータブの見出し用）。同じ曲名は1つにまとめる。
+ * 曲を複数選んだキューの見出しは、選んだものを全部連ねる（「A,B,C」）。
+ */
+export function titlesOf(tracks: Track[], limit = MAX_TITLE_NAMES): string[] {
+  const seen = new Set<string>();
+  const titles: string[] = [];
+  for (const t of tracks) {
+    if (!t.title || seen.has(t.title)) continue;
+    seen.add(t.title);
+    titles.push(t.title);
+    if (titles.length >= limit) break;
+  }
+  return titles;
+}
+
 /** 再生を始めるときに保存する QueueMeta。'all' は固定の名前で足りるので持たない。 */
 export function buildMeta(
   kind: 'artist' | 'album' | 'songs' | 'seq',
@@ -166,7 +185,11 @@ export function buildMeta(
   if (kind === 'artist' || kind === 'album') {
     return { srcIds: [...ids], names: namesForSources(kind, ids, source) };
   }
-  return { srcIds: [], names: summarizeTracks(source) };
+  // 曲を選んだキューは、同じアルバムの曲でも、選んだ曲名を連ねる（選んだものを見せる）
+  if (kind === 'songs') return { srcIds: [], names: titlesOf(source) };
+  // 順番再生は、1枚のアルバム／1人のアーティストに収まればその名前、そうでなければ曲名
+  const names = summarizeTracks(source);
+  return { srcIds: [], names: names.length > 0 ? names : titlesOf(source) };
 }
 
 /**

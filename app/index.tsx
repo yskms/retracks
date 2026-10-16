@@ -41,7 +41,7 @@ import {
   SongsPage,
 } from '../src/components/LibraryPages';
 import { buildQueueEntries, type QueueEntry } from '../src/queueEntries';
-import { namesForSources } from '../src/queueKeys';
+import { namesForSources, titlesOf } from '../src/queueKeys';
 import { useSelection } from '../src/useSelection';
 import { CAN_DELETE_TRACKS, useDeleteTracks } from '../src/useDeleteTracks';
 import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
@@ -291,7 +291,8 @@ export default function LibraryScreen() {
     if (kind === 'songs' && !shuffled) {
       // 一覧の並び順のまま先頭から（曲タブの並べ替えを反映した順）
       const picked = sortedTracks.filter((t) => ids.includes(t.id));
-      await playFrom(picked, 0);
+      // 曲を選んだ「順番に」は、選んだ曲名を連ねた見出しにする
+      await playFrom(picked, 0, { names: titlesOf(picked) });
     } else if (kind === 'songs') {
       const byId = new Map(tracks.map((t) => [t.id, t]));
       const picked = ids.map((id) => byId.get(id)).filter((t): t is Track => t != null);
