@@ -68,7 +68,7 @@ export default {
     unavailableMessage: 'このキューの曲が端末内に見つかりません。不要であれば削除してください。',
     removeA11y: 'このキューを削除',
     removeConfirmTitle: 'キューを削除しますか？',
-    removeConfirmMessage: '再生位置の記録だけが消えます。曲は端末から削除されません。',
+    removeConfirmMessage: '再生リストだけが消えます。曲は端末から削除されません。',
     removeAllConfirmMessage:
       '全曲シャッフルの進み具合が消えます。次に全曲シャッフルを押すと、最初から新しい順番で始まります。曲は端末から削除されません。',
   },

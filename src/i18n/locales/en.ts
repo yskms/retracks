@@ -60,7 +60,7 @@ export default {
     unavailableMessage: 'The songs in this queue are no longer on this device. You can delete it if you no longer need it.',
     removeA11y: 'Delete this queue',
     removeConfirmTitle: 'Delete this queue?',
-    removeConfirmMessage: 'Only the saved position is removed. Songs are not deleted from this device.',
+    removeConfirmMessage: 'Only this queue is removed from the list. Songs are not deleted from this device.',
     removeAllConfirmMessage:
       'Your shuffle-all progress will be removed. The next time you shuffle all, it starts over in a new order. Songs are not deleted from this device.',
   },
