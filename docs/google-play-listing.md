@@ -26,6 +26,7 @@ RE:TR4CKSは、曲の好きな部分を一定時間ずつ次々と再生する�
 ・曲の開始位置、再生時間、フェードイン／フェードアウトを指定できるメドレー再生
 ・全曲を聴き終えるまで同じ曲を繰り返さないシャッフル
 ・シャッフルの進行状況を保持し、途中で別の曲を聴いても続きから再開
+・「続きから」タブに、再生したアーティスト、アルバム、複数選択などを残し、いつでも途中から再開
 ・通常再生とメドレー再生の切り替え
 ・楽曲、アーティスト、アルバムから検索・再生
 ・並べ替え、短い曲や音楽以外のファイル、指定フォルダの除外
@@ -62,6 +63,11 @@ RE:TR4CKS 1.0.0 初回リリース
 ・再生/一時停止・リピートボタンの反応とアイコン表示を改善しました
 ・起動時のスプラッシュ画面の見た目を調整しました
 
+### 1.2.0 リリースノート
+
+・新しいタブ「続きから」を追加しました。再生したアーティスト、アルバム、複数選択したものなどが一覧に残り、タップすると途中から再開できます（不要なものは削除できます）
+・シャッフルなどの「続きから再生」で、保存した再生位置まで戻れないことがある不具合を修正しました
+
 ## English (default, en-US)
 
 ### App name
@@ -92,6 +98,7 @@ Key features
 • Medley playback with adjustable start position, playback duration, fade-in, and fade-out
 • Non-repeating shuffle that plays every track before starting another pass
 • Shuffle progress is preserved, so you can listen to something else and return where you left off
+• A "Resume" tab keeps the artists, albums and multi-selections you have played, so you can pick up where you left off at any time
 • Switch between normal and Medley playback
 • Browse and search by song, artist, and album
 • Sorting and filters for short tracks, non-music audio, and selected folders
@@ -127,3 +134,8 @@ Initial release of RE:TR4CKS 1.0.0.
 • Fixed an issue where the ad banner could overlap the navigation bar on devices using 3-button navigation
 • Improved the responsiveness and accuracy of the play/pause and repeat buttons
 • Adjusted the splash screen appearance
+
+### 1.2.0 release notes
+
+• Added a new "Resume" tab. The artists, albums and multi-selections you have played are kept in a list, and tapping one picks up where you left off (you can delete any you no longer need)
+• Fixed an issue where resuming a shuffle could start from the beginning of the track instead of the saved position
