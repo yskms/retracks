@@ -1,4 +1,6 @@
-const { withGradleProperties, withAppBuildGradle } = require('expo/config-plugins');
+const { withGradleProperties, withAppBuildGradle, withDangerousMod } = require('expo/config-plugins');
+const fs = require('fs');
+const path = require('path');
 
 // Androidのリリースビルドで、R8（コードの縮小・難読化・最適化）を有効にする。
 //
@@ -11,25 +13,39 @@ const { withGradleProperties, withAppBuildGradle } = require('expo/config-plugin
 // `android/`は`expo prebuild`の生成物で、`build.gradle`・`gradle.properties`を
 // 手で直しても次のprebuildで消える。そのため、設定はこのpluginで入れる。
 //
-// 【重要】次の2つは、一見やめてよさそうだが、やめないこと。
+// 【重要】次の3つは、一見やめてよさそうだが、やめないこと。
 // 1. `proguard-android.txt`を`proguard-android-optimize.txt`へ置き換える処理。
 //    テンプレートの`proguard-android.txt`は`-dontoptimize`を含むので、そのままでは
 //    R8が最適化をせず、3つの率のうち「最適化率」が上がらない。
 //    なお、AGP 9.0でこのファイルのサポート自体が終わる（公式ドキュメント）。
-// 2. `shrinkResources`を無効のままにしておくこと（下の定数で明示している）。
+// 2. `plugins/android-r8-rules.pro`を足す処理（optimize版に切り替えるのと必ずセット）。
+//    最適化を有効にすると、ExpoのRecord変換がR8に壊され、Recordを引数に取る
+//    ネイティブ関数がNullPointerExceptionで落ちる。そのkeepルールが入っている。
+//    optimize版へ切り替えて、このルールを外すと、起動直後にクラッシュする。
+// 3. `shrinkResources`を無効のままにしておくこと（下の定数で明示している）。
 //    Playの要件はDEXの率だけで、リソース縮小は関係しない。一方、JSから`require()`
 //    している画像（`src/components/SplashFade.tsx`・`app/player.tsx`）は、
 //    リリースビルドで`res/drawable-*`へ入り、名前で探して読み込まれる。これはJSの側
 //    だけが知っている名前なので、リソース縮小が「使われていない」と判断して
 //    消す恐れがある。消えると、リリースだけで画像が出なくなる。
 //
-// どちらも、置換対象・参照先が見つからないときはビルドを失敗させる。Expoの
+// いずれも、置換対象・参照先が見つからないときはビルドを失敗させる。Expoの
 // テンプレートが変わったときに、何も言わず設定が効かなくなるのを避けるため。
 
 const MINIFY_KEY = 'android.enableMinifyInReleaseBuilds';
 const SHRINK_RESOURCES_KEY = 'android.enableShrinkResourcesInReleaseBuilds';
-const DEFAULT_PROGUARD_FILE = 'proguard-android.txt';
-const OPTIMIZE_PROGUARD_FILE = 'proguard-android-optimize.txt';
+const JVM_ARGS_KEY = 'org.gradle.jvmargs';
+// minifyを有効にすると、AABに難読化の対応表（proguard.map、約170MB）が入る。
+// テンプレートの-Xmx2048mでは、AABのバンドル時にbundletoolが
+// `Java heap space`で落ちることがあった（2026-10-18）。
+const JVM_ARGS_VALUE = '-Xmx4096m -XX:MaxMetaspaceSize=1g';
+
+const RULES_SOURCE = path.join(__dirname, 'android-r8-rules.pro');
+const RULES_DEST_NAME = 'retracks-r8-rules.pro';
+
+const OLD_PROGUARD_FILES = 'proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"';
+const NEW_PROGUARD_FILES =
+  `proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro", "${RULES_DEST_NAME}"`;
 
 function setProperty(items, key, value) {
   const existing = items.find((item) => item.type === 'property' && item.key === key);
@@ -44,15 +60,16 @@ function withR8GradleProperties(config) {
   return withGradleProperties(config, (mod) => {
     setProperty(mod.modResults, MINIFY_KEY, 'true');
     setProperty(mod.modResults, SHRINK_RESOURCES_KEY, 'false');
+    setProperty(mod.modResults, JVM_ARGS_KEY, JVM_ARGS_VALUE);
     return mod;
   });
 }
 
-function withR8ProguardFile(config) {
+function withR8ProguardFiles(config) {
   return withAppBuildGradle(config, (mod) => {
     const before = mod.modResults.contents;
 
-    // 上の2つのプロパティを`build.gradle`が読んでいなければ、設定しても効かない。
+    // 上のプロパティを`build.gradle`が読んでいなければ、設定しても効かない。
     for (const key of [MINIFY_KEY, SHRINK_RESOURCES_KEY]) {
       if (!before.includes(key)) {
         throw new Error(
@@ -62,13 +79,11 @@ function withR8ProguardFile(config) {
       }
     }
 
-    const oldCall = `getDefaultProguardFile("${DEFAULT_PROGUARD_FILE}")`;
-    const newCall = `getDefaultProguardFile("${OPTIMIZE_PROGUARD_FILE}")`;
-    if (before.includes(oldCall)) {
-      mod.modResults.contents = before.split(oldCall).join(newCall);
-    } else if (!before.includes(newCall)) {
+    if (before.includes(OLD_PROGUARD_FILES)) {
+      mod.modResults.contents = before.split(OLD_PROGUARD_FILES).join(NEW_PROGUARD_FILES);
+    } else if (!before.includes(NEW_PROGUARD_FILES)) {
       throw new Error(
-        `withAndroidR8: android/app/build.gradle に ${oldCall} が見つかりません。` +
+        `withAndroidR8: android/app/build.gradle に「${OLD_PROGUARD_FILES}」が見つかりません。` +
           'Expoのテンプレートが変わった可能性があります。plugins/withAndroidR8.js を見直してください。'
       );
     }
@@ -76,8 +91,20 @@ function withR8ProguardFile(config) {
   });
 }
 
+function withR8RulesFile(config) {
+  return withDangerousMod(config, [
+    'android',
+    (mod) => {
+      const dest = path.join(mod.modRequest.platformProjectRoot, 'app', RULES_DEST_NAME);
+      fs.copyFileSync(RULES_SOURCE, dest);
+      return mod;
+    },
+  ]);
+}
+
 module.exports = function withAndroidR8(config) {
   config = withR8GradleProperties(config);
-  config = withR8ProguardFile(config);
+  config = withR8ProguardFiles(config);
+  config = withR8RulesFile(config);
   return config;
 };
