@@ -16,6 +16,7 @@
 | `ios-release-checklist.md` | iOSで未完了のQA・申請項目 | iOSリリース作業時 |
 | `index.html` | GitHub Pagesのサポートページ | 公開情報やリンクが変わったとき |
 | `google-play-assets/` | 公開用のGoogle Play画像 | ストア素材を変えたとき |
+| `app-store-assets/` | 公開用のApp Store画像（App Storeのヘッダー画像） | ストア素材を変えたとき |
 
 ## 公開しない資料
 
