@@ -20,7 +20,8 @@ const path = require('path');
 //    なお、AGP 9.0でこのファイルのサポート自体が終わる（公式ドキュメント）。
 // 2. `plugins/android-r8-rules.pro`を足す処理（optimize版に切り替えるのと必ずセット）。
 //    最適化を有効にすると、ExpoのRecord変換がR8に壊され、Recordを引数に取る
-//    ネイティブ関数がNullPointerExceptionで落ちる。そのkeepルールが入っている。
+//    ネイティブ関数がNullPointerExceptionで落ちる。Expoの注釈インターフェース
+//    （`Field`・`Required`・`ServiceInterface`など）を残すkeepルールが入っている。
 //    optimize版へ切り替えて、このルールを外すと、起動直後にクラッシュする。
 // 3. `shrinkResources`を無効のままにしておくこと（下の定数で明示している）。
 //    Playの要件はDEXの率だけで、リソース縮小は関係しない。一方、JSから`require()`

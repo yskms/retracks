@@ -67,11 +67,14 @@
 
 - リリースビルドのR8は`plugins/withAndroidR8.js`（`app.json`のplugins）が有効にしている。2027年2月から、
   Google PlayはDEX 10MB超のアプリに難読化・最適化・縮小の各25%以上を求める。**このpluginは外さない・簡略化しない**。
-- **`proguard-android-optimize.txt`への置き換えと、`plugins/android-r8-rules.pro`（`Field`・`Required`のkeep）は
-  セット**。テンプレートの`proguard-android.txt`は`-dontoptimize`を含み、最適化率が上がらない。一方、最適化を
-  有効にしてkeepを外すと、ExpoのRecord変換がR8に壊され（注釈インターフェースの呼び出しが`throw null`になる）、
-  Recordを引数に取るネイティブ関数が`NullPointerException`になって、**リリースビルドだけ**で起動直後に落ちる。
-  `tsc`・debugビルドでは検出できない。`-dontoptimize`へ戻して済ませない（要件の最適化率が不明になる）
+- **`proguard-android-optimize.txt`への置き換えと、`plugins/android-r8-rules.pro`（Expoの注釈インターフェース
+  `@interface expo.modules.**`のkeep。`Field`・`Required`・`ServiceInterface`など）はセット**。テンプレートの
+  `proguard-android.txt`は`-dontoptimize`を含み、最適化率が上がらない。一方、最適化を有効にしてkeepを外すと、
+  ExpoのRecord変換がR8に壊され（注釈インターフェースの呼び出しが`throw null`になる）、Recordを引数に取る
+  ネイティブ関数が`NullPointerException`になって、**リリースビルドだけ**で起動直後に落ちる。
+  `tsc`・debugビルドでは検出できない。`-dontoptimize`へ戻して済ませない（要件の最適化率が不明になる）。
+  keepを`Field`・`Required`の2つに絞らないこと（`ServiceInterface`など同種の注釈を、壊れない理由が不明なまま
+  運に任せることになる）
 - **`shrinkResources`は意図的に無効**。JSから`require()`している画像は`res/drawable-*`に入り、名前で探して読み込まれるので、
   リソース縮小に消される恐れがある。Playの要件はDEXの率だけで、リソース縮小は不要
 - Expo・React Native・各ライブラリを更新したら、R8入りのリリースビルドを実機かエミュレータで動かして確認する
