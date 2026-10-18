@@ -42,6 +42,7 @@
     "plugins": [
       "./plugins/with-ios-app-delegate-fix",
       "./plugins/withIosSceneDelegate",
+      "./plugins/withAndroidR8",
       "expo-music-library",
       [
         "expo-splash-screen",
