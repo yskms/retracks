@@ -66,6 +66,7 @@ RE:TR4CKS 1.0.0 初回リリース
 ### 1.2.0 リリースノート
 
 ・新しいタブ「続きから」を追加しました。再生したアーティスト、アルバム、複数選択したものなどが一覧に残り、タップすると途中から再開できます（不要なものは削除できます）
+・選択した曲・アルバム・アーティストを、端末から削除できるようになりました（Android 10以降。削除の前に確認が表示されます）
 ・シャッフルなどの「続きから再生」で、保存した再生位置まで戻れないことがある不具合を修正しました
 
 ## English (default, en-US)
@@ -138,4 +139,5 @@ Initial release of RE:TR4CKS 1.0.0.
 ### 1.2.0 release notes
 
 • Added a new "Resume" tab. The artists, albums and multi-selections you have played are kept in a list, and tapping one picks up where you left off (you can delete any you no longer need)
+• You can now delete selected songs, albums or artists from your device (Android 10 and later; you are asked to confirm before anything is deleted)
 • Fixed an issue where resuming a shuffle could start from the beginning of the track instead of the saved position
