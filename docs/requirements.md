@@ -1862,6 +1862,9 @@ crash無し、dev-client経由でMetroからJSバンドルを読み込みアプ�
   修正後の実測（194.5KB/回）でも同じオーダーなので、この結論は変わらない
 
 
+- **R8（2026-10-18〜）**：リリースビルドはR8が有効（`plugins/withAndroidR8.js`）。`prebuild`で`android/`を作り直しても
+  設定は`app.json`のpluginで戻る（鍵の退避は引き続き必要）。`mapping.txt`はリリースごとに保管する。詳細は13.8
+
 ### 13.6 再生位置の保存・復元を実機で確かめる手順（2026-10-15）
 
 再生位置は再生中だけ5秒ごとに保存される（`src/playback.tsx`）。再生を続けたまま保存値を
@@ -1910,6 +1913,91 @@ crash無し、dev-client経由でMetroからJSバンドルを読み込みアプ�
 5. **releaseビルドは本番のAdMob広告ユニットを使う**（`__DEV__`でないため。`src/adConfig.ts`）。
    テストの端末でも広告を**タップしない**（誤タップはAdMobのポリシー違反）
 6. これは配布用ではない（ストア提出用のAAB・IPAは別に作る。13.5）。使い終わったAPKは削除する
+
+### 13.8 AndroidのR8（コード縮小・難読化・最適化）を有効にする（2026-10-18）
+
+**背景**
+- 1.2.0の公開後、Play Consoleの「DEXコードの最適化」が赤字になった（難読化率2%、最適化率・縮小率・R8の設定は`-`、
+  DEX 66MB）。リリースビルドでR8を使っていなかった（テンプレートの`android.enableMinifyInReleaseBuilds`が既定の`false`）。
+- Googleの公式ヘルプ（Play Console「technical quality requirements」）では、**2027年2月から、DEXが10MBを超える
+  アプリは、アップロードごとに難読化・最適化・縮小の3つの率を各25%以上にする必要がある**（満たさないと
+  Google Play上の表示と公開機能に影響しうる。ストアからの削除とは書かれていない）。それまでの赤字は推奨の表示。
+- AGPは8.12.0（React Native 0.86.3が固定）。Playが`r8.json`を読む条件（8.10以上）を満たすので、Consoleの
+  「AGP 9.0にアップグレード」は不要で、R8を有効にするだけでよい。
+
+**実装**（`plugins/withAndroidR8.js`＋`plugins/android-r8-rules.pro`。`app.json`のpluginsに登録）
+- `android.enableMinifyInReleaseBuilds=true`
+- `proguard-android.txt`を`proguard-android-optimize.txt`へ置き換える（前者は`-dontoptimize`を含む）
+- `android-r8-rules.pro`（Expoの`@Field`・`@Required`のkeep。下の不具合の対策）を`android/app/`へコピーし、`proguardFiles`へ足す
+- `android.enableShrinkResourcesInReleaseBuilds=false`を明示（**意図的に無効**。Playの要件はDEXの率だけで、
+  リソース縮小は関係しない。JSから`require()`している画像4枚（`SplashFade.tsx`・`player.tsx`）は、リリースでは
+  `res/drawable-*`に`assets_icrepeat.png`などの名前で入り、名前で探して読み込まれる。この名前はJSの側しか知らないので、
+  リソース縮小に「未使用」と判断されて消える恐れがある）
+- `org.gradle.jvmargs`を`-Xmx4096m`へ（minifyでAABに難読化の対応表（約170MB）が入り、テンプレートの2GBでは
+  バンドル時に`Java heap space`で落ちた）
+- 置換対象・参照先が見つからなければ`prebuild`が失敗する。プロジェクトの複製（機密を除外してscratchpadへ作る）で、
+  正常系と失敗系3種（置換対象なし・参照先なし・ルールファイルなし）を確認した
+
+**実測**（r8.jsonから。試験ビルドはarm64のみ、最終AABは全アーキテクチャ。DEXのチェックサムは同一）
+
+| | 1.2.0（R8なし） | R8あり・最適化あり（採用） | R8あり・`-dontoptimize` |
+|---|---|---|---|
+| DEX（非圧縮） | 66MB | 16.8MB | 25.2MB |
+| 難読化率 | 2% | 84.35% | 約92% |
+| 最適化率 | - | 84.02% | 無効（`noOptimizationPercentage`が`-26.98`で、意味のある値ではない） |
+| 縮小率 | - | 84.39% | 約92% |
+
+- `r8.json`の`noXPercentage`は「適用されなかった割合」と読み、率は100−Xとした。公式ドキュメントに対応は
+  明記されていない。裏付けとして、`mapping.txt`ではクラスの91%・メンバーの84%が改名されていた。
+  **Play Consoleの表示での確認はまだ**（内部テストへ上げたあと、アプリバンドルエクスプローラで確認する）
+- `-dontoptimize`にすれば不具合は出ないが、最適化率が要件を満たすか分からないので採用しない
+
+**最適化を有効にすると起きた不具合（重要）**
+- 症状：起動直後に`RetracksPlayer.setSegment`が`ERR_UNEXPECTED`で拒否され、`FATAL EXCEPTION`でアプリが落ちる。
+  リリースビルドだけで、`tsc`もdebugビルドも検出できない。`-dontoptimize`では起きない
+- 原因：ExpoのRecord変換（`ReflectionRecordConversionStrategy`）は、各プロパティの`@Field`注釈を
+  `descriptor.fieldAnnotation.key`で読む。`@Field`は注釈インターフェースで、プログラム内に実装クラスが無い
+  （実体は実行時にJVMが作る）。最適化が有効だと、R8はこれを「実体の無い型のメソッド呼び出し」とみなして
+  `throw null`に置き換える（R8後のバイトコードで確認。両戦略が1クラスに統合され、リフレクション側の分岐の
+  ループ本体が`getClass(); throw null`になっていた）。自前モジュールの`TrackInput`・`SegmentInput`だけでなく、
+  `expo-music-library`の`Record`も同じ経路。Expoのテンプレートは`-dontoptimize`なので、Expo標準の構成では出ない
+- 対策：`@Field`と`@Required`をkeep（`plugins/android-r8-rules.pro`）。`kotlin.reflect`や
+  `kotlin.jvm.internal`を丸ごとkeepしても直らなかった（実験で否定）
+- **Expo・React Native・ライブラリを更新したら、R8入りのリリースビルドを実機かエミュレータで起動・再生して
+  確認する**。同種の問題はリリースの実行時にしか出ない
+
+**調べ方**（再発したとき用）
+- `adb logcat`の`FATAL EXCEPTION`・`has been rejected`・`NullPointerException`。難読化された名前は
+  `~/Library/Android/sdk/cmdline-tools/latest/bin/retrace <mapping.txt> <stack.txt>`で戻す
+- 原因を絞るには、`-dontoptimize`版との比較（A/B）、`dexdump -d`でR8後のメソッドを読む、自前モジュールに一時的な診断
+  コードを入れてExpoの変換（`toAnyType<T>()`）を呼びスタックを出す、が有効だった。
+  `ro.debuggable=0`（userビルド）のエミュレータではJDWP（`jdb`）は使えない。
+  `node_modules`の書き換えは安全確認で拒否されるので使わない
+
+**確認した範囲**（エミュレータ、API 36・arm64、最終構成のAPK。2026-10-18）：新規インストールと上書きの起動、
+ライブラリ表示、再生とメドレー（`setSegment`）、通知（MediaSession・フォアグラウンドサービス）、
+バックグラウンド再生、**Androidホーム画面ウィジェット**（追加、次へ・一時停止・再開）、
+プレイヤーのリピート・全曲再生アイコン、広告バナー（テスト広告）、設定・Pro画面の描画。
+**未確認**：購入（Play Billing・RevenueCat。エミュレータはBilling未対応で、Pro画面は「価格の読み込みに失敗」と出る。
+R8とは無関係）→ **内部テストトラックにAABを上げ、ライセンステスターで購入して確認する**。
+Pixel 11実機でのR8入りリリース、端末からの削除（Android 10以降）、Play Consoleの率の表示も未確認
+
+**手順**（R8の設定を変えたとき・ビルドの検証）
+1. 試験ビルドは`expo prebuild`を使わず、生成済み`android/`に手で反映して`./gradlew bundleRelease assembleRelease
+   -PreactNativeArchitectures=arm64-v8a`（`nice -n 10`。署名は13.7のdebug鍵でもよい）。5分ほど。
+   `r8.json`は`unzip -p <aab> BUNDLE-METADATA/com.android.tools/r8.json`
+2. pluginの検証は、プロジェクトの複製で`expo prebuild --platform android --no-install`（`android/`・`ios/`・
+   `docs/private/`・`build-output/`・`.claude/`・`.git`は除いてscratchpadへ。`node_modules`は`cp -cR`でほぼ無料）
+3. 実際の`android/`に`expo prebuild`を使うときは13.5の手順（鍵2つの退避と配線の書き直し。署名のSHA-256を確認）
+4. エミュレータでの確認：音声は`say`＋`afconvert -f m4af -d aac`で作り、`adb push`→`MEDIA_SCANNER_SCAN_FILE`。
+   終わったら、自分のアプリをアンインストールし、音声を消し、自分で起動したエミュレータだけを止める
+   （`adb shell rm`はスペースを含むファイル名が分割されるので、`'rm -f /sdcard/Music/RTest*'`のように全体を引用する）
+
+**mapping.txt（難読化の対応表）の保管**
+- AABにも入っていて、Play Consoleのクラッシュは自動で読み解かれる。手元でlogcatを読むときのために、リリースごとに
+  `docs/private/mapping/<version>-vc<versionCode>/mapping.txt.gz`へ保管する（git管理外。171MBが12MBに圧縮される）。
+  `android/app/build/outputs/mapping/release/mapping.txt`は`prebuild`や次のビルドで消える／変わる
+- 1.2.0（versionCode 6）の分を保管済み
 
 ### Phase 1（MVP）
 
@@ -2092,3 +2180,4 @@ crash無し、dev-client経由でMetroからJSバンドルを読み込みアプ�
 | v2.61 | 2026-10-18 | 1.2.0（`chore/release-1.2.0`のコミット`d7aab1c`、`main`へは未マージ）のストア用ビルドを作成した。**提出はしていない**。**iOS**：`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`で`eas build --local --platform ios --profile production --non-interactive`（約9分、Xcode 27）。成果物の確認：`CFBundleShortVersionString 1.2.0`・`CFBundleVersion 21`（リモートの直前の番号は20）、ウィジェット拡張（ExpoWidgetsTarget）も同じ1.2.0／21で、v2.36の不一致警告は出なかった、署名は`iPhone Distribution: Masashi Yasaka (3L2FPFG722)`・プロファイルはApp Store用（有効期限2027-04-12）、最低iOS 16.4、JSバンドルに新しいコードの文字列がある。**Android**：`./gradlew bundleRelease`（全アーキテクチャ、`nice -n 10`、7分52秒。`expo prebuild`はしていない）。成果物の確認：署名の証明書SHA-256が`release.jks`と一致（`52:F3:1B:98:…:3B:D6:3A`）、`versionCode 5`・`versionName 1.2.0`、debuggableでない、arm64-v8a・armeabi-v7a・x86・x86_64の4つのABIを同梱、JSバンドルに新しいコードの文字列がある。成果物は`build-output/`（git管理外）の`retracks-1.2.0-build21.ipa`・`retracks-1.2.0-vc5.aab`。**実機での確認はAndroidのみ**（Pixel 11、同じJS。ただし署名・AABの形は別物で、実機にAABそのものは入れていない）、**iOSは再生を伴う確認が未実施**でTestFlightでの確認が必要。提出前に、新しい版のスクリーンショット・掲載文（`docs/*-listing.md`）の更新内容をストア管理画面へ反映する作業が残る |
 | v2.62 | 2026-10-18 | 1.2.0（`chore/release-1.2.0`、v2.60〜v2.61）を`main`へ`--ff-only`でマージして、提出を行った。マージ前に`npx tsc --noEmit`・`npm run check:i18n`・検証スクリプト（18項目）を確認し、ビルドしたコミット（`d7aab1c`）から先はドキュメントだけの変更であることを確認した。**Androidのリリースノートに、端末からの削除（Android 10以降）を足した**（利用者の判断。v2.60では書かないとしていた。日本語199・英語452文字で、Playの500文字上限に収まる。iOSには書かない）。**iOS**：`eas submit -p ios --path build-output/retracks-1.2.0-build21.ipa --profile production`でApp Store Connectへアップロードした（提出ID `50dfb682-10fb-458a-96a2-6de76ba6fb58`、EASに保存済みのApp Store Connect APIキーを使用）。TestFlightでの確認と、App Store審査への提出は、利用者が行った（報告による）。**Android**：AAB（`versionCode 5`）をPlay Consoleへ提出したのは利用者（`eas submit`の設定が`eas.json`に無く、Play Consoleの画面での手動アップロード）。**作業ミス**：`d7aab1c`のコミットで`git add docs`とディレクトリごとステージし、当時Git管理外だった`docs/app-store-assets/app_store_header_3840x1646.png`（2.3MB、App Storeのヘッダー画像）を巻き込んだ。pushの前にマージ出力の`create mode`で気づき、履歴の書き換えは安全確認で止められたため、利用者に確認した。**利用者が「iOSの提出で使う画像なので公開してよい」と判断**したので、履歴はそのままpushし、画像は公開用のストア素材として管理することにした（`docs/README.md`に`app-store-assets/`を追記）。再発防止：コミットは、ディレクトリでなくパスを1つずつ指定し、`git diff --cached --stat`で中身を確認してから行う。使い終わった成果物（IPA・AAB。提出済み）はCLAUDE.mdの規則どおり削除した（再生成できる） |
 
+| v2.63 | 2026-10-18 | AndroidのR8を有効にした（`feat/android-r8`、`main`へは未マージ）。1.2.0の公開後、Play Consoleの「DEXコードの最適化」が赤字になった（難読化率2%、DEX 66MB）。2027年2月からGoogle PlayがDEX 10MB超のアプリに難読化・最適化・縮小の各25%以上を求めることを、公式ヘルプで確認した（AGPは8.12.0で、AGP 9.0への更新は不要）。`plugins/withAndroidR8.js`・`plugins/android-r8-rules.pro`を追加（minify有効、optimize版のproguardファイル、keepルール、`org.gradle.jvmargs`を4GBへ。`shrinkResources`は、`require()`した画像が消える恐れがあるので意図的に無効）。複製の`prebuild`で、正常系と失敗系3種を確認した。**最適化を有効にすると、起動直後にRecord変換（`setSegment`）が`NullPointerException`で落ちる**ことを、エミュレータで見つけた：R8が注釈インターフェース`@Field`のメソッド呼び出しを`throw null`に置き換える（`-dontoptimize`では出ない）。`Field`・`Required`のkeepで解消した（`-dontoptimize`との比較、R8後のバイトコードの読み取り、自前モジュールに入れた一時診断コードで特定。`node_modules`の書き換えは安全確認で拒否されたので、別の手段にした。診断コードは取り除いた）。最終構成で、DEXは66MB→16.8MB、3つの率は約84%（`r8.json`から。Play Consoleの表示は未確認）。エミュレータで、新規インストール・再生・メドレー・通知・バックグラウンド再生・ウィジェット・アイコン・広告バナー・Pro画面の描画を確認した。**購入は未確認**（エミュレータはBilling未対応）。versionCodeを6へ上げ（`versionName`は1.2.0のまま）、全アーキテクチャ・release鍵のAAB（`build-output/retracks-1.2.0-vc6-r8.aab`）を作った。署名のSHA-256は1.0.0以来の鍵と一致、権限は公開済みの1.2.0と同じ15個、DEXのチェックサムは動作確認した試験ビルドと同一。`mapping.txt`は`docs/private/mapping/1.2.0-vc6/`へ保管した。**提出はしていない**。次：内部テストへ上げ、ライセンステスターで購入を確認する（13.8） |

@@ -63,6 +63,22 @@
   と明記している）。このリポジトリはconfig plugin経由（`expo.plugins`内）でのみ
   設定しているため、追加対応は不要。
 
+## Android R8（コード縮小・難読化・最適化。詳細は`docs/requirements.md` 13.8）
+
+- リリースビルドのR8は`plugins/withAndroidR8.js`（`app.json`のplugins）が有効にしている。2027年2月から、
+  Google PlayはDEX 10MB超のアプリに難読化・最適化・縮小の各25%以上を求める。**このpluginは外さない・簡略化しない**。
+- **`proguard-android-optimize.txt`への置き換えと、`plugins/android-r8-rules.pro`（`Field`・`Required`のkeep）は
+  セット**。テンプレートの`proguard-android.txt`は`-dontoptimize`を含み、最適化率が上がらない。一方、最適化を
+  有効にしてkeepを外すと、ExpoのRecord変換がR8に壊され（注釈インターフェースの呼び出しが`throw null`になる）、
+  Recordを引数に取るネイティブ関数が`NullPointerException`になって、**リリースビルドだけ**で起動直後に落ちる。
+  `tsc`・debugビルドでは検出できない。`-dontoptimize`へ戻して済ませない（要件の最適化率が不明になる）
+- **`shrinkResources`は意図的に無効**。JSから`require()`している画像は`res/drawable-*`に入り、名前で探して読み込まれるので、
+  リソース縮小に消される恐れがある。Playの要件はDEXの率だけで、リソース縮小は不要
+- Expo・React Native・各ライブラリを更新したら、R8入りのリリースビルドを実機かエミュレータで動かして確認する
+  （起動、再生、メドレー、ウィジェット。購入はエミュレータではできないので内部テストトラックで）
+- `mapping.txt`はリリースごとに`docs/private/mapping/<version>-vc<code>/`へ圧縮して保管する（AABにも入っているが、
+  手元でlogcatを読むのに要る）
+
 ## iOSビルド
 
 - 現在のローカル環境はXcode 27（M4 MacBook Air、2026-09下旬に移行）。
