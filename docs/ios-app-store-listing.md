@@ -14,7 +14,7 @@ Android限定の機能のため、引き続き掲載文へ含めない。
 - プライバシーポリシーURL（英語・日本語共通）: `https://yskms.github.io/retracks/privacy-policy.html`
 - バージョン: `1.2.0`
 - 著作権: `2026 yskms`
-- ビルド: 1.2.0のビルドは未作成（`appVersionSource: remote`で自動採番）。1.1.1はビルド18で公開済み（ビルド17は2026-10-02に`eas build --local` → `eas submit`でTestFlightへアップロード）
+- ビルド: `21`（App Version `1.2.0`、2026-10-18に`eas build --local --profile production`で作成。**未提出**。`appVersionSource: remote`で自動採番、直前のリモート番号は20）。1.1.1はビルド18で公開済み（ビルド17は2026-10-02に`eas build --local` → `eas submit`でTestFlightへアップロード）
 - サインインが必要: いいえ
 - リリース方法: 手動リリース
 - 価格: 無料（アプリ内課金あり: Pro月額購読）
