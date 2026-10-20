@@ -69,6 +69,16 @@ RE:TR4CKS 1.0.0 初回リリース
 ・選択した曲・アルバム・アーティストを、端末から削除できるようになりました（Android 10以降。削除の前に確認が表示されます）
 ・シャッフルなどの「続きから再生」で、保存した再生位置まで戻れないことがある不具合を修正しました
 
+### 1.2.0（versionCode 8）リリースノート
+
+versionCode 5（1.2.0）の公開から間もないので、更新前の利用者にも1.2.0の変更が伝わるよう、3項目を残して1行を足す
+（versionCode 8の中身は、R8の有効化とAGPの更新だけ。ユーザーに見える変更はアプリのサイズだけ。226文字、上限500）。
+
+・新しいタブ「続きから」を追加しました。再生したアーティスト、アルバム、複数選択したものなどが一覧に残り、タップすると途中から再開できます（不要なものは削除できます）
+・選択した曲・アルバム・アーティストを、端末から削除できるようになりました（Android 10以降。削除の前に確認が表示されます）
+・シャッフルなどの「続きから再生」で、保存した再生位置まで戻れないことがある不具合を修正しました
+・アプリのサイズを小さくし、内部処理を最適化しました
+
 ## English (default, en-US)
 
 ### App name
@@ -141,3 +151,13 @@ Initial release of RE:TR4CKS 1.0.0.
 • Added a new "Resume" tab. The artists, albums and multi-selections you have played are kept in a list, and tapping one picks up where you left off (you can delete any you no longer need)
 • You can now delete selected songs, albums or artists from your device (Android 10 and later; you are asked to confirm before anything is deleted)
 • Fixed an issue where resuming a shuffle could start from the beginning of the track instead of the saved position
+
+### 1.2.0 (versionCode 8) release notes
+
+Same reason as above: keep the three 1.2.0 items and add one line (498 characters; the limit is 500 —
+if the Console counter says it is over, use "• Smaller app size, internal optimizations", 495).
+
+• Added a new "Resume" tab. The artists, albums and multi-selections you have played are kept in a list, and tapping one picks up where you left off (you can delete any you no longer need)
+• You can now delete selected songs, albums or artists from your device (Android 10 and later; you are asked to confirm before anything is deleted)
+• Fixed an issue where resuming a shuffle could start from the beginning of the track instead of the saved position
+• Smaller app size and internal optimizations
