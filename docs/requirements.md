@@ -1937,7 +1937,7 @@ crash無し、dev-client経由でMetroからJSバンドルを読み込みアプ�
 - `org.gradle.jvmargs`を`-Xmx4096m`へ（minifyでAABに難読化の対応表（約170MB）が入り、テンプレートの2GBでは
   バンドル時に`Java heap space`で落ちた）
 - **AGPを8.12.3（8.12系の最新パッチ）に指定**（`android/build.gradle`の`classpath('com.android.tools.build:gradle:8.12.3')`。
-  Gradleは最も高い指定を使うので、React Nativeが固定する8.12.0を上書きできる）。**外さない**。理由は下の
+  今回の構成ではこの指定で、React Nativeが固定する8.12.0より新しい8.12.3が採用された。Gradleは通常、競合する版のうち新しい方を選ぶが、AABの`androidGradlePluginVersion`で確認する）。**外さない**。理由は下の
   「AGPを最新パッチにする理由」
 - 置換対象・参照先が見つからなければ`prebuild`が失敗する。プロジェクトの複製（機密を除外してscratchpadへ作る）で、
   正常系と失敗系3種（置換対象なし・参照先なし・ルールファイルなし）を確認した
