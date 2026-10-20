@@ -75,6 +75,10 @@
   `tsc`・debugビルドでは検出できない。`-dontoptimize`へ戻して済ませない（要件の最適化率が不明になる）。
   keepを`Field`・`Required`の2つに絞らないこと（`ServiceInterface`など同種の注釈を、壊れない理由が不明なまま
   運に任せることになる）
+- **AGPは`plugins/withAndroidR8.js`が8.12.3（8.12系の最新パッチ）に指定している。外さない**。Playが`r8.json`から率を読むのは
+  「AGP 8.10以降の最新パッチ」のときだけで、React Nativeが固定する8.12.0のままだと、Play Consoleの率が
+  難読化92%（推定）・最適化率`-`・縮小率`-`になり、2027年2月の要件を満たすか判定されない（8.12.3では3つとも84%と表示された）。
+  React Native・Expoの更新でAGPが変わったときや、8.12.4以降が出たときは、`AGP_VERSION`を見直してConsoleで率を確認する
 - **`shrinkResources`は意図的に無効**。JSから`require()`している画像は`res/drawable-*`に入り、名前で探して読み込まれるので、
   リソース縮小に消される恐れがある。Playの要件はDEXの率だけで、リソース縮小は不要
 - Expo・React Native・各ライブラリを更新したら、R8入りのリリースビルドを実機かエミュレータで動かして確認する
