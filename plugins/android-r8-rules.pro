@@ -8,7 +8,7 @@
 #                                                  `fieldAnnotation.key` を読む
 #   - expo.modules.kotlin.records.Required       : 同じく有無を読む
 #   - expo.modules.kotlin.services.ServiceInterface : ServicesRegistry が `clazz` を読む
-# これらは注釈インターフェースで、プログラム内に実装クラスが無い（実体は実行時にJVMが作る）。
+# これらは注釈インターフェースで、プログラム内に実装クラスが無い（実体は実行時にAndroidのランタイムが動的Proxyとして作る）。
 # 最適化が有効だと、R8は「実体の無い型のメソッド呼び出し」と判断し、呼び出しを `throw null` に
 # 置き換えることがある。Field で実際に起き、Recordを引数に取るネイティブ関数（自前モジュールの
 # setSegment・setQueue、expo-music-library の SubQueryOptions・AssetsOptions など）が、
