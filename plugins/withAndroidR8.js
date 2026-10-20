@@ -1,4 +1,9 @@
-const { withGradleProperties, withAppBuildGradle, withDangerousMod } = require('expo/config-plugins');
+const {
+  withGradleProperties,
+  withAppBuildGradle,
+  withProjectBuildGradle,
+  withDangerousMod,
+} = require('expo/config-plugins');
 const fs = require('fs');
 const path = require('path');
 
@@ -29,6 +34,15 @@ const path = require('path');
 //    リリースビルドで`res/drawable-*`へ入り、名前で探して読み込まれる。これはJSの側
 //    だけが知っている名前なので、リソース縮小が「使われていない」と判断して
 //    消す恐れがある。消えると、リリースだけで画像が出なくなる。
+// 4. AGPを`AGP_VERSION`（8.12系の最新パッチ）に指定する処理。
+//    Playが`r8.json`から最適化率・縮小率・難読化率を読むのは、公式ドキュメントでは「AGP 8.10以降の
+//    最新パッチ」のときだけ。React Nativeが固定するAGP 8.12.0のままだと、Play Consoleの率が
+//    難読化92%（最終DEXの推定）・最適化率`-`・縮小率`-`になり、2027年2月の要件（3つとも25%以上）を
+//    満たしているか判定できない。8.12.3（R8 8.12.22）に上げると、3つとも84%と表示された
+//    （2026-10-20、versionCode 7の内部テストで確認。docs/requirements.md 13.8）。
+//    Gradleは、複数の指定のうち最も高いバージョンを使うので、このclasspathの指定でRNの8.12.0を上書きできる。
+//    React Native・Expoを更新してAGPが変わったとき、また8.12.4以降が出たときは、この値を見直して、
+//    Consoleで率が出ることを確認すること（`AGP_VERSION`を最新パッチに保つ）。
 //
 // いずれも、置換対象・参照先が見つからないときはビルドを失敗させる。Expoの
 // テンプレートが変わったときに、何も言わず設定が効かなくなるのを避けるため。
@@ -40,6 +54,11 @@ const JVM_ARGS_KEY = 'org.gradle.jvmargs';
 // テンプレートの-Xmx2048mでは、AABのバンドル時にbundletoolが
 // `Java heap space`で落ちることがあった（2026-10-18）。
 const JVM_ARGS_VALUE = '-Xmx4096m -XX:MaxMetaspaceSize=1g';
+
+// Googleのmaven（dl.google.com/dl/android/maven2/com/android/tools/build/gradle/）で、8.12系の最新パッチ（2026-10-20時点）。
+const AGP_VERSION = '8.12.3';
+const OLD_AGP_CLASSPATH = "classpath('com.android.tools.build:gradle')";
+const NEW_AGP_CLASSPATH = `classpath('com.android.tools.build:gradle:${AGP_VERSION}')`;
 
 const RULES_SOURCE = path.join(__dirname, 'android-r8-rules.pro');
 const RULES_DEST_NAME = 'retracks-r8-rules.pro';
@@ -92,6 +111,21 @@ function withR8ProguardFiles(config) {
   });
 }
 
+function withAgpPatchVersion(config) {
+  return withProjectBuildGradle(config, (mod) => {
+    const before = mod.modResults.contents;
+    if (before.includes(OLD_AGP_CLASSPATH)) {
+      mod.modResults.contents = before.split(OLD_AGP_CLASSPATH).join(NEW_AGP_CLASSPATH);
+    } else if (!before.includes(NEW_AGP_CLASSPATH)) {
+      throw new Error(
+        `withAndroidR8: android/build.gradle に「${OLD_AGP_CLASSPATH}」が見つかりません。` +
+          'Expoのテンプレートが変わった可能性があります。plugins/withAndroidR8.js を見直してください。'
+      );
+    }
+    return mod;
+  });
+}
+
 function withR8RulesFile(config) {
   return withDangerousMod(config, [
     'android',
@@ -107,5 +141,6 @@ module.exports = function withAndroidR8(config) {
   config = withR8GradleProperties(config);
   config = withR8ProguardFiles(config);
   config = withR8RulesFile(config);
+  config = withAgpPatchVersion(config);
   return config;
 };
