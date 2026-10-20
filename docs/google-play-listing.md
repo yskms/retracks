@@ -8,7 +8,7 @@ RE:TR4CKS Music Player
 
 ### 簡単な説明
 
-手持ちの音楽を、メドレーでもう一度。忘れていた曲と出会えるオフライン音楽プレイヤー。
+好きな位置から好きな秒数だけ、曲を次々に再生するメドレー機能。手持ちの音楽に再会できるオフライン音楽プレイヤー。
 
 ### 詳細な説明
 
@@ -87,7 +87,7 @@ RE:TR4CKS Music Player
 
 ### Short description
 
-Rediscover your music with Medley playback and a non-repeating shuffle.
+Play each song from any point for a time you set, then move on automatically.
 
 ### Full description
 
