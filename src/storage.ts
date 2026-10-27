@@ -27,10 +27,17 @@ export const StorageKeys = {
    */
   playbackPosition: (queueKey: string) => `${PREFIX}:position:v1:${queueKey}`,
   /**
-   * 区間設定。永続化しないとアプリ再起動のたびに既定値へ戻り、
-   * ネイティブ側が「設定が変わった」と判定してキューを組み直してしまう。
+   * 区間設定と、メドレーのON/OFF（rushOn）。永続化しないとアプリ再起動のたびに
+   * 既定値へ戻り、ネイティブ側が「設定が変わった」と判定してキューを組み直してしまう。
+   * rushOn も同じ理由でここに入れる。ネイティブは区間を控えて引き継ぐので、JS だけが
+   * 毎回ONから始めると、OFFだった区間を起動の350ms後にONで組み直してしまう。
    */
   settings: `${PREFIX}:settings:v1`,
+  /**
+   * キューごとの再生設定（リピート・メドレーのON/OFF）。「続きから」で再開するときに戻す。
+   * 再生位置（playbackPosition）と同じく、キューを消すときに一緒に消える。→ queueStore.ts
+   */
+  playbackSettings: (queueKey: string) => `${PREFIX}:playback-settings:v1:${queueKey}`,
   /** アーティスト／アルバムタブの表示形式（一覧かグリッドか）。 */
   layout: `${PREFIX}:layout:v1`,
   /** 曲／アルバムタブの並べ替え軸と方向。→ sortOrder.ts */

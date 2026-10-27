@@ -563,7 +563,7 @@ export default function LibraryScreen() {
         <Pressable
           style={styles.fab}
           onPress={async () => {
-            await playAll();
+            await playAll({ restoreSettings: true });
             router.push('/player');
           }}
         >

@@ -22,6 +22,7 @@ import {
   RetracksPlayer,
   RepeatMode,
   type PlayerStatus,
+  type SegmentInput,
   type TrackInput,
 } from '../modules/retracks-player/src';
 import { DEFAULT_SEGMENT, type SegmentSetting } from './rush';
@@ -54,13 +55,16 @@ import {
 } from './queueKeys';
 import {
   loadOrdered,
+  loadPlaybackSettings,
   loadQueueMeta,
   loadQueueSnapshots,
   purgeLegacySelectionPositions,
   removeQueue as removeStoredQueue,
   saveOrdered,
   saveOrderedCursor,
+  savePlaybackSettings,
   saveQueueMeta,
+  type QueuePlaybackSettings,
   type QueueSnapshot,
 } from './queueStore';
 import {
@@ -142,9 +146,17 @@ type PlaybackValue = {
   removeQueue: (key: string) => Promise<void>;
 
   /** 指定した曲でキューを作って再生する。順列は生成条件ごとに永続化される。 */
-  playTracks: (mode: QueueMode, ids: string[], source: Track[]) => Promise<void>;
-  /** ライブラリ全曲を再生する（続きがあれば続きから）。 */
-  playAll: () => Promise<void>;
+  playTracks: (
+    mode: QueueMode,
+    ids: string[],
+    source: Track[],
+    options?: ResumeOptions
+  ) => Promise<void>;
+  /**
+   * ライブラリ全曲を再生する（続きがあれば続きから）。
+   * 「続きから」「シャッフル再開」の入口は restoreSettings を渡す。
+   */
+  playAll: (options?: ResumeOptions) => Promise<void>;
   /**
    * 一覧の並び順のまま、指定した位置から再生する（要件 10.4）。
    * 曲をタップしたときの挙動。シャッフルの1巡管理は使わない。
@@ -200,6 +212,35 @@ type PlaybackValue = {
  * アプリを開くたびに走らせると無駄なので、前回からこれだけ経っていたら行う。
  */
 const RESCAN_AFTER_MS = 5 * 60 * 1000;
+
+/**
+ * 保存してあるキューを続きから再生する入口（キュータブ、全曲の「シャッフル再開」）が渡す。
+ *
+ * restoreSettings が真のとき、続きから再開できたキューに限り、そのキューを最後に鳴らして
+ * いたときのリピートとメドレーのON/OFFへ戻す（要件 5.3）。渡さない開始（アーティスト詳細の
+ * シャッフルなど）は、いまの設定のまま始め、そのキューの控えもいまの設定で上書きする。
+ */
+export type ResumeOptions = {
+  restoreSettings?: boolean;
+};
+
+/** StorageKeys.settings に保存する形。rushOn は、これを足す前の保存には無い。 */
+type StoredSegmentSettings = SegmentSetting & { rushOn?: boolean };
+
+/**
+ * ネイティブへ渡す区間。メドレーOFFは null。
+ * 区間設定の effect と、続きから再開の復元の両方がこれで作る（同じ値でないと、
+ * 復元のあとに effect が送る値で、ネイティブがキューを組み直してしまう）。
+ */
+function toSegmentInput(on: boolean, setting: SegmentSetting): SegmentInput | null {
+  if (!on) return null;
+  return {
+    startMs: Math.round(setting.startSec * 1000),
+    lengthMs: Math.round(setting.lengthSec * 1000),
+    fadeMs: Math.round(setting.fadeSec * 1000),
+    fadeInMs: Math.round(setting.fadeInSec * 1000),
+  };
+}
 
 export type PlayFromOptions = {
   /** false なら、続きから再生するキューとして保存しない（既定は保存する）。 */
@@ -334,7 +375,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<PlayerStatus | null>(null);
   const [shuffle, setShuffle] = useState<ShuffleState | null>(null);
   const [setting, setSettingState] = useState<SegmentSetting>(DEFAULT_SEGMENT);
-  const [rushOn, setRushOn] = useState(true);
+  const [rushOn, setRushOnState] = useState(true);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [allProgress, setAllProgress] = useState<{
@@ -395,6 +436,82 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     rawTracksRef.current = next;
     setRawTracks(next);
   }, []);
+
+  // メドレーのON/OFFと区間設定の最新値。再生を始める処理（useCallback）が、
+  // state を依存に入れずに読むための ref（入れると、トグルのたびに playAll などの
+  // 参照が変わり、usePlayback() の購読者が再レンダーされる）。
+  const rushOnRef = useRef(true);
+  const settingRef = useRef<SegmentSetting>(DEFAULT_SEGMENT);
+  useEffect(() => {
+    settingRef.current = setting;
+  }, [setting]);
+
+  const applyRush = useCallback((on: boolean) => {
+    rushOnRef.current = on;
+    setRushOnState(on);
+  }, []);
+
+  /**
+   * いま鳴っているキューのうち、再生設定（リピート・メドレー）を控える対象のキー。
+   * 位置・カーソルと同じ条件で、シャッフル状態があるか、保存中の順番再生のときだけ。
+   * どちらでもないキュー（保存しない再生）は queueKeyRef が 'all' のままなので、
+   * 書くと全曲キューの控えを別のキューの設定で上書きしてしまう。
+   */
+  const persistedQueueKey = useCallback(
+    () => (shuffleRef.current || orderedLiveRef.current ? queueKeyRef.current : null),
+    []
+  );
+
+  /** 画面のメドレーのトグル。いま鳴っているキューの控えにも書く。 */
+  const setRushOn = useCallback(
+    (on: boolean) => {
+      applyRush(on);
+      const key = persistedQueueKey();
+      if (key) void savePlaybackSettings(key, { rushOn: on }).catch(() => {});
+    },
+    [applyRush, persistedQueueKey]
+  );
+
+  const currentPlaybackSettings = useCallback(
+    (): Required<QueuePlaybackSettings> => ({
+      repeat: RetracksPlayer.getStatus().repeatMode ?? RepeatMode.All,
+      rushOn: rushOnRef.current,
+    }),
+    []
+  );
+
+  /**
+   * キューに控えてあった再生設定へ戻し、いま有効な設定を返す（キューの控えに書く値）。
+   * 控えに無い項目は、いまの設定のまま。
+   *
+   * 次の順序を守ること。
+   * - queueKeyRef を新しいキューへ切り替えた**後**に呼ぶ。リピートの変更は
+   *   onRepeatModeChange で届き、そのとき queueKeyRef のキューの控えに書かれる。
+   *   切り替え前に呼ぶと、戻した値が前のキューの控えに入る
+   * - **setQueue() の前**に呼ぶ。区間は MediaItem に焼き込まれ、setSegment() は
+   *   鳴っている曲を組み直さない（requirements 7.4.1）ので、後で呼ぶと1曲目だけ
+   *   前の区間のまま鳴る。state だけ変えて区間設定の effect（350ms後）に任せるのも同じ
+   */
+  const restorePlaybackSettings = useCallback(
+    (saved: QueuePlaybackSettings): Required<QueuePlaybackSettings> => {
+      const current = currentPlaybackSettings();
+      const next = {
+        repeat: saved.repeat ?? current.repeat,
+        rushOn: saved.rushOn ?? current.rushOn,
+      };
+      if (next.repeat !== current.repeat) RetracksPlayer.setRepeatMode(next.repeat);
+      if (next.rushOn !== current.rushOn) {
+        applyRush(next.rushOn);
+        RetracksPlayer.setSegment(toSegmentInput(next.rushOn, settingRef.current));
+        // 区間設定の effect は350ms後。それより前にアプリが終わっても、次の起動で
+        // ネイティブが引き継いだ区間とずれないよう、ここでも保存する
+        const stored: StoredSegmentSettings = { ...settingRef.current, rushOn: next.rushOn };
+        void writeJson(StorageKeys.settings, stored).catch(() => {});
+      }
+      return next;
+    },
+    [applyRush, currentPlaybackSettings]
+  );
 
   const addLog = useCallback((line: string) => {
     const stamp = new Date().toISOString().slice(14, 23);
@@ -542,6 +659,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           lastIndexRef.current = -1;
           orderedLiveRef.current = live;
           setActiveQueueKey(live ? key : null);
+          // ウィジェットは、アプリが動いていない間にもリピートを変えられる。その分は
+          // イベントで届かないので、合流したときに鳴っているキューの控えへ写す
+          if (live) {
+            void savePlaybackSettings(key, { repeat: current.repeatMode }).catch(() => {});
+          }
         } else {
           // 1巡の進捗は、保存してある順列がいま鳴っているキューと
           // 完全に同じ並びのときだけ引き継ぐ。長さだけを見ると、曲数が
@@ -559,6 +681,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           orderedLiveRef.current = false;
           if (matches && !saved.key) queueKeyRef.current = ALL_KEY;
           setActiveQueueKey(matches ? key : null);
+          // 理由は上の順番再生と同じ
+          if (matches) {
+            void savePlaybackSettings(key, { repeat: current.repeatMode }).catch(() => {});
+          }
         }
       }
       addLog(`再生中のセッションに接続（${current.index + 1}/${current.queueSize}）`);
@@ -599,9 +725,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
         // 区間設定は接続前に読む。既定値のまま送ると native 側が「設定が変わった」と
         // 判定し、再生中のキューを組み直してしまう。
-        const savedSetting = await readJson<SegmentSetting>(StorageKeys.settings);
+        // メドレーのON/OFFも同じ理由で、区間設定の effect が動く前に読む。ネイティブは
+        // 区間を控えて引き継ぐので、ONで始めると、OFFだったキューを起動の350ms後に
+        // ONで組み直してしまう（setSettingsLoaded と同じ tick で反映する）。
+        const savedSetting = await readJson<StoredSegmentSettings>(StorageKeys.settings);
         if (savedSetting && !cancelled) {
-          setSettingState({ ...DEFAULT_SEGMENT, ...savedSetting });
+          const { rushOn: savedRushOn, ...savedSegment } = savedSetting;
+          setSettingState({ ...DEFAULT_SEGMENT, ...savedSegment });
+          if (typeof savedRushOn === 'boolean') applyRush(savedRushOn);
         }
         if (!cancelled) setSettingsLoaded(true);
 
@@ -636,7 +767,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [addLog, loadLibraryAndSession]);
+  }, [addLog, applyRush, loadLibraryAndSession]);
 
   // ---- 再生イベント ----------------------------------------------------
   useEffect(() => {
@@ -721,6 +852,12 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     const onRepeatModeChange = RetracksPlayer.addListener(
       'onRepeatModeChange',
       (event) => {
+        // 利用者の操作でも、ウィジェットからの変更でも、いま鳴っているキューの控えに書く。
+        // 続きから再開で戻したときも届くが、同じ値が同じキューに書かれるだけ
+        // （restorePlaybackSettings() は queueKeyRef を切り替えた後に呼ぶ）
+        const key = persistedQueueKey();
+        if (key) void savePlaybackSettings(key, { repeat: event.repeatMode }).catch(() => {});
+
         setStatus((prev) => {
           if (!prev || prev.repeatMode === event.repeatMode) return prev;
           return { ...prev, repeatMode: event.repeatMode };
@@ -784,7 +921,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       clearInterval(timer);
       clearInterval(saver);
     };
-  }, [addLog, applyShuffle, applyQueue]);
+  }, [addLog, applyShuffle, applyQueue, persistedQueueKey]);
 
   // ---- バックグラウンドでの振る舞い -------------------------------------
   useEffect(() => {
@@ -824,19 +961,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!ready || !settingsLoaded) return;
 
-    // 連打のたびに 1000件超のキューを差し替えないよう、操作が落ち着いてから送る
+    // 連打のたびに 1000件超のキューを差し替えないよう、操作が落ち着いてから送る。
+    // rushOn の保存は、ネイティブへ送る値と同じここで行う。トグル操作の時点だけで書くと、
+    // 続きから再開で戻した値（トグル操作を通らない）が保存されず、次の起動で
+    // ネイティブの区間とずれる。
     const timer = setTimeout(() => {
-      void writeJson(StorageKeys.settings, setting);
-      RetracksPlayer.setSegment(
-        rushOn
-          ? {
-              startMs: Math.round(setting.startSec * 1000),
-              lengthMs: Math.round(setting.lengthSec * 1000),
-              fadeMs: Math.round(setting.fadeSec * 1000),
-              fadeInMs: Math.round(setting.fadeInSec * 1000),
-            }
-          : null
-      );
+      const stored: StoredSegmentSettings = { ...setting, rushOn };
+      void writeJson(StorageKeys.settings, stored);
+      RetracksPlayer.setSegment(toSegmentInput(rushOn, setting));
     }, 350);
 
     return () => clearTimeout(timer);
@@ -849,9 +981,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
    * キーでは、保存したときのキーと食い違うことがある（曲が増減した、等）ため。
    *
    * meta が null なら、保存済みのメタデータには触れない（全曲、または続きから）。
+   *
+   * options.restoreSettings が真で、保存済みの1巡を続きから再開できたときに限り、
+   * リピートとメドレーのON/OFFをそのキューの控えへ戻す（→ ResumeOptions）。
    */
   const startShuffleQueue = useCallback(
-    async (key: string, source: Track[], meta: QueueMeta | null) => {
+    async (
+      key: string,
+      source: Track[],
+      meta: QueueMeta | null,
+      options?: ResumeOptions
+    ) => {
       // 保存してある再生位置は、キューを切り替える前に読む。setQueue() が出す
       // onTrackChange のハンドラが「曲が変わった」として位置を 0 に書き戻すため、
       // setQueue() のあとに読むと 0 になり、保存した位置まで戻れなかった
@@ -860,6 +1000,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       // onTrackChange の1ms後の読み出しが 0）。切り替え前に読めば、旧キューの
       // 遅れて届くイベントが新しいキューの位置を書き潰すこともない。
       const savedPosition = await readJson<number>(StorageKeys.playbackPosition(key));
+      // 再生設定の控えも同じ理由で切り替え前に読む。始める側の保存（下）が先に走ると、
+      // 戻すはずの値をいまの設定で潰す
+      const savedSettings = options?.restoreSettings ? await loadPlaybackSettings(key) : null;
 
       queueKeyRef.current = key;
       orderedLiveRef.current = false;
@@ -886,6 +1029,15 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         .filter((t): t is Track => t != null);
       applyQueue(ordered);
 
+      // 続きから再開するときだけ戻し、それ以外はいまの設定で始める。どちらも、
+      // 有効になった設定をこのキューの控えに書く（始め直したキューは上書きされる）。
+      // setQueue() の前に呼ぶ理由は restorePlaybackSettings() のコメント
+      const effective =
+        resumed && savedSettings
+          ? restorePlaybackSettings(savedSettings)
+          : currentPlaybackSettings();
+      void savePlaybackSettings(key, effective).catch(() => {});
+
       await RetracksPlayer.setQueue(ordered, state.cursor, key);
 
       if (resumed) {
@@ -900,23 +1052,38 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       addLog(resumed ? `続きから再開 ${played}/${total}` : `新しい順列 ${total}曲`);
       refreshQueueSnapshots();
     },
-    [addLog, applyShuffle, applyQueue, refreshQueueSnapshots]
+    [
+      addLog,
+      applyShuffle,
+      applyQueue,
+      refreshQueueSnapshots,
+      restorePlaybackSettings,
+      currentPlaybackSettings,
+    ]
   );
 
   const playTracks = useCallback(
-    async (mode: QueueMode, ids: string[], source: Track[]) => {
+    async (mode: QueueMode, ids: string[], source: Track[], options?: ResumeOptions) => {
       if (!ready) return addLog('プレイヤーの準備ができていません');
       if (source.length === 0) return addLog('対象の曲がありません');
 
       const key = buildQueueKey(mode, mode === 'all' ? [] : ids);
-      await startShuffleQueue(key, source, mode === 'all' ? null : buildMeta(mode, ids, source));
+      await startShuffleQueue(
+        key,
+        source,
+        mode === 'all' ? null : buildMeta(mode, ids, source),
+        options
+      );
     },
     [ready, addLog, startShuffleQueue]
   );
 
-  const playAll = useCallback(async () => {
-    await playTracks('all', [], tracksRef.current);
-  }, [playTracks]);
+  const playAll = useCallback(
+    async (options?: ResumeOptions) => {
+      await playTracks('all', [], tracksRef.current, options);
+    },
+    [playTracks]
+  );
 
   const playFrom = useCallback(
     async (
@@ -945,6 +1112,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         orderedLiveRef.current = true;
         setActiveQueueKey(key);
 
+        // 始め直しなので、リピートとメドレーの控えは、いまの設定で上書きする
+        // （戻すのは「続きから」の入口だけ。→ ResumeOptions）
+        const settingsNow = currentPlaybackSettings();
         const persisted = saveOrdered(
           key,
           ids,
@@ -952,6 +1122,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           options?.names?.length ? { srcIds: [], names: options.names } : buildMeta('seq', [], source)
         )
           .then(() => writeJson(StorageKeys.playbackPosition(key), 0))
+          .then(() => savePlaybackSettings(key, settingsNow))
           .catch(() => {
             // 保存に失敗しても再生は続けられる（キュータブに載らないだけ）
           });
@@ -972,7 +1143,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       }
       addLog(`一覧から再生 ${index + 1}/${source.length}`);
     },
-    [ready, addLog, applyShuffle, applyQueue, refreshQueueSnapshots]
+    [ready, addLog, applyShuffle, applyQueue, refreshQueueSnapshots, currentPlaybackSettings]
   );
 
   /**
@@ -988,6 +1159,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (!stored) return false;
       // 切り替え前に読む理由は startShuffleQueue() と同じ
       const savedPosition = await readJson<number>(StorageKeys.playbackPosition(key));
+      const savedSettings = await loadPlaybackSettings(key);
 
       const byId = new Map(tracksRef.current.map((t) => [t.id, t]));
       const list: Track[] = [];
@@ -1011,11 +1183,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       orderedLiveRef.current = true;
       setActiveQueueKey(key);
 
+      // queueKeyRef を切り替えた後、setQueue() の前（理由は restorePlaybackSettings()）。
+      // resumeOrdered() はキュータブからの再開（resumeQueue）でしか呼ばれないので、
+      // 控えがあれば常に戻す
+      const effective = savedSettings
+        ? restorePlaybackSettings(savedSettings)
+        : currentPlaybackSettings();
+
       await saveOrdered(
         key,
         list.map((t) => t.id),
         index
       );
+      void savePlaybackSettings(key, effective).catch(() => {});
       if (currentGone) await writeJson(StorageKeys.playbackPosition(key), 0);
       await RetracksPlayer.setQueue(list, index, key);
 
@@ -1030,7 +1210,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       refreshQueueSnapshots();
       return true;
     },
-    [addLog, applyShuffle, applyQueue, refreshQueueSnapshots]
+    [
+      addLog,
+      applyShuffle,
+      applyQueue,
+      refreshQueueSnapshots,
+      restorePlaybackSettings,
+      currentPlaybackSettings,
+    ]
   );
 
   const resumeQueue = useCallback(
@@ -1041,7 +1228,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
       if (kind === 'all') {
         if (library.length === 0) return false;
-        await playAll();
+        await playAll({ restoreSettings: true });
         return true;
       }
       if (kind === 'seq') return resumeOrdered(key);
@@ -1067,7 +1254,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       }
       if (source.length === 0) return false;
 
-      await startShuffleQueue(key, source, meta);
+      await startShuffleQueue(key, source, meta, { restoreSettings: true });
       return true;
     },
     [ready, playAll, resumeOrdered, startShuffleQueue]

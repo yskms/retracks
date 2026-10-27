@@ -69,6 +69,7 @@ async function removeQueueFiles(queueKey: string): Promise<void> {
   await remove(StorageKeys.playbackPosition(queueKey));
   await remove(StorageKeys.ordered(queueKey));
   await remove(StorageKeys.orderedCursor(queueKey));
+  await remove(StorageKeys.playbackSettings(queueKey));
 }
 
 /** キューを使い始めたことを記録し、あふれた古いものを捨てる。 */
@@ -142,6 +143,45 @@ export function saveQueueMeta(queueKey: string, meta: QueueMeta): Promise<void> 
 
 export async function loadQueueMeta(queueKey: string): Promise<QueueMeta | null> {
   return (await readMeta())[queueKey] ?? null;
+}
+
+// ---- キューごとの再生設定 ------------------------------------------------
+
+/**
+ * キューごとに控える再生設定。項目ごとに有無が違う（旧データには無い。リピートだけ、
+ * メドレーだけが書かれることもある）ので、どちらも省略できる。無い項目は、再開しても
+ * いまの設定に触らない。
+ */
+export type QueuePlaybackSettings = {
+  /** Player.REPEAT_MODE_* と同じ値（RepeatMode）。 */
+  repeat?: number;
+  /** メドレー（RUSH）のON/OFF。 */
+  rushOn?: boolean;
+};
+
+export async function loadPlaybackSettings(
+  queueKey: string
+): Promise<QueuePlaybackSettings | null> {
+  const stored = await readJson<QueuePlaybackSettings>(StorageKeys.playbackSettings(queueKey));
+  if (!stored || typeof stored !== 'object' || Array.isArray(stored)) return null;
+  return {
+    ...(typeof stored.repeat === 'number' ? { repeat: stored.repeat } : {}),
+    ...(typeof stored.rushOn === 'boolean' ? { rushOn: stored.rushOn } : {}),
+  };
+}
+
+/**
+ * 渡した項目だけを書き換える（リピートの変更でメドレーの保存値を消さない）。
+ * 読んで書き戻すので、ほかの保存と同じ列に並べる（serialized）。
+ */
+export function savePlaybackSettings(
+  queueKey: string,
+  patch: QueuePlaybackSettings
+): Promise<void> {
+  return serialized(async () => {
+    const current = (await loadPlaybackSettings(queueKey)) ?? {};
+    await writeJson(StorageKeys.playbackSettings(queueKey), { ...current, ...patch });
+  });
 }
 
 // ---- 順番再生（seq:）------------------------------------------------------
