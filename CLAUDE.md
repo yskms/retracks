@@ -180,6 +180,23 @@
   - **`rushOn`は`StorageKeys.settings`に保存する**（区間設定のeffectで書く）。`useState(true)`だけに戻さない。
     ネイティブは区間を引き継ぐので、JSが毎回ONで始まると、OFFの区間を起動の350ms後にONで組み直す
 
+## 最近追加タブ（詳細は`docs/requirements.md` 10.4・13.9）
+
+- **一覧を保存しない。** `src/recentGroups.ts`が`Track.addedAt`から開くたびに組み立てる（アーティスト × 端末の暦日、
+  新しい順に30行）。キュータブのように登録簿（`queueStore.ts`）へ持たせない：持った時点からしか追加が分からず、
+  アプリを開いていない間に足した曲を取りこぼす。上限での押し出しも、端末から消した曲が外れるのも、組み立て直しだけで成り立つ。
+- **`Track`にフィールドを足したら、`library.ts`のキャッシュ版（`LibrarySnapshot.version`と`readCache()`の比較）を上げる**
+  （上げないと、旧キャッシュの曲が新フィールドを持たないまま使われる。`addedAt`で5→6にした）。`playback.tsx`の
+  `fallback()`は`Track`を返す関数なので、足し忘れは型エラーで止まる。
+- **詳細画面（`app/recent/[day].tsx`）の曲は、行から持たず`tracksOfGroup()`で曲一覧から引き直す**（開いている間に行が
+  上限から押し出されても中身が消えないように）。`RecentGroup.key`は分解しない（キュー・キーと同じ理由）。
+- **シャッフルは`playTracks('songs', …, { names })`。`'artist'`にしない。** `artist:`のキューは「そのアーティストの全曲」の
+  続きとして復元されるので、一部の曲だけで始めると、アーティスト詳細のシャッフルを上書きする。
+- 選択の種類は`app/index.tsx`の`LibrarySelectionKind`。`library.ts`の`SelectionKind`に`'recent'`を足さない
+  （`tracksForSelection()`は行を引けない）。端末からの削除は最近追加の選択では出さない（意図的）。
+- タブバーのラベルは`numberOfLines={1}`・`adjustsFontSizeToFit`。外すと、5タブの360dp幅で「アーティスト」が折り返す。
+- 動作確認で日をまたいだ追加日が要るときは、`content update`が`date_added`を無視するので、端末の時計を動かしてスキャンする（13.9）。
+
 ## iOSウィジェット（`'widget'`ディレクティブの制約）
 
 - `expo-widgets`の`createWidget()`に渡す、関数本体先頭に`'widget';`と書く関数は、
