@@ -502,12 +502,17 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (next.repeat !== current.repeat) RetracksPlayer.setRepeatMode(next.repeat);
       if (next.rushOn !== current.rushOn) {
         applyRush(next.rushOn);
-        RetracksPlayer.setSegment(toSegmentInput(next.rushOn, settingRef.current));
         // 区間設定の effect は350ms後。それより前にアプリが終わっても、次の起動で
         // ネイティブが引き継いだ区間とずれないよう、ここでも保存する
         const stored: StoredSegmentSettings = { ...settingRef.current, rushOn: next.rushOn };
         void writeJson(StorageKeys.settings, stored).catch(() => {});
       }
+      // 比べて送るかを決めない。current は JS の ref で、ネイティブに届いた値ではない:
+      // トグルの直後（350ms以内）は、ref が新しくても区間設定の effect がまだ送っておらず、
+      // ネイティブは前の区間のまま。そこで「変更なし」として送らずに setQueue() すると、
+      // 1曲目だけ前の区間で組まれる。同じ値ならネイティブは何もしない（Android は等値で
+      // 戻る。iOS は代入するだけ）ので、常に送って害はない
+      RetracksPlayer.setSegment(toSegmentInput(next.rushOn, settingRef.current));
       return next;
     },
     [applyRush, currentPlaybackSettings]
@@ -1113,8 +1118,11 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         setActiveQueueKey(key);
 
         // 始め直しなので、リピートとメドレーの控えは、いまの設定で上書きする
-        // （戻すのは「続きから」の入口だけ。→ ResumeOptions）
-        const settingsNow = currentPlaybackSettings();
+        // （戻すのは「続きから」の入口だけ。→ ResumeOptions）。
+        // 並び（saveOrdered）より先に列へ入れる。後ろに置くと、並びの保存を待つ間に
+        // onRepeatModeChange が書いた新しいリピートを、開始時点の古い値で上書きする
+        // （保存は同じ列に並ぶので、先に入れた方が先に書かれる）
+        void savePlaybackSettings(key, currentPlaybackSettings()).catch(() => {});
         const persisted = saveOrdered(
           key,
           ids,
@@ -1122,7 +1130,6 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           options?.names?.length ? { srcIds: [], names: options.names } : buildMeta('seq', [], source)
         )
           .then(() => writeJson(StorageKeys.playbackPosition(key), 0))
-          .then(() => savePlaybackSettings(key, settingsNow))
           .catch(() => {
             // 保存に失敗しても再生は続けられる（キュータブに載らないだけ）
           });
@@ -1190,12 +1197,14 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         ? restorePlaybackSettings(savedSettings)
         : currentPlaybackSettings();
 
+      // 並びの保存（saveOrdered）より先に列へ入れる。待ってから書くと、その間に
+      // onRepeatModeChange が書いた新しいリピートを、古い値で上書きする（→ playFrom）
+      void savePlaybackSettings(key, effective).catch(() => {});
       await saveOrdered(
         key,
         list.map((t) => t.id),
         index
       );
-      void savePlaybackSettings(key, effective).catch(() => {});
       if (currentGone) await writeJson(StorageKeys.playbackPosition(key), 0);
       await RetracksPlayer.setQueue(list, index, key);
 
