@@ -440,6 +440,10 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
     setShuffle(next);
   }, []);
 
+  // キューを替えるとき（始める・復元する・空にする）にだけ呼ぶこと。onTrackChange の
+  // 1巡完了の処理が、await の間に別のキューが始まったかを queueRef の配列の同一性で
+  // 見分けている。同じキューの中身を差し替える目的（再走査後のメタデータの更新など）で
+  // 呼ぶと、正常な1巡完了が黙って止まる（docs/requirements.md 13.9）。
   const applyQueue = useCallback((next: Track[]) => {
     queueRef.current = next;
     setQueue(next);
@@ -840,7 +844,19 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
           // 同期的にキューを入れ替えるので、配列の同一性でも見る
           // （applyQueue は、キューを始める・復元する・空にするときにしか呼ばれない）。
           // startNextCycle が古いキーに書いた次の巡は、そのキューの正しい続きなので残す。
-          if (queueKeyRef.current !== queueKey || queueRef.current !== queueAtStart) return;
+          if (queueKeyRef.current !== queueKey || queueRef.current !== queueAtStart) {
+            // 古いキューの保存を、startNextCycle が保存した次の巡（cursor 0）にそろえる。
+            // 通常は続きの setQueue() が出す onTrackChange(0) が、位置を 0 に戻し、全曲なら
+            // FAB の進捗も更新する。戻る場合はそれが走らないので、ここで行う。でないと、
+            // あとで「続きから」を押したとき、新しい巡の1曲目が前の巡の最後の曲の保存位置まで
+            // シークされ、FAB は前の巡の N/N のままになる（docs/requirements.md 13.9）。
+            void writeJson(StorageKeys.playbackPosition(queueKey), 0);
+            // 同じ全曲のシャッフルが新しく始まっているなら、その側が進捗の持ち主なので触らない
+            if (queueKey === ALL_KEY && !(queueKeyRef.current === ALL_KEY && shuffleRef.current)) {
+              setAllProgress(progressOf(nextState));
+            }
+            return;
+          }
           applyShuffle(nextState);
           // ここも -1（未再生）にする。0 のままだと、1曲だけのキューでは
           // この直後の setQueue() が出す onTrackChange（index 0）を
