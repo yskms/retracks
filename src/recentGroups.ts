@@ -139,11 +139,15 @@ export function artistNamesOf(groups: RecentGroup[]): string[] {
 }
 
 /** 行の日付の言い方。今日・昨日はラベルで、それより前は日付で返す。 */
-export type DayLabel = { kind: 'today' } | { kind: 'yesterday' } | { kind: 'date'; ms: number };
+export type DayLabel =
+  | { kind: 'today' }
+  | { kind: 'yesterday' }
+  | { kind: 'date'; ms: number; withYear: boolean };
 
 /**
  * day（YYYY-MM-DD）を、now から見た言い方にする。日付で返すとき ms は、その日の正午
- * （夏時間の切り替わりで日がずれないよう、0時を避ける）。
+ * （夏時間の切り替わりで日がずれないよう、0時を避ける）。withYear は、今年でない日付に年を
+ * 添えるため（行は件数で切るので、曲をあまり足さない人の一覧には、1年以上前の行も残る）。
  */
 export function labelOfDay(day: string, now: number = Date.now()): DayLabel {
   if (day === dayKeyOf(now)) return { kind: 'today' };
@@ -151,5 +155,9 @@ export function labelOfDay(day: string, now: number = Date.now()): DayLabel {
   yesterday.setDate(yesterday.getDate() - 1);
   if (day === dayKeyOf(yesterday.getTime())) return { kind: 'yesterday' };
   const [y, m, d] = day.split('-').map(Number);
-  return { kind: 'date', ms: new Date(y, m - 1, d, 12).getTime() };
+  return {
+    kind: 'date',
+    ms: new Date(y, m - 1, d, 12).getTime(),
+    withYear: y !== new Date(now).getFullYear(),
+  };
 }

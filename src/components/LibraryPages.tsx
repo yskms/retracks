@@ -13,6 +13,7 @@ import {
   FlatList,
   Pressable,
   type RefreshControlProps,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -399,10 +400,11 @@ export function RecentPage({
     <View style={styles.page}>
       {groups.length === 0 ? (
         loaded ? (
-          <View style={styles.loading}>
+          // 空でも、曲を足したあとにここから再走査を始められるよう、引っ張って更新できる形にする
+          <ScrollView contentContainerStyle={styles.emptyScroll} refreshControl={refreshControl}>
             <Text style={styles.emptyText}>{t('recent.empty')}</Text>
             <Text style={styles.emptyHint}>{t('recent.emptyHint')}</Text>
-          </View>
+          </ScrollView>
         ) : (
           <Loading />
         )
@@ -474,6 +476,7 @@ const styles = StyleSheet.create({
   gridContent: { padding: GRID_PADDING, paddingBottom: FAB_CLEARANCE },
   gridRow: { gap: GRID_GAP },
   loading: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  emptyScroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
   loadingText: { color: colors.textDim, fontSize: 13 },
   emptyText: { color: colors.textDim, fontSize: 14 },
   emptyHint: {

@@ -219,4 +219,18 @@ const ids = (tracks: Track[]) => tracks.map((t) => t.id);
   ok('今日・昨日・それ以前（月またぎ・年またぎ）');
 }
 
+// 13. 今年でない日付だけ、年を添える
+{
+  const now = at(2026, 10, 27);
+  const thisYear = rg.labelOfDay('2026-01-05', now) as { kind: 'date'; withYear: boolean };
+  assert.strictEqual(thisYear.withYear, false);
+  const lastYear = rg.labelOfDay('2025-10-27', now) as { kind: 'date'; withYear: boolean };
+  assert.strictEqual(lastYear.kind, 'date');
+  assert.strictEqual(lastYear.withYear, true);
+  // 年が変わった直後の「昨日」は、年を添えない（昨日の言い方になる）
+  assert.strictEqual(rg.labelOfDay('2026-12-31', at(2027, 1, 1, 9)).kind, 'yesterday');
+  assert.strictEqual((rg.labelOfDay('2026-12-30', at(2027, 1, 1, 9)) as { withYear: boolean }).withYear, true);
+  ok('今年でない日付だけ、年を添える');
+}
+
 console.log(`\n${n} checks passed`);
