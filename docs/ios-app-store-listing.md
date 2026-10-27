@@ -12,9 +12,9 @@ Android限定の機能のため、引き続き掲載文へ含めない。
 - サポートURL: `https://yskms.github.io/retracks/`
 - マーケティングURL: `https://yskms.github.io/retracks/`
 - プライバシーポリシーURL（英語・日本語共通）: `https://yskms.github.io/retracks/privacy-policy.html`
-- バージョン: `1.2.0`
+- バージョン: `1.3.0`
 - 著作権: `2026 yskms`
-- ビルド: `21`（App Version `1.2.0`、2026-10-18に`eas build --local --profile production`で作成し、同日`eas submit`でApp Store Connectへアップロード〔提出ID `50dfb682-10fb-458a-96a2-6de76ba6fb58`〕。TestFlightで確認済み、App Store審査へ提出済み、2026-10-20に公開済みを確認〔いずれも利用者の報告〕。`appVersionSource: remote`で自動採番、直前のリモート番号は20）。1.1.1はビルド18で公開済み（ビルド17は2026-10-02に`eas build --local` → `eas submit`でTestFlightへアップロード）
+- ビルド: `22`（App Version `1.3.0`、2026-10-28に`eas build --local --profile production`で作成し、同日`eas submit`でApp Store Connectへアップロード〔提出ID `23d695ba-fb7b-4b59-9d57-050c333d42d6`。EAS側のキューで約20分待った〕。TestFlightでの確認とApp Store審査への提出は未。`appVersionSource: remote`で自動採番、直前のリモート番号は21）。1.2.0はビルド21で公開済み（2026-10-18に作成・アップロード〔提出ID `50dfb682-10fb-458a-96a2-6de76ba6fb58`〕。TestFlightで確認済み、App Store審査へ提出済み、2026-10-20に公開済みを確認〔いずれも利用者の報告〕。直前のリモート番号は20）。1.1.1はビルド18で公開済み（ビルド17は2026-10-02に`eas build --local` → `eas submit`でTestFlightへアップロード）
 - サインインが必要: いいえ
 - リリース方法: 手動リリース
 - 価格: 無料（アプリ内課金あり: Pro月額購読）
@@ -74,7 +74,21 @@ Rediscover the music you already own. Move through forgotten tracks with adjusta
 
 ### What's New in This Version
 
-1.2.0（iOSでは「端末からの削除」は提供しないので、書かない）。
+1.3.0。新しいタブ「最近追加」、続きから再開でのリピート・メドレーのON/OFFの復元、軽微な不具合の修正の3項目。
+文面はAndroidのリリースノート（`docs/google-play-listing.md`の1.3.0）と同じ考え方：メドレーは**ON/OFFだけ**が戻る
+（開始位置・秒数・フェードの数値は全体で1つのまま）ので「設定」とは書かず、1巡完了の競合の修正は当てはまる人がほとんど
+いないので症状を書かずに「軽微な不具合」とまとめる。iOSでは追加日が`MPMediaItem.dateAdded`なので、Androidの「端末に」ではなく
+本文の「端末のメディアライブラリ」に合わせて書く。
+
+```text
+Added a new "Recent" tab. Songs you recently added to your device's media library are listed by artist and by the day they were added.
+Resuming from the "Resume" tab now also restores that queue's repeat and Medley on/off settings.
+Fixed a minor playback issue.
+```
+
+#### 1.2.0（公開済み）
+
+iOSでは「端末からの削除」は提供しないので、書かなかった。
 
 ```text
 Added a new "Resume" tab. The artists, albums and multi-selections you have played are kept in a list, and tapping one picks up where you left off (you can delete any you no longer need).
@@ -112,7 +126,8 @@ Key features
 • Medley playback with adjustable start position, playback duration, fade-in, and fade-out
 • Non-repeating shuffle that plays every track before starting another pass
 • Shuffle progress is preserved, so you can listen to something else and return where you left off
-• A "Resume" tab keeps the artists, albums and multi-selections you have played, so you can pick up where you left off at any time
+• A "Resume" tab keeps the artists, albums and multi-selections you have played, so you can pick up where you left off at any time (repeat and Medley on/off are restored too)
+• A "Recent" tab lists songs recently added to your device's media library, grouped by artist and by the day they were added, ready to play
 • Switch between normal and Medley playback
 • Browse and search by song, artist, and album
 • Sorting and filters for short tracks and non-music audio
@@ -162,7 +177,15 @@ offline,medley,shuffle,local library,album,artist,background playback,rediscover
 
 ### このバージョンの新機能
 
-1.2.0。
+1.3.0。
+
+```text
+新しいタブ「最近追加」を追加しました。端末のメディアライブラリに最近追加した曲が、アーティストごと・追加した日ごとに並びます。
+「続きから」で再開したとき、そのキューのリピートとメドレーのON/OFFも元に戻るようになりました。
+再生に関する軽微な不具合を修正しました。
+```
+
+#### 1.2.0（公開済み）
 
 ```text
 新しいタブ「続きから」を追加しました。再生したアーティスト、アルバム、複数選択したものなどが一覧に残り、タップすると途中から再開できます（不要なものは削除できます）。
@@ -193,7 +216,8 @@ RE:TR4CKSは、曲の好きな部分を一定時間ずつ次々と再生する�
 ・曲の開始位置、再生時間、フェードイン／フェードアウトを指定できるメドレー再生
 ・全曲を聴き終えるまで同じ曲を繰り返さないシャッフル
 ・シャッフルの進行状況を保持し、途中で別の曲を聴いても続きから再開
-・「続きから」タブに、再生したアーティスト、アルバム、複数選択などを残し、いつでも途中から再開
+・「続きから」タブに、再生したアーティスト、アルバム、複数選択などを残し、いつでも途中から再開（リピートとメドレーのON/OFFも元に戻ります）
+・「最近追加」タブで、端末のメディアライブラリに最近追加した曲をアーティストごと・追加した日ごとに確認して再生
 ・通常再生とメドレー再生の切り替え
 ・楽曲、アーティスト、アルバムから検索・再生
 ・短い曲や音楽以外の音声を対象にした並べ替えとフィルター

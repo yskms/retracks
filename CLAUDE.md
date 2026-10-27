@@ -140,6 +140,10 @@
   `android/app/build.gradle`の署名設定（`keystorePropertiesFile`の読み込みと
   `signingConfigs.release`/`buildTypes.release.signingConfig`）を手動で
   再配線すること（詳細は`docs/requirements.md` 13.5節）。
+- **`eas`コマンドはPATHに無い**（グローバルにもプロジェクトにも`eas-cli`は入っていない）。`npx --no-install eas-cli@25.3.0`
+  （`npx`のキャッシュにある版）で呼ぶ。`npx eas-cli`だと最新（2026-10-28時点で26.0.0）を取りに行く。`eas submit`は
+  EAS側のキューで20分以上「in queue」のままになることがあるが、止めずに待てば進む（`eas status`で状態が見える。
+  詳細は`docs/requirements.md` v2.89）。
 
 ## 再生キューの保存とキュータブ（詳細は`docs/requirements.md` 6.2・10.4）
 
