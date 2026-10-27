@@ -26,7 +26,8 @@ RE:TR4CKSは、曲の好きな部分を一定時間ずつ次々と再生する�
 ・曲の開始位置、再生時間、フェードイン／フェードアウトを指定できるメドレー再生
 ・全曲を聴き終えるまで同じ曲を繰り返さないシャッフル
 ・シャッフルの進行状況を保持し、途中で別の曲を聴いても続きから再開
-・「続きから」タブに、再生したアーティスト、アルバム、複数選択などを残し、いつでも途中から再開
+・「続きから」タブに、再生したアーティスト、アルバム、複数選択などを残し、いつでも途中から再開（リピートとメドレーのON/OFFも元に戻ります）
+・「最近追加」タブで、端末に最近追加した曲をアーティストごと・追加した日ごとに確認して再生
 ・通常再生とメドレー再生の切り替え
 ・楽曲、アーティスト、アルバムから検索・再生
 ・並べ替え、短い曲や音楽以外のファイル、指定フォルダの除外
@@ -79,6 +80,15 @@ versionCode 5（1.2.0）の公開から間もないので、更新前の利用�
 ・シャッフルなどの「続きから再生」で、保存した再生位置まで戻れないことがある不具合を修正しました
 ・アプリのサイズを小さくし、内部処理を最適化しました
 
+### 1.3.0 リリースノート
+
+新しいタブ「最近追加」、続きから再開でのリピート・メドレーの復元、1巡完了の競合の修正の3項目
+（198文字、上限500）。新しいタブは、既存の利用者にも既定で表示される（保存値に無いタブは、表示ありで末尾に足される）。
+
+・新しいタブ「最近追加」を追加しました。端末に最近追加した曲が、アーティストごと・追加した日ごとにまとまって並びます（タップで曲の一覧、長押しで複数選んで再生）
+・「続きから」で再開したとき、そのキューで使っていたリピートとメドレーのON/OFFも元に戻るようになりました
+・全曲シャッフルが1巡し終わる瞬間に別の曲を再生すると、選んだ曲が元のシャッフルに置き換わることがある不具合を修正しました
+
 ## English (default, en-US)
 
 ### App name
@@ -109,7 +119,8 @@ Key features
 • Medley playback with adjustable start position, playback duration, fade-in, and fade-out
 • Non-repeating shuffle that plays every track before starting another pass
 • Shuffle progress is preserved, so you can listen to something else and return where you left off
-• A "Resume" tab keeps the artists, albums and multi-selections you have played, so you can pick up where you left off at any time
+• A "Resume" tab keeps the artists, albums and multi-selections you have played, so you can pick up where you left off at any time (repeat and Medley on/off are restored too)
+• A "Recent" tab shows the songs you recently added to your device, grouped by artist and by the day they were added, ready to play
 • Switch between normal and Medley playback
 • Browse and search by song, artist, and album
 • Sorting and filters for short tracks, non-music audio, and selected folders
@@ -161,3 +172,11 @@ if the Console counter says it is over, use "• Smaller app size, internal opti
 • You can now delete selected songs, albums or artists from your device (Android 10 and later; you are asked to confirm before anything is deleted)
 • Fixed an issue where resuming a shuffle could start from the beginning of the track instead of the saved position
 • Smaller app size and internal optimizations
+
+### 1.3.0 release notes
+
+Three items (452 characters; the limit is 500).
+
+• Added a new "Recent" tab. Songs you recently added to your device are grouped by artist and by the day they were added (tap a row to see the songs, or long-press to select several and play them)
+• When you resume from the "Resume" tab, the repeat and Medley on/off settings you last used with that queue are restored too
+• Fixed a rare issue where playing a song just as a shuffle-all pass finished could replace your choice with the previous shuffle
