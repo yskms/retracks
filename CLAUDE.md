@@ -172,6 +172,11 @@
     鳴っている曲を組み直さないので、`setQueue()`の後やstateだけの変更（350ms後のeffect）に任せると1曲目だけ
     前の区間で鳴る。控えは切り替える**前**に読む。書くのは、位置・カーソルと同じ条件（シャッフル状態があるか
     `orderedLiveRef`）のときだけ
+  - **`restorePlaybackSettings()`は、メドレーのON/OFFが変わらなくても`setSegment()`を必ず送る**。比較相手の
+    `rushOnRef`はJSの値で、トグルの350ms以内はネイティブがまだ前の区間なので、比べて省くと1曲目だけ前の
+    区間で鳴る（同じ値ならネイティブは何もしないので、送って害はない）。「無駄な呼び出し」に見えるが戻さない
+  - **開始時点の控えは、`saveOrdered`より先に保存の列へ入れる**（`playFrom`・`resumeOrdered`）。後ろに置くと、
+    並びの保存を待つ間に届いたリピートの変更を古い値で上書きする。保存層は`npm run check:queue-settings`
   - **`rushOn`は`StorageKeys.settings`に保存する**（区間設定のeffectで書く）。`useState(true)`だけに戻さない。
     ネイティブは区間を引き継ぐので、JSが毎回ONで始まると、OFFの区間を起動の350ms後にONで組み直す
 
