@@ -82,12 +82,14 @@ versionCode 5（1.2.0）の公開から間もないので、更新前の利用�
 
 ### 1.3.0 リリースノート
 
-新しいタブ「最近追加」、続きから再開でのリピート・メドレーの復元、1巡完了の競合の修正の3項目
-（198文字、上限500）。新しいタブは、既存の利用者にも既定で表示される（保存値に無いタブは、表示ありで末尾に足される）。
+新しいタブ「最近追加」、続きから再開でのリピート・メドレーのON/OFFの復元、軽微な不具合の修正の3項目（120文字、上限500）。新しいタブは、既存の利用者にも既定で表示される（保存値に無いタブは、表示ありで末尾に足される）。
+メドレーは**ON/OFFだけ**が戻る（開始位置・秒数・フェードの数値は全体で1つのまま。v2.77）ので、「メドレーの設定」とは書かない
+（数値まで戻ると読まれる）。キューごとに戻るので「そのキューの」と書く。1巡完了の競合の修正は、当てはまる人がほとんどいない
+（全曲シャッフルが1巡し終わる瞬間に別の曲を再生した場合だけ）ので、症状を書かずに「軽微な不具合」とまとめる。
 
-・新しいタブ「最近追加」を追加しました。端末に最近追加した曲が、アーティストごと・追加した日ごとにまとまって並びます（タップで曲の一覧、長押しで複数選んで再生）
-・「続きから」で再開したとき、そのキューで使っていたリピートとメドレーのON/OFFも元に戻るようになりました
-・全曲シャッフルが1巡し終わる瞬間に別の曲を再生すると、選んだ曲が元のシャッフルに置き換わることがある不具合を修正しました
+・「最近追加」タブを新設しました。端末に最近追加した曲が、アーティストごと・追加した日ごとに並びます
+・「続きから」で再開したとき、そのキューのリピートとメドレーのON/OFFも戻るようになりました
+・再生に関する軽微な不具合を修正しました
 
 ## English (default, en-US)
 
@@ -175,8 +177,8 @@ if the Console counter says it is over, use "• Smaller app size, internal opti
 
 ### 1.3.0 release notes
 
-Three items (452 characters; the limit is 500).
+Three items (238 characters; the limit is 500). Same reasons as the Japanese notes: only the on/off state is restored (not the segment numbers), and the race fix is too rare to describe.
 
-• Added a new "Recent" tab. Songs you recently added to your device are grouped by artist and by the day they were added (tap a row to see the songs, or long-press to select several and play them)
-• When you resume from the "Resume" tab, the repeat and Medley on/off settings you last used with that queue are restored too
-• Fixed a rare issue where playing a song just as a shuffle-all pass finished could replace your choice with the previous shuffle
+• New "Recent" tab: songs you recently added to your device, grouped by artist and by the day they were added
+• Resuming from the "Resume" tab now also restores that queue's repeat and Medley on/off settings
+• Fixed a minor playback issue
