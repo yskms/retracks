@@ -823,13 +823,24 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (previous === state.order.length - 1 && event.index === 0) {
         const lastPlayed = state.order[previous] ?? null;
         void (async () => {
+          const queueKey = queueKeyRef.current;
+          const queueAtStart = queueRef.current;
           // 全曲キューの2巡目は、その時点のライブラリを元に作り直す。
           // 1巡の途中で増えた曲も次の巡から出てくるようにするため。
           // アーティストやアルバムのキューは対象が決まっているのでそのまま使う。
-          const source =
-            queueKeyRef.current === ALL_KEY ? tracksRef.current : queueRef.current;
+          const source = queueKey === ALL_KEY ? tracksRef.current : queueAtStart;
           const ids = source.map((t) => t.id);
-          const nextState = await startNextCycle(queueKeyRef.current, ids, lastPlayed);
+          const nextState = await startNextCycle(queueKey, ids, lastPlayed);
+          // この await（保存の読み書き）の間に別のキューが始まっていたら、何もしない。
+          // 続けると、古いキューの並びを新しいキーで applyShuffle・setQueue し直し、
+          // 新しいキューを上書きする（順番再生の seq: なら、保存も食い違う）。
+          // applyShuffle の前で戻ること。setQueue() の直前で止めるだけでは、
+          // applyShuffle で戻した古い状態が残る（docs/requirements.md 13.9）。
+          // キーだけでは足りない：保存しない再生（playFrom）は全曲のキーのまま
+          // 同期的にキューを入れ替えるので、配列の同一性でも見る
+          // （applyQueue は、キューを始める・復元する・空にするときにしか呼ばれない）。
+          // startNextCycle が古いキーに書いた次の巡は、そのキューの正しい続きなので残す。
+          if (queueKeyRef.current !== queueKey || queueRef.current !== queueAtStart) return;
           applyShuffle(nextState);
           // ここも -1（未再生）にする。0 のままだと、1曲だけのキューでは
           // この直後の setQueue() が出す onTrackChange（index 0）を
@@ -844,7 +855,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
             .filter((t): t is Track => t != null);
           applyQueue(ordered);
 
-          await RetracksPlayer.setQueue(ordered, 0, queueKeyRef.current);
+          await RetracksPlayer.setQueue(ordered, 0, queueKey);
           RetracksPlayer.play();
           addLog('1巡完了。順列を作り直して2巡目へ');
         })();
