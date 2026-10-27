@@ -14,7 +14,7 @@ Android限定の機能のため、引き続き掲載文へ含めない。
 - プライバシーポリシーURL（英語・日本語共通）: `https://yskms.github.io/retracks/privacy-policy.html`
 - バージョン: `1.3.0`
 - 著作権: `2026 yskms`
-- ビルド: `22`（App Version `1.3.0`、2026-10-28に`eas build --local --profile production`で作成し、同日`eas submit`でApp Store Connectへアップロード〔提出ID `23d695ba-fb7b-4b59-9d57-050c333d42d6`。EAS側のキューで約20分待った〕。TestFlightでの確認とApp Store審査への提出は未。`appVersionSource: remote`で自動採番、直前のリモート番号は21）。1.2.0はビルド21で公開済み（2026-10-18に作成・アップロード〔提出ID `50dfb682-10fb-458a-96a2-6de76ba6fb58`〕。TestFlightで確認済み、App Store審査へ提出済み、2026-10-20に公開済みを確認〔いずれも利用者の報告〕。直前のリモート番号は20）。1.1.1はビルド18で公開済み（ビルド17は2026-10-02に`eas build --local` → `eas submit`でTestFlightへアップロード）
+- ビルド: `22`（App Version `1.3.0`、2026-10-28に`eas build --local --profile production`で作成し、同日`eas submit`でApp Store Connectへアップロード〔提出ID `23d695ba-fb7b-4b59-9d57-050c333d42d6`。EAS側のキューで約20分待った〕。TestFlightで確認済み、App Store審査へ提出済み〔2026-10-28、いずれも利用者の報告。審査の結果は未確認〕。`appVersionSource: remote`で自動採番、直前のリモート番号は21）。1.2.0はビルド21で公開済み（2026-10-18に作成・アップロード〔提出ID `50dfb682-10fb-458a-96a2-6de76ba6fb58`〕。TestFlightで確認済み、App Store審査へ提出済み、2026-10-20に公開済みを確認〔いずれも利用者の報告〕。直前のリモート番号は20）。1.1.1はビルド18で公開済み（ビルド17は2026-10-02に`eas build --local` → `eas submit`でTestFlightへアップロード）
 - サインインが必要: いいえ
 - リリース方法: 手動リリース
 - 価格: 無料（アプリ内課金あり: Pro月額購読）
