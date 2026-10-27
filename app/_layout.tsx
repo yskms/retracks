@@ -62,6 +62,7 @@ export default function RootLayout() {
                   <Stack.Screen name="pro" />
                   <Stack.Screen name="artist/[id]" />
                   <Stack.Screen name="album/[id]" />
+                  <Stack.Screen name="recent/[day]" />
                 </Stack>
                 <BottomBar />
               </View>

@@ -8,7 +8,7 @@
 
 import type { LayoutKey } from './layout';
 
-export type TabId = 'songs' | 'artists' | 'albums' | 'queues';
+export type TabId = 'songs' | 'artists' | 'albums' | 'queues' | 'recent';
 
 /**
  * 'queues' は、再生を始めたキュー（全曲・アーティスト・アルバム・選んだ曲・
@@ -16,17 +16,29 @@ export type TabId = 'songs' | 'artists' | 'albums' | 'queues';
  * 要件定義書 10.4 の「プレイリスト」（自動プレイリスト／ユーザー作成。未実装）とは
  * 別物なので、TabId に playlists を使わない。
  *
- * **この ID は変えない。** normalizeTabs() は未知の ID を捨てるため、リリース後に
+ * 'recent' は、最近端末に追加した曲を「アーティスト × 追加した日」ごとの行に並べるタブ
+ * （ラベルは「最近追加」/ "Recent"）。端末の追加日（Track.addedAt）から毎回組み立てる
+ * だけで、保存する一覧は持たない（→ src/recentGroups.ts）。こちらも、上の「プレイリスト」
+ * （最近の追加曲を含む自動プレイリスト）とは別物。
+ *
+ * **これらの ID は変えない。** normalizeTabs() は未知の ID を捨てるため、リリース後に
  * 変えると、利用者が設定したこのタブの並び順・表示設定が黙って初期化される。
- * 表示名だけを変えるなら、ラベル（i18n の library.tabQueues）を直す。
+ * 表示名だけを変えるなら、ラベル（i18n の library.tabQueues / library.tabRecent）を直す。
  */
-export const TAB_IDS: readonly TabId[] = ['songs', 'artists', 'albums', 'queues'] as const;
+export const TAB_IDS: readonly TabId[] = [
+  'songs',
+  'artists',
+  'albums',
+  'queues',
+  'recent',
+] as const;
 
 export const TAB_LABEL_KEY = {
   songs: 'library.tabSongs',
   artists: 'library.tabArtists',
   albums: 'library.tabAlbums',
   queues: 'library.tabQueues',
+  recent: 'library.tabRecent',
 } as const satisfies Record<TabId, string>;
 
 /**

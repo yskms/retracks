@@ -38,10 +38,17 @@ import {
   FAB_BOTTOM_OFFSET,
   FAB_HEIGHT,
   QueuesPage,
+  RecentPage,
   SongsPage,
 } from '../src/components/LibraryPages';
 import { buildQueueEntries, type QueueEntry } from '../src/queueEntries';
 import { namesForSources, titlesOf } from '../src/queueKeys';
+import {
+  artistNamesOf,
+  buildRecentGroups,
+  tracksOfGroups,
+  type RecentGroup,
+} from '../src/recentGroups';
 import { useSelection } from '../src/useSelection';
 import { CAN_DELETE_TRACKS, useDeleteTracks } from '../src/useDeleteTracks';
 import { LAYOUT_ICON, tileSizeOf, useLayouts } from '../src/layout';
@@ -66,6 +73,13 @@ const AnimatedPagerView = Animated.createAnimatedComponent(PagerView);
 
 const GRID_PADDING = 12;
 const GRID_GAP = 10;
+
+/**
+ * この画面の複数選択の種類。最近追加の行（アーティスト × 日）は曲・アルバム・アーティスト
+ * から tracksForSelection() で引けない（行は曲の追加日から組み立てたもの）ので、
+ * SelectionKind（src/library.ts）には足さず、この画面だけで足す。
+ */
+type LibrarySelectionKind = SelectionKind | 'recent';
 
 /**
  * メディア権限が拒否されているときに、タブ・一覧の代わりに出す画面
@@ -136,7 +150,7 @@ export default function LibraryScreen() {
   } = usePlayback();
   // 選択の種類はタブIDとは別物（キュータブには選択モードが無い）
   const { selection, active: inSelection, toggle, clear, isSelected } =
-    useSelection<SelectionKind>();
+    useSelection<LibrarySelectionKind>();
   const { deleting, confirmAndDelete } = useDeleteTracks(rescan);
 
   const pagerRef = useRef<PagerView>(null);
@@ -245,6 +259,18 @@ export default function LibraryScreen() {
     [resumeQueue, router, t]
   );
 
+  // 最近追加タブ。曲の追加日から毎回組み立てる（保存する一覧は持たない。→ src/recentGroups.ts）
+  const recentGroups = useMemo(() => buildRecentGroups(tracks), [tracks]);
+
+  const openRecent = useCallback(
+    (group: RecentGroup) =>
+      router.push({
+        pathname: '/recent/[day]',
+        params: { day: group.day, artist: group.artistKey, name: group.artist },
+      }),
+    [router]
+  );
+
   const albumCounts = useMemo(() => countAlbumsByArtist(tracks), [tracks]);
   // アーティストの写真は持っていないので、そのアーティストのアルバムから流用する
   const artistArtwork = useMemo(() => artworkByArtist(tracks, albums), [tracks, albums]);
@@ -288,7 +314,22 @@ export default function LibraryScreen() {
     if (!selection) return;
     const { kind, ids } = selection;
 
-    if (kind === 'songs' && !shuffled) {
+    if (kind === 'recent') {
+      // 選んだ行の曲を、行の並び（新しい順）のまま1つにする。見出しは曲名でなくアーティスト名
+      const chosen = recentGroups.filter((group) => ids.includes(group.key));
+      const picked = tracksOfGroups(chosen);
+      if (picked.length === 0) {
+        // 選んでいる間に行が押し出された／曲が消えた
+        clear();
+        return;
+      }
+      const names = artistNamesOf(chosen);
+      if (shuffled) {
+        await playTracks('songs', picked.map((track) => track.id), picked, { names });
+      } else {
+        await playFrom(picked, 0, { names });
+      }
+    } else if (kind === 'songs' && !shuffled) {
       // 一覧の並び順のまま先頭から（曲タブの並べ替えを反映した順）
       const picked = sortedTracks.filter((t) => ids.includes(t.id));
       // 曲を選んだ「順番に」は、選んだ曲名を連ねた見出しにする
@@ -320,7 +361,7 @@ export default function LibraryScreen() {
 
     clear();
     router.push('/player');
-  }, [selection, tracks, sortedTracks, playTracks, playFrom, clear, router]);
+  }, [selection, tracks, sortedTracks, recentGroups, playTracks, playFrom, clear, router]);
 
   /**
    * 選択した曲・アルバム・アーティストを端末から削除する（要件: 端末からの
@@ -331,7 +372,8 @@ export default function LibraryScreen() {
    * useDeleteTracks() に集約している（→ src/useDeleteTracks.ts）。
    */
   const deleteSelection = useCallback(() => {
-    if (!selection) return;
+    // 最近追加の選択には削除を出さない（下の CAN_DELETE_TRACKS の条件）
+    if (!selection || selection.kind === 'recent') return;
     const picked = tracksForSelection(tracks, selection.kind, selection.ids);
     confirmAndDelete(picked, clear);
   }, [selection, tracks, confirmAndDelete, clear]);
@@ -391,8 +433,9 @@ export default function LibraryScreen() {
               <Ionicons name="shuffle-outline" size={14} color="#1a1206" />
               <Text style={styles.headerActionPrimaryText}>{t('common.shufflePlay')}</Text>
             </Pressable>
-            {/* 端末からの削除は Android 10 以降のみ（→ CAN_DELETE_TRACKS）。 */}
-            {CAN_DELETE_TRACKS && (
+            {/* 端末からの削除は Android 10 以降のみ（→ CAN_DELETE_TRACKS）。
+                最近追加の選択には出さない（まとまりごと消す操作は求められていない）。 */}
+            {CAN_DELETE_TRACKS && selection?.kind !== 'recent' && (
               <Pressable
                 hitSlop={10}
                 disabled={deleting}
@@ -463,7 +506,14 @@ export default function LibraryScreen() {
                   style={styles.tab}
                   onPress={() => pagerRef.current?.setPage(index)}
                 >
-                  <Text style={[styles.tabLabel, page === index && styles.tabLabelActive]}>
+                  {/* 5タブだと360dp幅で1タブ72dpになり、「アーティスト」が折り返す。
+                      1行に収め、入り切らない分は文字を縮める。 */}
+                  <Text
+                    style={[styles.tabLabel, page === index && styles.tabLabelActive]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.8}
+                  >
                     {tab.label}
                   </Text>
                 </Pressable>
@@ -537,6 +587,17 @@ export default function LibraryScreen() {
                 entries={queueEntries}
                 onOpen={openQueue}
                 onRemove={(entry) => void removeQueue(entry.key)}
+              />
+            )}
+            {tab.id === 'recent' && (
+              <RecentPage
+                groups={recentGroups}
+                loaded={libraryLoaded}
+                inSelection={inSelection}
+                isSelected={isSelected}
+                toggle={toggle}
+                onOpen={openRecent}
+                refreshControl={refreshControl}
               />
             )}
             {tab.id === 'albums' && (

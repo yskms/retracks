@@ -25,6 +25,7 @@ export default {
     tabArtists: 'アーティスト',
     tabAlbums: 'アルバム',
     tabQueues: '続きから',
+    tabRecent: '最近追加',
     selectedCount_one: '{{count}}件選択',
     selectedCount_other: '{{count}}件選択',
     continueFrom: '全曲シャッフル再開 {{played}}/{{total}}',
@@ -73,6 +74,15 @@ export default {
     removeConfirmMessage: 'このキューだけが消えます。曲は端末から削除されません。',
     removeAllConfirmMessage:
       '全曲シャッフルの進み具合が消えます。次に全曲シャッフルを押すと、最初から新しい順番で始まります。曲は端末から削除されません。',
+  },
+  recent: {
+    empty: '最近追加した曲がありません',
+    emptyHint: '端末に曲を追加すると、アーティストごとにここへ並びます',
+    today: '今日',
+    yesterday: '昨日',
+    // {{date}} は端末の言語での日付（例: 10月25日）。曲数は common.songCount
+    rowSubtitle: '{{date}} · {{songs}}',
+    detailFallbackTitle: '最近追加',
   },
   player: {
     segmentStart: '開始位置',

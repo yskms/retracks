@@ -48,10 +48,17 @@ export type Track = {
   trackNumber: number | null;
   /** ディスク番号。無ければ1枚組として扱う。→ compareByTrackOrder() */
   discNumber: number | null;
+  /**
+   * 端末に追加された時刻（エポックミリ秒）。Android は MediaStore の DATE_ADDED、
+   * iOS は MPMediaItem.dateAdded（どちらも expo-music-library の Asset.creationTime）。
+   * 取れないときと、scanLibrary() 以外（保存済みキューの復元など）から作った Track は 0
+   * （「最近追加」タブの対象外。→ src/recentGroups.ts）。
+   */
+  addedAt: number;
 };
 
 export type LibrarySnapshot = {
-  version: 5;
+  version: 6;
   scannedAt: number;
   tracks: Track[];
 };
@@ -132,6 +139,7 @@ function toTrack(
     artistId: asset.artistId ?? null,
     trackNumber: asset.trackNumber ?? null,
     discNumber: asset.discNumber ?? null,
+    addedAt: asset.creationTime > 0 ? asset.creationTime : 0,
   };
 }
 
@@ -204,14 +212,14 @@ export async function scanLibrary(): Promise<Track[]> {
 
 export async function readCache(): Promise<LibrarySnapshot | null> {
   const cached = await readJson<LibrarySnapshot>(StorageKeys.library);
-  // 版が上がったらキャッシュを捨てて走査し直す（アートワーク追加など）
-  if (!cached || cached.version !== 5 || !Array.isArray(cached.tracks)) return null;
+  // 版が上がったらキャッシュを捨てて走査し直す（アートワーク追加、追加日 addedAt など）
+  if (!cached || cached.version !== 6 || !Array.isArray(cached.tracks)) return null;
   return cached;
 }
 
 export async function writeCache(tracks: Track[]): Promise<LibrarySnapshot> {
   const snapshot: LibrarySnapshot = {
-    version: 5,
+    version: 6,
     scannedAt: Date.now(),
     tracks,
   };

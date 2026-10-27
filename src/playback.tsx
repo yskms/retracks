@@ -150,7 +150,7 @@ type PlaybackValue = {
     mode: QueueMode,
     ids: string[],
     source: Track[],
-    options?: ResumeOptions
+    options?: PlayTracksOptions
   ) => Promise<void>;
   /**
    * ライブラリ全曲を再生する（続きがあれば続きから）。
@@ -241,6 +241,15 @@ function toSegmentInput(on: boolean, setting: SegmentSetting): SegmentInput | nu
     fadeInMs: Math.round(setting.fadeInSec * 1000),
   };
 }
+
+export type PlayTracksOptions = ResumeOptions & {
+  /**
+   * キュータブの見出しに使う名前。曲を選んだシャッフル（'songs'）だけが使う。省略すると、
+   * 選んだ曲名を連ねる。「最近追加」で選んだグループのように、利用者が選んだものが曲でなく
+   * アーティストのときに渡す（曲名の羅列では、何を選んだキューか分からない）。
+   */
+  names?: string[];
+};
 
 export type PlayFromOptions = {
   /** false なら、続きから再生するキューとして保存しない（既定は保存する）。 */
@@ -640,6 +649,7 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
         artistId: null,
         trackNumber: null,
         discNumber: null,
+        addedAt: 0,
       });
       const tracksById = new Map(result.tracks.map((t) => [t.id, t]));
       const nativeQueue: Track[] = saved.tracks.map((t) => tracksById.get(t.id) ?? fallback(t));
@@ -1068,17 +1078,18 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
   );
 
   const playTracks = useCallback(
-    async (mode: QueueMode, ids: string[], source: Track[], options?: ResumeOptions) => {
+    async (mode: QueueMode, ids: string[], source: Track[], options?: PlayTracksOptions) => {
       if (!ready) return addLog('プレイヤーの準備ができていません');
       if (source.length === 0) return addLog('対象の曲がありません');
 
       const key = buildQueueKey(mode, mode === 'all' ? [] : ids);
-      await startShuffleQueue(
-        key,
-        source,
-        mode === 'all' ? null : buildMeta(mode, ids, source),
-        options
-      );
+      const meta =
+        mode === 'all'
+          ? null
+          : mode === 'songs' && options?.names?.length
+            ? { srcIds: [], names: options.names }
+            : buildMeta(mode, ids, source);
+      await startShuffleQueue(key, source, meta, options);
     },
     [ready, addLog, startShuffleQueue]
   );

@@ -17,6 +17,7 @@ export default {
     tabArtists: 'Artists',
     tabAlbums: 'Albums',
     tabQueues: 'Resume',
+    tabRecent: 'Recent',
     selectedCount_one: '{{count}} selected',
     selectedCount_other: '{{count}} selected',
     continueFrom: 'Shuffle all · {{played}}/{{total}}',
@@ -65,6 +66,15 @@ export default {
     removeConfirmMessage: 'Only this queue is removed. Songs are not deleted from this device.',
     removeAllConfirmMessage:
       'Your shuffle-all progress will be removed. The next time you shuffle all, it starts over in a new order. Songs are not deleted from this device.',
+  },
+  recent: {
+    empty: 'Nothing added recently',
+    emptyHint: 'Songs you add to this device show up here, grouped by artist',
+    today: 'Today',
+    yesterday: 'Yesterday',
+    // {{date}} is the date in the device language (e.g. Oct 25); songs comes from common.songCount
+    rowSubtitle: '{{date}} · {{songs}}',
+    detailFallbackTitle: 'Recently added',
   },
   player: {
     segmentStart: 'Start',

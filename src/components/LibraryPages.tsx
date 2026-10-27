@@ -24,6 +24,8 @@ import type { TFunction } from 'i18next';
 
 import type { Album, Artist, Track } from '../library';
 import type { QueueEntry } from '../queueEntries';
+import type { RecentGroup } from '../recentGroups';
+import { dayText } from '../recentLabel';
 import { colors, formatDuration } from '../theme';
 import { Row } from './Row';
 import { Tile } from './Tile';
@@ -365,6 +367,71 @@ export function QueuesPage({
                 }
               />
             </View>
+          )}
+        />
+      )}
+    </View>
+  );
+}
+
+/**
+ * 最近追加タブ。最近端末に追加した曲を、アーティスト × 追加した日の行に並べる
+ * （組み立ては src/recentGroups.ts）。行のタップは詳細（曲一覧）、長押しで複数選択に入り、
+ * 選んだ行の曲をまとめて再生できる（選択の再生は app/index.tsx）。
+ */
+export function RecentPage({
+  groups,
+  loaded,
+  inSelection,
+  isSelected,
+  toggle,
+  onOpen,
+  refreshControl,
+}: SelectionHelpers<'recent'> & {
+  groups: RecentGroup[];
+  loaded: boolean;
+  onOpen: (group: RecentGroup) => void;
+  refreshControl: ReactElement<RefreshControlProps>;
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <View style={styles.page}>
+      {groups.length === 0 ? (
+        loaded ? (
+          <View style={styles.loading}>
+            <Text style={styles.emptyText}>{t('recent.empty')}</Text>
+            <Text style={styles.emptyHint}>{t('recent.emptyHint')}</Text>
+          </View>
+        ) : (
+          <Loading />
+        )
+      ) : (
+        <FlatList
+          data={groups}
+          keyExtractor={(item) => item.key}
+          contentContainerStyle={styles.listContent}
+          initialNumToRender={12}
+          windowSize={4}
+          refreshControl={refreshControl}
+          getItemLayout={(_, index) => ({
+            length: ROW_HEIGHT,
+            offset: ROW_HEIGHT * index,
+            index,
+          })}
+          renderItem={({ item }) => (
+            <Row
+              title={item.artist}
+              subtitle={t('recent.rowSubtitle', {
+                date: dayText(t, item.day),
+                songs: t('common.songCount', { count: item.tracks.length }),
+              })}
+              artworkUri={item.artworkUri}
+              chevron
+              selected={isSelected('recent', item.key)}
+              onPress={() => (inSelection ? toggle('recent', item.key) : onOpen(item))}
+              onLongPress={() => toggle('recent', item.key)}
+            />
           )}
         />
       )}
