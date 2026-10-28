@@ -168,6 +168,10 @@
   要件 10.4 の未実装の「プレイリスト」とは別物で、`playlists`という名前も使わない。
 - 再生位置の保存・復元を実機で確かめる手順は`docs/requirements.md` 13.6（**一時停止して保存位置を固定してから**
   記録する）。
+- **鳴っているシャッフルと同じキューを始め直す操作（全曲のFAB、詳細画面のシャッフル等）は、`playTracks()`の入口で`canKeepActiveShuffle()`
+  （`src/shuffleRestart.ts`）が真なら何もしない。積み直すと、最大5秒前に保存した位置まで巻き戻る。**条件の「曲の集合が同じ」を外さない**：
+  積み直し（`prepareShuffle()` → `reconcile()`）は、再生中に増減した曲を順列へ反映する役割も持つ（キーは出所で決まり、再スキャンでも変わらない）。
+  `shuffleRef`も見る（曲タブのタップで始めた再生は、キーが全曲のまま`shuffleRef`がnull）。検査は`npm run check:keep-playing`（詳細は`docs/requirements.md` 13.9）
 - **`playback.tsx`の1巡完了の処理（`onTrackChange`）は、`await startNextCycle()`の直後で、キーと`queueRef`の配列の
   両方を控えと比べ、違えば戻る。キーだけの比較に「簡略化」しない。** 保存しない再生（`playFrom`の`remember: false`）は
   キーが`all`のまま同期的にキューを入れ替えるので、全曲シャッフルの1巡完了と重なるとキーだけでは素通りして、
