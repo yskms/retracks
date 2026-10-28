@@ -154,7 +154,9 @@ type PlaybackValue = {
   ) => Promise<void>;
   /**
    * ライブラリ全曲を再生する（続きがあれば続きから）。
-   * 「続きから」「シャッフル再開」の入口は restoreSettings を渡す。
+   * 「続きから」「シャッフル再開」の入口は restoreSettings を渡す。その入口では、
+   * 全曲のシャッフルがいま鳴っているなら積み直さない（何もしない。積み直すと、最大5秒前に
+   * 保存した位置まで戻る）。一時停止中は、積み直して再生を再開する。
    */
   playAll: (options?: ResumeOptions) => Promise<void>;
   /**
@@ -1127,9 +1129,23 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const playAll = useCallback(
     async (options?: ResumeOptions) => {
+      // 続きから再開の入口（全曲のFAB）で、全曲のシャッフルがいま鳴っているなら、積み直さない。
+      // 積み直すと、最大5秒前に保存した位置まで戻る（resumeQueue() の呼び出し側が、鳴っている
+      // キューを弾くのと同じ理由。app/index.tsx の openQueue）。1巡完了の await と重なると、
+      // 前の巡の位置が新しい巡の先頭に使われる窓もある（docs/requirements.md 13.9）。
+      // 保存しない再生（曲タブのタップ）はキーが全曲のまま shuffleRef が null なので、
+      // shuffleRef も見る。一時停止中は、従来どおり積み直して再生を再開する。
+      if (
+        options?.restoreSettings &&
+        queueKeyRef.current === ALL_KEY &&
+        shuffleRef.current &&
+        RetracksPlayer.getStatus().isPlaying
+      ) {
+        return;
+      }
       await playTracks('all', [], tracksRef.current, options);
     },
-    [playTracks]
+    [ALL_KEY, playTracks]
   );
 
   const playFrom = useCallback(
