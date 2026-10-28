@@ -75,6 +75,7 @@ import {
   startNextCycle,
   type ShuffleState,
 } from './shuffle';
+import { canKeepActiveShuffle } from './shuffleRestart';
 import { clearAll, readJson, StorageKeys, writeJson } from './storage';
 
 type PlaybackValue = {
@@ -145,7 +146,11 @@ type PlaybackValue = {
    */
   removeQueue: (key: string) => Promise<void>;
 
-  /** 指定した曲でキューを作って再生する。順列は生成条件ごとに永続化される。 */
+  /**
+   * 指定した曲でキューを作って再生する。順列は生成条件ごとに永続化される。
+   * 同じキューのシャッフルがいま鳴っていて、曲の集合も変わっていないなら、何もしない
+   * （積み直すと、最大5秒前に保存した位置まで戻る。→ src/shuffleRestart.ts）。
+   */
   playTracks: (
     mode: QueueMode,
     ids: string[],
@@ -154,9 +159,7 @@ type PlaybackValue = {
   ) => Promise<void>;
   /**
    * ライブラリ全曲を再生する（続きがあれば続きから）。
-   * 「続きから」「シャッフル再開」の入口は restoreSettings を渡す。その入口では、
-   * 全曲のシャッフルがいま鳴っているなら積み直さない（何もしない。積み直すと、最大5秒前に
-   * 保存した位置まで戻る）。一時停止中は、積み直して再生を再開する。
+   * 「続きから」「シャッフル再開」の入口は restoreSettings を渡す。
    */
   playAll: (options?: ResumeOptions) => Promise<void>;
   /**
@@ -1116,6 +1119,21 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
       if (source.length === 0) return addLog('対象の曲がありません');
 
       const key = buildQueueKey(mode, mode === 'all' ? [] : ids);
+      // 鳴っているシャッフルと同じキューを、もう一度始める操作（全曲のFAB、アーティスト／アルバム
+      // 詳細の「シャッフル」など）は、積み直さない。理由と条件は canKeepActiveShuffle() のコメント。
+      // どの入口も、このあと自分でプレイヤー画面へ移るので、何もしなくても画面の動きは変わらない。
+      // 保存しない再生（曲タブのタップ）はキーが全曲のまま shuffleRef が null なので、素通りする。
+      if (
+        canKeepActiveShuffle({
+          activeKey: queueKeyRef.current,
+          key,
+          activeOrder: shuffleRef.current?.order ?? null,
+          sourceIds: source.map((t) => t.id),
+          isPlaying: RetracksPlayer.getStatus().isPlaying,
+        })
+      ) {
+        return;
+      }
       const meta =
         mode === 'all'
           ? null
@@ -1129,23 +1147,9 @@ export function PlaybackProvider({ children }: { children: ReactNode }) {
 
   const playAll = useCallback(
     async (options?: ResumeOptions) => {
-      // 続きから再開の入口（全曲のFAB）で、全曲のシャッフルがいま鳴っているなら、積み直さない。
-      // 積み直すと、最大5秒前に保存した位置まで戻る（resumeQueue() の呼び出し側が、鳴っている
-      // キューを弾くのと同じ理由。app/index.tsx の openQueue）。1巡完了の await と重なると、
-      // 前の巡の位置が新しい巡の先頭に使われる窓もある（docs/requirements.md 13.9）。
-      // 保存しない再生（曲タブのタップ）はキーが全曲のまま shuffleRef が null なので、
-      // shuffleRef も見る。一時停止中は、従来どおり積み直して再生を再開する。
-      if (
-        options?.restoreSettings &&
-        queueKeyRef.current === ALL_KEY &&
-        shuffleRef.current &&
-        RetracksPlayer.getStatus().isPlaying
-      ) {
-        return;
-      }
       await playTracks('all', [], tracksRef.current, options);
     },
-    [ALL_KEY, playTracks]
+    [playTracks]
   );
 
   const playFrom = useCallback(

@@ -46,6 +46,7 @@
     "web": "expo start --web",
     "check:i18n": "tsx tools/check-i18n-keys.ts",
     "check:queue-settings": "tsx tools/check-queue-settings.ts",
+    "check:keep-playing": "tsx tools/check-keep-playing.ts",
     "check:recent-groups": "tsx tools/check-recent-groups.ts"
   },
   "private": true,
