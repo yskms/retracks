@@ -1,0 +1,16 @@
+# GitHub Pages（このリポジトリの docs/ を公開元にする）で公開するのは、紹介ページ（index.html・ja/）、
+# privacy-policy.md、ページが使う画像・CSS。docs/ の他の .md（要件・開発履歴・チェックリスト・
+# ストア掲載文・README）は、リポジトリでは読めるが、サイトのページとしては公開しない。
+# 公開すると、掲載文が紹介ページと重複して検索で競合し、内部の記録（署名・提出の情報など）が
+# 検索に出るため。robots.txt の Disallow では、インデックスを防げず、パスも見えてしまう。
+#
+# すべての .md を除き、公開する .md だけを include に足す（Jekyll は、include に当たるものを
+# exclude より先に残す）。docs/ に .md を足すと、既定では非公開になる。サイトに出したいときだけ
+# include に足す。
+#
+# privacy-policy.md は、外さない。URL（/retracks/privacy-policy.html）がアプリ（src/legalUrls.ts）と
+# 両ストアに登録済み。ここを外すと、そのURLが404になる。
+exclude:
+  - "*.md"
+include:
+  - privacy-policy.md

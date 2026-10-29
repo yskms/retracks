@@ -8,6 +8,10 @@
   数日分古いままになっていた）。両ファイルは役割が違う（`requirements.md`は詳細な
   作業ログ、`development-history.md`は俯瞰用の現在地・マイルストーン）ため、片方の
   更新がもう片方に自動で反映されるわけではない。
+- GitHub Pages（`docs/`を公開）では、`docs/_config.yml`で**`.md`をすべて非公開にし、`privacy-policy.md`だけ
+  `include`している**。`docs/`に`.md`を足してもサイトには出ない（既定で非公開）。サイトに出したい`.md`だけ
+  `include`に足す。`privacy-policy.md`の`include`は外さない（URLがアプリ・両ストアに登録済みで、外すと404）。
+  理由と経緯は`docs/requirements.md`のv2.101。
 
 ## RevenueCat / AdMob（Android/iOS共通）
 
