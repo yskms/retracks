@@ -116,7 +116,7 @@ Play each song from any point for a time you set, then move on automatically.
 
 Rediscover your music with Medley playback.
 
-RE:TR4CKS is an offline music player that plays selected portions of your tracks one after another, helping you quickly rediscover forgotten music already in your library.
+RE:TR4CKS is an offline music player that plays your tracks one after another, each from a start point you set for a length of time you set, helping you quickly rediscover forgotten music already in your library.
 
 Old favorites. Deep cuts from albums you used to love. Tracks you forgot were even in your library. Even with a large music collection, it's easy to end up listening to the same familiar songs again and again.
 
