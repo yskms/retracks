@@ -130,7 +130,8 @@ footer a { color: var(--muted); }
   main { padding-top: 40px; }
   .lang-switch { margin-top: -16px; }
   .hero { grid-template-columns: minmax(0, 1fr); gap: 20px; text-align: center; }
-  .icon { width: 160px; height: 160px; border-radius: 36px; margin: 0 auto; }
+  /* 狭い幅では、アイコンを先頭に96pxで置く（Solo + Usの紹介ページと揃える）。HTMLでは文章の後ろにある */
+  .icon { order: -1; width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 8px 24px rgb(0 0 0 / 38%); margin: 0 auto; }
   .actions { justify-content: center; }
   .grid { grid-template-columns: 1fr; }
   .shots {
