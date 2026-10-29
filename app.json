@@ -2,13 +2,13 @@
   "expo": {
     "name": "RE:TR4CKS",
     "slug": "retracks",
-    "version": "1.3.0",
+    "version": "1.3.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "android": {
       "package": "com.yskms.retracks",
-      "versionCode": 9,
+      "versionCode": 10,
       "blockedPermissions": [
         "android.permission.SYSTEM_ALERT_WINDOW",
         "com.google.android.gms.permission.AD_ID"

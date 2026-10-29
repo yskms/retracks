@@ -12,7 +12,7 @@ Android限定の機能のため、引き続き掲載文へ含めない。
 - サポートURL: `https://yskms.github.io/retracks/`
 - マーケティングURL: `https://yskms.github.io/retracks/`
 - プライバシーポリシーURL（英語・日本語共通）: `https://yskms.github.io/retracks/privacy-policy.html`
-- バージョン: `1.3.0`
+- バージョン: `1.3.1`
 - 著作権: `2026 yskms`
 - ビルド: `22`（App Version `1.3.0`、2026-10-28に`eas build --local --profile production`で作成し、同日`eas submit`でApp Store Connectへアップロード〔提出ID `23d695ba-fb7b-4b59-9d57-050c333d42d6`。EAS側のキューで約20分待った〕。TestFlightで確認済み、App Store審査へ提出済み〔2026-10-28、いずれも利用者の報告。審査の結果は未確認〕。`appVersionSource: remote`で自動採番、直前のリモート番号は21）。1.2.0はビルド21で公開済み（2026-10-18に作成・アップロード〔提出ID `50dfb682-10fb-458a-96a2-6de76ba6fb58`〕。TestFlightで確認済み、App Store審査へ提出済み、2026-10-20に公開済みを確認〔いずれも利用者の報告〕。直前のリモート番号は20）。1.1.1はビルド18で公開済み（ビルド17は2026-10-02に`eas build --local` → `eas submit`でTestFlightへアップロード）
 - サインインが必要: いいえ
@@ -73,6 +73,18 @@ Rediscover the music you already own. Move through forgotten tracks with adjusta
 ```
 
 ### What's New in This Version
+
+1.3.1。1.3.0の公開から間もないので、Androidの1.3.1（`docs/google-play-listing.md`）と同じく、更新前の利用者にも1.3.0の変更が
+伝わるよう、1.3.0の3項目を残して1行を足す（足す1行は、鳴っているシャッフルを始め直す操作の修正）。
+
+```text
+Added a new "Recent" tab. Songs you recently added to your device's media library are listed by artist and by the day they were added.
+Resuming from the "Resume" tab now also restores that queue's repeat and Medley on/off settings.
+Fixed a minor playback issue.
+Fixed an issue where tapping the shuffle button for the shuffle that is already playing could jump playback back by a few seconds.
+```
+
+#### 1.3.0（公開済み）
 
 1.3.0。新しいタブ「最近追加」、続きから再開でのリピート・メドレーのON/OFFの復元、軽微な不具合の修正の3項目。
 文面はAndroidのリリースノート（`docs/google-play-listing.md`の1.3.0）と同じ考え方：メドレーは**ON/OFFだけ**が戻る
@@ -177,7 +189,16 @@ offline,medley,shuffle,local library,album,artist,background playback,rediscover
 
 ### このバージョンの新機能
 
-1.3.0。
+1.3.1（英語版と同じ考え方で、1.3.0の3項目を残して1行を足す）。
+
+```text
+新しいタブ「最近追加」を追加しました。端末のメディアライブラリに最近追加した曲が、アーティストごと・追加した日ごとに並びます。
+「続きから」で再開したとき、そのキューのリピートとメドレーのON/OFFも元に戻るようになりました。
+再生に関する軽微な不具合を修正しました。
+再生中のシャッフルと同じシャッフルボタンを押すと、再生位置が数秒前に戻ってしまうことがある不具合を修正しました。
+```
+
+#### 1.3.0（公開済み）
 
 ```text
 新しいタブ「最近追加」を追加しました。端末のメディアライブラリに最近追加した曲が、アーティストごと・追加した日ごとに並びます。

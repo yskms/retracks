@@ -91,6 +91,17 @@ versionCode 5（1.2.0）の公開から間もないので、更新前の利用�
 ・「続きから」で再開したとき、そのキューのリピートとメドレーのON/OFFも戻るようになりました
 ・再生に関する軽微な不具合を修正しました
 
+### 1.3.1 リリースノート
+
+1.3.0の公開から間もないので、versionCode 8のときと同じく、更新前の利用者にも1.3.0の変更が伝わるよう、3項目を残して1行を足す
+（1.3.1の中身は、鳴っているシャッフルを始め直す操作の修正だけ。177文字、上限500）。足す1行は、症状を具体的に書く
+（全曲のシャッフルボタン、アーティスト／アルバム詳細の「シャッフル」を押すと、最大5秒ほど前に戻っていた。13.9・v2.94〜v2.96）。
+
+・「最近追加」タブを新設しました。端末に最近追加した曲が、アーティストごと・追加した日ごとに並びます
+・「続きから」で再開したとき、そのキューのリピートとメドレーのON/OFFも戻るようになりました
+・再生に関する軽微な不具合を修正しました
+・再生中のシャッフルと同じシャッフルボタンを押すと、再生位置が数秒前に戻ってしまうことがある不具合を修正しました
+
 ## English (default, en-US)
 
 ### App name
@@ -182,3 +193,12 @@ Three items (238 characters; the limit is 500). Same reasons as the Japanese not
 • New "Recent" tab: songs you recently added to your device, grouped by artist and by the day they were added
 • Resuming from the "Resume" tab now also restores that queue's repeat and Medley on/off settings
 • Fixed a minor playback issue
+
+### 1.3.1 release notes
+
+Same reason as the Japanese notes: 1.3.0 has just been published, so keep its three items and add one line (370 characters; the limit is 500).
+
+• New "Recent" tab: songs you recently added to your device, grouped by artist and by the day they were added
+• Resuming from the "Resume" tab now also restores that queue's repeat and Medley on/off settings
+• Fixed a minor playback issue
+• Fixed an issue where tapping the shuffle button for the shuffle that is already playing could jump playback back by a few seconds
