@@ -358,42 +358,43 @@ export default function PlayerScreen() {
                 </Text>
               </Pressable>
 
-              {/* RUSH を切らずに、この曲だけ通しで聴きたいとき */}
-              {rushOn && (
-                <Pressable
-                  style={[styles.oneShot, status?.fullPlayback && styles.oneShotOn]}
-                  onPress={playCurrentFromStart}
-                  disabled={status?.fullPlayback}
-                >
-                  <View style={styles.oneShotHead}>
-                    {/* ウィジェットの同じ操作と同じ絵にして、見て分かるようにする */}
-                    <Image
-                      source={require('../assets/ic-fulltrack.png')}
-                      style={[
-                        styles.oneShotIcon,
-                        {
-                          tintColor: status?.fullPlayback ? colors.text : colors.textDim,
-                        },
-                      ]}
-                    />
-                    <Text
-                      style={[
-                        styles.oneShotLabel,
-                        status?.fullPlayback && styles.oneShotLabelOn,
-                      ]}
-                    >
-                      {status?.fullPlayback
-                        ? t('player.oneShotActiveLabel')
-                        : t('player.oneShotLabel')}
-                    </Text>
-                  </View>
-                  <Text style={styles.rushHint}>
+              {/* この曲だけ、区間を外して最初から通常再生したいとき。ON / OFF どちらでも出す
+                  （OFF は次の曲から効くので、OFF にした直後の曲には区間が残っていることがある） */}
+              <Pressable
+                style={[styles.oneShot, status?.fullPlayback && styles.oneShotOn]}
+                onPress={playCurrentFromStart}
+                disabled={status?.fullPlayback}
+              >
+                <View style={styles.oneShotHead}>
+                  {/* ウィジェットの同じ操作と同じ絵にして、見て分かるようにする */}
+                  <Image
+                    source={require('../assets/ic-fulltrack.png')}
+                    style={[
+                      styles.oneShotIcon,
+                      {
+                        tintColor: status?.fullPlayback ? colors.text : colors.textDim,
+                      },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.oneShotLabel,
+                      status?.fullPlayback && styles.oneShotLabelOn,
+                    ]}
+                  >
                     {status?.fullPlayback
-                      ? t('player.oneShotHintActive')
-                      : t('player.oneShotHint')}
+                      ? t('player.oneShotActiveLabel')
+                      : t('player.oneShotLabel')}
                   </Text>
-                </Pressable>
-              )}
+                </View>
+                <Text style={styles.rushHint}>
+                  {status?.fullPlayback
+                    ? rushOn
+                      ? t('player.oneShotHintActive')
+                      : t('player.oneShotHintActiveOff')
+                    : t('player.oneShotHint')}
+                </Text>
+              </Pressable>
             </View>
 
             {rushOn && (

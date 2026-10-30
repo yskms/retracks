@@ -100,17 +100,42 @@ class SegmentController(private val player: Player) : Player.Listener {
   var segment: Segment? = null
     set(value) {
       field = value
+      if (value != null) lastOnSegment = value
       // ON にしたときやフェードの長さを変えたときは、鳴っている曲にも即座に効かせてよい
       // （区間の境界は変わらない）。OFF にしたときは、区間の付いた曲だけ前の設定を残す
-      if (value != null || !isClipped(player.currentMediaItem)) currentItemSegment = value
+      followSetting()
     }
 
-  /** 鳴っている曲のフェードに使う区間。[segment] と違うのは、OFF にした直後の曲だけ。 */
+  /** 鳴っている曲のフェードに使う区間。[segment] と違うのは、OFF にした後で区間が残っている曲だけ。 */
   @Volatile
   private var currentItemSegment: Segment? = null
 
+  /**
+   * 最後に有効だった（null でない）設定。OFF のまま区間付きの項目へ移ったときのフェードに使う。
+   * 直前の曲の値を引き継ぐと、直前が区間なしの曲だったとき、0 dB のまま切れる。
+   * （組み直しが途中で終わって、区間付きの項目がキューに残ったときに起きる）
+   */
+  @Volatile
+  private var lastOnSegment: Segment? = null
+
   private fun isClipped(item: MediaItem?): Boolean =
     item != null && item.clippingConfiguration != MediaItem.ClippingConfiguration.UNSET
+
+  /**
+   * [item] が鳴っているときに効かせる区間。設定に従う。ただし OFF でも、その項目に区間が
+   * 焼き込まれているときは、切られる以上フェードも付ける（1曲リピートの繰り返しなど）。
+   */
+  private fun segmentFor(item: MediaItem?): Segment? =
+    if (segment == null && isClipped(item)) (lastOnSegment ?: currentItemSegment) else segment
+
+  /**
+   * 鳴っている曲に効く区間を、設定と、いまの項目の区間の有無から決め直す。
+   * 曲を差し替えたとき（「この曲を最初から」で区間を外したとき）にも呼ぶ。OFF のまま区間を外すと、
+   * 残っていたフェードが、全曲の頭と終わりに付いてしまう。
+   */
+  fun followSetting() {
+    currentItemSegment = segmentFor(player.currentMediaItem)
+  }
 
   /**
    * 区間の切り替わりを通知する（計測用）。
@@ -181,7 +206,7 @@ class SegmentController(private val player: Player) : Player.Listener {
 
     // 曲が替わったので、設定（[segment]）に追いつく。OFF にした直後の区間付きの曲が
     // もう一度鳴るとき（1曲リピートの繰り返し）だけは、区間が残っているので、フェードも残す
-    currentItemSegment = if (segment == null && isClipped(mediaItem)) currentItemSegment else segment
+    currentItemSegment = segmentFor(mediaItem)
 
     // フェードインする設定なら、ここで先に絞っておく。
     // 一覧から曲をタップした場合など、前の曲がフェードアウトせずに切り替わるときは

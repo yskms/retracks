@@ -188,7 +188,8 @@ class PlaybackService : MediaSessionService() {
   }
 
   /**
-   * いま鳴っている曲を、区間を外して最初から通しで再生する。
+   * いま鳴っている曲を、区間を外して最初から通常再生する。メドレーの ON / OFF どちらでも押せる
+   * （OFF は次の曲から効くので、OFF にした直後の曲には区間が残っていることがある。要件 4.3）。
    *
    * 区間は MediaItem に焼き込まれているので、その項目から区間指定だけを外した
    * ものへ差し替える。元の項目は控えておき、次の曲へ移ったら戻す。
@@ -202,16 +203,21 @@ class PlaybackService : MediaSessionService() {
     val index = player.currentMediaItemIndex
     if (index < 0) return
 
-    clippedItemBeforeFullPlayback = item
-    fullPlaybackIndex = index
-
-    player.replaceMediaItem(
-      index,
-      item.buildUpon()
+    // 通しで再生している曲をもう一度押したときは、控えを替えない（いまの項目は区間なしで、
+    // 控えを替えると、元の区間付きの項目を失う）。頭へ戻すだけ
+    if (fullPlaybackIndex != index) {
+      val unclipped = item.buildUpon()
         .setClippingConfiguration(MediaItem.ClippingConfiguration.UNSET)
         .build()
-    )
+      // 離れたあとに戻す項目。OFF のときは区間なしにする（OFF なのに ON のときの区間が戻ると、
+      // その曲へ戻ったとき、フェードなしで途中で切れる）
+      clippedItemBeforeFullPlayback = if (segmentController?.segment == null) unclipped else item
+      fullPlaybackIndex = index
+      player.replaceMediaItem(index, unclipped)
+    }
     player.seekTo(index, 0L)
+    // 区間を外したので、OFF 後に残っていたフェード（区間付きの曲のためのもの）も外す
+    segmentController?.followSetting()
     player.play()
     RetracksWidgetProvider.updateAll(this)
   }
@@ -260,6 +266,8 @@ class PlaybackService : MediaSessionService() {
    */
   fun replaceFullPlaybackStash(item: MediaItem) {
     if (fullPlaybackIndex == null) return
+    // 同じ曲のときだけ。曲の一覧とキューの並びがずれていると、別の曲を書き戻してしまう
+    if (clippedItemBeforeFullPlayback?.mediaId != item.mediaId) return
     clippedItemBeforeFullPlayback = item
   }
 

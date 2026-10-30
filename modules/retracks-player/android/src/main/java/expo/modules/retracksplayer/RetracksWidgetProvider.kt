@@ -153,20 +153,15 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       views.setOnClickPendingIntent(R.id.retracks_widget_prev, command(context, ACTION_PREV))
       views.setOnClickPendingIntent(R.id.retracks_widget_toggle, command(context, ACTION_TOGGLE))
       views.setOnClickPendingIntent(R.id.retracks_widget_next, command(context, ACTION_NEXT))
-      // 「この曲を最初から」は3つの状態を持つ。
-      //   RUSH OFF   … 外す区間が無いので不活性
-      //   RUSH ON    … 押せる
-      //   通しで再生中 … 効いている間は強調色
+      // 「この曲を最初から」は、メドレーの ON / OFF どちらでも押せる（OFF は次の曲から効くので、
+      // OFF にした直後の曲には区間が残っていることがある。要件 4.3）。
+      // 通しで再生中の間は強調色。
       val fullPlayback = PlaybackService.instance?.isFullPlayback() ?: false
       views.setImageViewResource(
         R.id.retracks_widget_replay,
         if (fullPlayback) R.drawable.retracks_ic_replay_on else R.drawable.retracks_ic_replay
       )
-      views.setInt(
-        R.id.retracks_widget_replay,
-        "setImageAlpha",
-        if (fullPlayback || rushOn()) 255 else 60
-      )
+      views.setInt(R.id.retracks_widget_replay, "setImageAlpha", 255)
 
       views.setOnClickPendingIntent(
         R.id.retracks_widget_replay,
@@ -238,13 +233,6 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       return square
     }
 
-    /**
-     * RUSH が効いているか。区間が設定されていれば ON。
-     * 「この曲を最初から」は区間を外す操作なので、OFF のときは意味を持たない。
-     */
-    private fun rushOn(): Boolean =
-      PlaybackService.instance?.segmentController?.segment != null
-
     /** OFF → 全曲 → 1曲 → OFF の順に巡る（一般的なプレイヤーと同じ）。 */
     private fun nextRepeatMode(current: Int): Int = when (current) {
       Player.REPEAT_MODE_OFF -> Player.REPEAT_MODE_ALL
@@ -310,7 +298,7 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       ACTION_TOGGLE -> if (player.isPlaying) player.pause() else player.play()
       ACTION_NEXT -> player.seekToNextMediaItem()
       // 不活性に見せている以上、押しても動かさない
-      ACTION_REPLAY -> if (rushOn()) PlaybackService.instance?.playCurrentFromStart()
+      ACTION_REPLAY -> PlaybackService.instance?.playCurrentFromStart()
       ACTION_REPEAT -> player.repeatMode = nextRepeatMode(player.repeatMode)
       else -> return
     }
