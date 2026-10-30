@@ -51,7 +51,7 @@ OFF にすれば普通の音楽プレイヤーとして使える。
 ## 技術的なところ
 
 - **Expo SDK 57 / React Native 0.86**（New Architecture）
-- **再生層は自作の Expo モジュール** — Android: Kotlin + Media3、iOS: Swift +
+- **再生層は自作の Expo モジュール** - Android: Kotlin + Media3、iOS: Swift +
   `AVPlayer`/`MPMediaQuery`。区間再生（メドレー）や一巡するシャッフルを前提にした
   既製プレイヤーはそもそも無く、Androidに限っても既存のクロスプラットフォーム
   ライブラリでは通知・イヤホンからの「次の曲」を満たせなかった：`expo-audio`

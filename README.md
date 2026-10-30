@@ -25,7 +25,7 @@ Two ideas carry the app.
 
 ### Medley
 
-A mode that plays only a slice of each track, then moves on — so you keep running into
+A mode that plays only a slice of each track, then moves on - so you keep running into
 songs you had forgotten about. You choose the start offset, the length, and the fades.
 Turn it off and the app behaves like an ordinary music player.
 
@@ -34,7 +34,7 @@ Turn it off and the app behaves like an ordinary music player.
 The shuffle order and your position in it are persisted.
 
 In a typical player, shuffling reshuffles every time you reopen the app. Even with a
-thousand tracks, a single listening session covers a few dozen — so you only ever hear
+thousand tracks, a single listening session covers a few dozen - so you only ever hear
 "the first few dozen of a fresh permutation," and most of your library is never reached.
 
 This app stores the permutation and the cursor, and will not repeat a track until the
@@ -54,7 +54,7 @@ See the [privacy policy](docs/privacy-policy.md) for privacy details.
 ## Technical notes
 
 - **Expo SDK 57 / React Native 0.86** (New Architecture)
-- **The playback layer is a custom Expo module** — Android: Kotlin + Media3, iOS: Swift +
+- **The playback layer is a custom Expo module** - Android: Kotlin + Media3, iOS: Swift +
   `AVPlayer`/`MPMediaQuery`. No off-the-shelf player assumes segment playback (Medley) or a
   persistent shuffle cycle in the first place, and on Android, existing cross-platform
   libraries couldn't even satisfy "skip to next track from the notification and from headset
@@ -109,5 +109,5 @@ npx expo run:ios
 
 Copyright (c) 2026 yskms. All rights reserved.
 
-The source is published for reading. No license to use it is granted —
+The source is published for reading. No license to use it is granted -
 copying, modifying, redistributing, or republishing is not permitted.
