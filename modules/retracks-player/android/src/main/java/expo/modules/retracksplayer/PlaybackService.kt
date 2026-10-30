@@ -184,7 +184,21 @@ class PlaybackService : MediaSessionService() {
 
   fun isFullPlayback(): Boolean {
     val player = mediaSession?.player ?: return false
-    return fullPlaybackIndex != null && fullPlaybackIndex == player.currentMediaItemIndex
+    return fullPlaybackIndex != null && fullPlaybackIndex == player.currentMediaItemIndex &&
+      clippedItemBeforeFullPlayback?.mediaId == player.currentMediaItem?.mediaId
+  }
+
+  /**
+   * 「通しで再生」の状態（控えと位置）を捨てる。キューを差し替えるときに呼ぶ。
+   *
+   * 差し替えても自動では消えない。残すと、(1) 新しいキューを別の位置から始めたとき、曲が替わる
+   * 拍で [restoreClippedItem] が、新しいキューの同じ添字の項目を消して前のキューの曲を差し込み、
+   * 画面のキューと実際に鳴る曲がずれる、(2) 同じ位置から始めたとき、区間付きの新しい曲が
+   * 「通しで再生中」と見えて、ボタンが押せなくなる（実測）。
+   */
+  fun clearFullPlayback() {
+    fullPlaybackIndex = null
+    clippedItemBeforeFullPlayback = null
   }
 
   /**
@@ -204,8 +218,9 @@ class PlaybackService : MediaSessionService() {
     if (index < 0) return
 
     // 通しで再生している曲をもう一度押したときは、控えを替えない（いまの項目は区間なしで、
-    // 控えを替えると、元の区間付きの項目を失う）。頭へ戻すだけ
-    if (fullPlaybackIndex != index) {
+    // 控えを替えると、元の区間付きの項目を失う）。頭へ戻すだけ。同じ曲かは mediaId でも確かめる
+    // （古い控えが残っていても、別の曲を「通しで再生中」と扱わない）
+    if (!(fullPlaybackIndex == index && clippedItemBeforeFullPlayback?.mediaId == item.mediaId)) {
       val unclipped = item.buildUpon()
         .setClippingConfiguration(MediaItem.ClippingConfiguration.UNSET)
         .build()
@@ -232,7 +247,10 @@ class PlaybackService : MediaSessionService() {
     fullPlaybackIndex = null
     clippedItemBeforeFullPlayback = null
 
-    if (original != null && index < player.mediaItemCount) {
+    // 同じ曲のときだけ戻す。違う曲なら、キューが替わっている（戻すと、前のキューの曲を差し込む）
+    if (original != null && index < player.mediaItemCount &&
+      player.getMediaItemAt(index).mediaId == original.mediaId
+    ) {
       // replaceMediaItem では区間が戻らない。Media3 は曲が同じならメディアソースを
       // 作り直さず、区間を付ける変更を捨てるため（docs/requirements.md 7.4.1）。
       player.removeMediaItems(index, index + 1)

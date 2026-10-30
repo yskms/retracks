@@ -297,7 +297,7 @@ class RetracksWidgetProvider : AppWidgetProvider() {
       ACTION_PREV -> player.seekToPreviousMediaItem()
       ACTION_TOGGLE -> if (player.isPlaying) player.pause() else player.play()
       ACTION_NEXT -> player.seekToNextMediaItem()
-      // 不活性に見せている以上、押しても動かさない
+      // メドレーの ON / OFF どちらでも動かす（要件 4.3）
       ACTION_REPLAY -> PlaybackService.instance?.playCurrentFromStart()
       ACTION_REPEAT -> player.repeatMode = nextRepeatMode(player.repeatMode)
       else -> return

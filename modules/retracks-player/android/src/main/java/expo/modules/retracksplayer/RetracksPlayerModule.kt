@@ -544,6 +544,8 @@ class RetracksPlayerModule : Module() {
         // ウィジェットから復元できるよう、ネイティブ側にも控えておく
         appContext.reactContext?.let { QueueStore.saveTracks(it, list, queueKey) }
         val items = buildItems(list, currentSegment)
+        // 「通しで再生」の控えは、キューを替えたら無効。残すと、前のキューの曲を新しいキューへ書き戻す
+        PlaybackService.instance?.clearFullPlayback()
         c.setMediaItems(items, startIndex.coerceIn(0, maxOf(0, items.size - 1)), 0L)
         c.prepare()
         promise.resolve(items.size)
