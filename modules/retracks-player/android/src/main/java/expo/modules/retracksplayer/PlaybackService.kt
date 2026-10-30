@@ -238,7 +238,8 @@ class PlaybackService : MediaSessionService() {
    * 区間を組み直したあと、別の曲に残していた「通しで再生」の控えを捨てる。
    *
    * 組み直しでその曲は新しい設定の項目に置き換わっているので、古い控えを
-   * 書き戻すと設定と 食い違う。いま鳴っている曲は組み直さないので対象外。
+   * 書き戻すと設定と 食い違う。いま鳴っている曲は組み直さないので対象外
+   * （その控えは [replaceFullPlaybackStash] で新しい設定に直す）。
    */
   fun dropFullPlaybackUnlessCurrent() {
     val player = mediaSession?.player ?: return
@@ -246,6 +247,20 @@ class PlaybackService : MediaSessionService() {
     if (index == player.currentMediaItemIndex) return
     fullPlaybackIndex = null
     clippedItemBeforeFullPlayback = null
+  }
+
+  /** 「通しで再生」している曲の添字。していなければ null。 */
+  fun fullPlaybackIndexOrNull(): Int? = fullPlaybackIndex
+
+  /**
+   * 「通しで再生」の最中に区間の設定が変わったとき、離れたあとに戻す項目を、新しい設定で
+   * 作ったものに替える。替えないと、メドレーを OFF にしたのに、その曲へ戻ったとき ON のときの区間が
+   * 戻り、フェードなしで途中で切れる（OFF の向きは修正前に実測）。
+   * OFF のときは区間なしの項目が渡され、戻すときに区間なしの項目へ入れ替わるだけになる。
+   */
+  fun replaceFullPlaybackStash(item: MediaItem) {
+    if (fullPlaybackIndex == null) return
+    clippedItemBeforeFullPlayback = item
   }
 
   fun currentPlayerSnapshot(): Snapshot? {

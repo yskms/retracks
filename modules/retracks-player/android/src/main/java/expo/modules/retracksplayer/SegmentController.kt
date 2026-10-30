@@ -88,9 +88,29 @@ class SegmentController(private val player: Player) : Player.Listener {
     }
   }
 
-  /** null のときは RUSH OFF（通常のフル再生）。 */
+  /**
+   * 区間の設定。null のときは RUSH OFF（通常のフル再生）。
+   *
+   * 切り替えは次の曲から効かせる（要件 4.3）。区間は MediaItem に焼き込まれ、鳴っている曲は
+   * 組み直さないので、OFF にしても、区間の付いた曲はその区間の終わりまで鳴って切られる。
+   * そこでフェードを止めると、フェードなしで切れる（実測。OFF にした曲が、0 dB のまま切れた）。
+   * 鳴っている曲に効く区間は [currentItemSegment] が持ち、OFF のときは曲が替わるまで残す。
+   */
   @Volatile
   var segment: Segment? = null
+    set(value) {
+      field = value
+      // ON にしたときやフェードの長さを変えたときは、鳴っている曲にも即座に効かせてよい
+      // （区間の境界は変わらない）。OFF にしたときは、区間の付いた曲だけ前の設定を残す
+      if (value != null || !isClipped(player.currentMediaItem)) currentItemSegment = value
+    }
+
+  /** 鳴っている曲のフェードに使う区間。[segment] と違うのは、OFF にした直後の曲だけ。 */
+  @Volatile
+  private var currentItemSegment: Segment? = null
+
+  private fun isClipped(item: MediaItem?): Boolean =
+    item != null && item.clippingConfiguration != MediaItem.ClippingConfiguration.UNSET
 
   /**
    * 区間の切り替わりを通知する（計測用）。
@@ -159,13 +179,17 @@ class SegmentController(private val player: Player) : Player.Listener {
     pausedDuringItem = false
     lastRawPos = -1L
 
+    // 曲が替わったので、設定（[segment]）に追いつく。OFF にした直後の区間付きの曲が
+    // もう一度鳴るとき（1曲リピートの繰り返し）だけは、区間が残っているので、フェードも残す
+    currentItemSegment = if (segment == null && isClipped(mediaItem)) currentItemSegment else segment
+
     // フェードインする設定なら、ここで先に絞っておく。
     // 一覧から曲をタップした場合など、前の曲がフェードアウトせずに切り替わるときは
     // 音量が 1.0 のまま新しい曲の頭が書き込まれ、一瞬大きく鳴ってしまう。
     //
     // 逆に 1.0 へ戻すことは決してしない。切り替わり直後はまだ前の曲の末尾が
     // 出力されており、戻すとその末尾が鳴ってしまうため。
-    if ((segment?.fadeInMs ?: 0L) > 0L) {
+    if ((currentItemSegment?.fadeInMs ?: 0L) > 0L) {
       currentVolume = 0f
       player.volume = 0f
     }
@@ -189,11 +213,14 @@ class SegmentController(private val player: Player) : Player.Listener {
   }
 
   private fun applyFade() {
-    val seg = segment
+    val seg = currentItemSegment
     if (seg == null) {
       if (currentVolume != 1f) {
-        currentVolume = 1f
-        player.volume = 1f
+        // OFF にした直後の曲の頭では、前の曲のフェードアウトで 0 近くまで絞られたまま。
+        // 戻すときも、上げ方向の制限（MIN_RISE_MS）を守る。一気に戻すと、まだ出力に残っている
+        // 前の曲の末尾が鳴る
+        currentVolume = minOf(1f, currentVolume + TICK_MS.toFloat() / MIN_RISE_MS.toFloat())
+        player.volume = currentVolume
       }
       return
     }

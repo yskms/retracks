@@ -210,7 +210,16 @@ class RetracksPlayerModule : Module() {
       c.addMediaItems(0, buildItems(list.subList(0, current), currentSegment))
     }
 
-    PlaybackService.instance?.dropFullPlaybackUnlessCurrent()
+    PlaybackService.instance?.let { service ->
+      service.dropFullPlaybackUnlessCurrent()
+      // 「通しで再生」中の曲は組み直さない（鳴っている曲）が、離れたときに戻す控えは、
+      // 新しい設定で作り直す。古い区間のままだと、OFF にしたのに区間で切れる曲が戻ってくる
+      service.fullPlaybackIndexOrNull()?.let { index ->
+        if (index < count) {
+          service.replaceFullPlaybackStash(buildItems(listOf(list[index]), currentSegment)[0])
+        }
+      }
+    }
   }
 
   /** メインスレッドで実行する。既にメインスレッドならそのまま走らせる。 */

@@ -90,6 +90,17 @@
 - `mapping.txt`はリリースごとに`docs/private/mapping/<version>-vc<code>/`へ圧縮して保管する（AABにも入っているが、
   手元でlogcatを読むのに要る）
 
+## メドレー（区間再生）のON/OFF切り替え（Android、詳細は`docs/requirements.md` 7.4.2）
+
+- **OFFも「次の曲から」適用。鳴っている曲の区間は外さない**（利用者の判断。外すには曲の差し替えが要り、約0.1秒の音切れが出る。
+  音切れは許容しない）。実装は`SegmentController`の`segment`（設定）と`currentItemSegment`（鳴っている曲に効く区間）の分離で、
+  OFFにしても区間付きの曲はフェードを残す。**`segment = null`でフェードを止める形に戻さない**（区間が残るので、0 dBのまま切れる。
+  1.3.1で実際に報告された）。OFF後の最初の曲の音量の戻しも、`MIN_RISE_MS`の制限を外さない
+- 「この曲を最初から」で退避した元の項目は、設定が変わったら`applySegmentToQueue()`が作り直す（`replaceFullPlaybackStash()`）。
+  外すと、OFFにしたのに古いONの区間の曲が戻ってきて、フェードなしで切れる
+- 音量・フェード・切断の確認は、聴かずに、`dumpsys media.audio_flinger`の自分のトラックの`L dB`列を端末上で約100Hz採取して行う
+  （手順は7.4.2の「測定」）。**release**ビルドで測る
+
 ## iOSビルド
 
 - 現在のローカル環境はXcode 27（M4 MacBook Air、2026-09下旬に移行）。
